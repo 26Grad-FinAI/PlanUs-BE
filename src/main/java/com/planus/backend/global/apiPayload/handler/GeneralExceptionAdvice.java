@@ -7,14 +7,17 @@ import com.planus.backend.global.apiPayload.exception.GeneralException;
 import jakarta.validation.ConstraintViolationException;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.http.HttpHeaders;
 import org.springframework.http.ResponseEntity;
 import org.springframework.http.converter.HttpMessageNotReadableException;
 import org.springframework.validation.BindException;
+import org.springframework.validation.FieldError;
 import org.springframework.web.HttpMediaTypeNotSupportedException;
 import org.springframework.web.HttpRequestMethodNotSupportedException;
 import org.springframework.web.bind.MissingServletRequestParameterException;
 import org.springframework.web.bind.annotation.ExceptionHandler;
 import org.springframework.web.bind.annotation.RestControllerAdvice;
+import org.springframework.web.method.annotation.HandlerMethodValidationException;
 import org.springframework.web.method.annotation.MethodArgumentTypeMismatchException;
 
 import java.nio.charset.StandardCharsets;
@@ -53,8 +56,13 @@ public class GeneralExceptionAdvice {
     public ResponseEntity<ApiResponse<?>> handleBindException(BindException ex) {
         BaseErrorCode ec = GeneralErrorCode.VALIDATION_ERROR;
 
-        List<String> detail = ex.getBindingResult().getFieldErrors().stream()
-                .map(fe -> fe.getField() + ": " + fe.getDefaultMessage())
+        List<String> detail = ex.getBindingResult().getAllErrors().stream()
+                .map(error -> {
+                    if (error instanceof FieldError fe) {
+                        return fe.getField() + ": " + fe.getDefaultMessage();
+                    }
+                    return error.getObjectName() + ": " + error.getDefaultMessage();
+                })
                 .toList();
 
         log.debug("[ValidationFail] {}", detail);
@@ -87,8 +95,11 @@ public class GeneralExceptionAdvice {
     public ResponseEntity<ApiResponse<?>> handleTypeMismatch(MethodArgumentTypeMismatchException ex) {
         BaseErrorCode ec = GeneralErrorCode.VALIDATION_ERROR;
 
-        String detail = ex.getName() + ": 타입이 올바르지 않습니다. (value=" + ex.getValue() + ")";
-        log.debug("[TypeMismatch] {}", detail);
+        String requiredType = ex.getRequiredType() == null
+                ? "알 수 없음"
+                : ex.getRequiredType().getSimpleName();
+        String detail = ex.getName() + ": 타입이 올바르지 않습니다. (기대 타입: " + requiredType + ")";
+        log.debug("[TypeMismatch] parameter={}, requiredType={}", ex.getName(), requiredType);
         return ResponseEntity.status(ec.getHttpStatus())
                 .body(ApiResponse.onFailure(ec, List.of(detail)));
     }
@@ -130,7 +141,12 @@ public class GeneralExceptionAdvice {
         BaseErrorCode ec = GeneralErrorCode.METHOD_NOT_ALLOWED;
 
         String detail = "지원하지 않는 HTTP 메서드입니다: " + ex.getMethod();
+        HttpHeaders headers = new HttpHeaders();
+        if (ex.getSupportedHttpMethods() != null) {
+            headers.setAllow(ex.getSupportedHttpMethods());
+        }
         return ResponseEntity.status(ec.getHttpStatus())
+                .headers(headers)
                 .body(ApiResponse.onFailure(ec, List.of(detail)));
     }
 
@@ -143,29 +159,35 @@ public class GeneralExceptionAdvice {
         BaseErrorCode ec = GeneralErrorCode.UNSUPPORTED_MEDIA_TYPE;
 
         String detail = "지원하지 않는 Content-Type 입니다: " + ex.getContentType();
+        HttpHeaders headers = new HttpHeaders();
+        headers.setAccept(ex.getSupportedMediaTypes());
         return ResponseEntity.status(ec.getHttpStatus())
+                .headers(headers)
                 .body(ApiResponse.onFailure(ec, List.of(detail)));
     }
 
     /**
-     * 요청 본문의 SHA-256 다이제스트를 계산하여 16진수 문자열로 반환한다.
-     *
-     * @param body 요청 본문 문자열
-     * @return SHA-256 해시의 16진수 문자열. 본문이 {@code null}이거나 비어 있으면 빈 문자열을 반환한다.
+     * Spring Framework 6.1+ 에서 {@code @Validated} 컨트롤러의 {@code @PathVariable},
+     * {@code @RequestParam} 등 메서드 파라미터 검증 실패 시 발생하는
+     * {@link HandlerMethodValidationException}을 처리한다.
      */
-    private String getBodyDigest(String body) {
-        if (body == null || body.isBlank()) {
-            return "";
-        }
+    @ExceptionHandler(HandlerMethodValidationException.class)
+    public ResponseEntity<ApiResponse<?>> handleHandlerMethodValidation(HandlerMethodValidationException ex) {
+        BaseErrorCode ec = GeneralErrorCode.VALIDATION_ERROR;
 
-        try {
-            MessageDigest digest = MessageDigest.getInstance("SHA-256");
-            byte[] hash = digest.digest(body.getBytes(StandardCharsets.UTF_8));
-            return HexFormat.of().formatHex(hash);
-        } catch (NoSuchAlgorithmException e) {
-            log.warn("Unable to compute body digest", e);
-            return "unavailable";
-        }
+        List<String> detail = ex.getParameterValidationResults().stream()
+                .flatMap(result -> result.getResolvableErrors().stream()
+                        .map(error -> {
+                            if (error instanceof FieldError fe) {
+                                return fe.getField() + ": " + fe.getDefaultMessage();
+                            }
+                            return result.getMethodParameter().getParameterName() + ": " + error.getDefaultMessage();
+                        }))
+                .toList();
+
+        log.debug("[HandlerMethodValidation] {}", detail);
+        return ResponseEntity.status(ec.getHttpStatus())
+                .body(ApiResponse.onFailure(ec, detail));
     }
 
     /**
