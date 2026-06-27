@@ -1,0 +1,15 @@
+# pgvector 포함 Postgres 로컬 기동:  docker compose up -d
+services:
+  db:
+    image: pgvector/pgvector:pg16
+    container_name: planus-postgres
+    environment:
+      POSTGRES_DB: planus
+      POSTGRES_USER: planus
+      POSTGRES_PASSWORD: planus
+    ports:
+      - "5435:5432"
+    volumes:
+      - planus_pgdata:/var/lib/postgresql/data
+volumes:
+  planus_pgdata:
