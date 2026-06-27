@@ -2,18 +2,9 @@ spring:
   autoconfigure:
     exclude:
       - org.springframework.ai.vectorstore.pgvector.autoconfigure.PgVectorStoreAutoConfiguration
-  datasource:
-    url: jdbc:postgresql://localhost:5435/planus
-    username: planus
-    password: planus
-    driver-class-name: org.postgresql.Driver
   jpa:
     hibernate:
       ddl-auto: none          # 스키마는 Flyway가 담당
     properties:
       hibernate:
         auto_quote_keyword: true
-  flyway:
-    enabled: true
-    locations: classpath:db/migration
-    baseline-on-migrate: true
