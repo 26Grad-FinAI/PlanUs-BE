@@ -1,0 +1,36 @@
+# ── PlanUs 설정 (Postgres + pgvector) — 메인 application.yml 에 병합 ──
+spring:
+  datasource:
+    url: jdbc:postgresql://localhost:5432/planus
+    username: postgres
+    password: ${DB_PASSWORD}
+    driver-class-name: org.postgresql.Driver
+  jpa:
+    hibernate:
+      ddl-auto: none            # 스키마는 Flyway가 담당. (#2 엔티티 매핑 끝나면 validate 권장)
+    properties:
+      hibernate:
+        dialect: org.hibernate.dialect.PostgreSQLDialect
+        auto_quote_keyword: true   # "user" 등 예약어 자동 따옴표
+    open-in-view: false
+  flyway:
+    enabled: true
+    locations: classpath:db/migration
+    baseline-on-migrate: true
+
+planus:
+  ai:
+    weekly-cron: "0 0 9 * * MON"   # 매주 월 09:00
+    llm:
+      api-key: ${ANTHROPIC_API_KEY}
+      model: claude-sonnet-4-5
+      max-tokens: 600
+    # 탐지/예측/ RAG 임계 — 합성 실험 확정값(기본값과 동일하면 생략 가능)
+    point-z: 3.5
+    trend-ratio: 1.40
+    high-freq-categories: [1, 6, 8, 10]
+    baseline-weeks: 8
+    rag-sim-threshold: 0.30
+    rag-top-k: 5
+    conf-high-mag: 4.0
+    conf-high-precedents: 2
