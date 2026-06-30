@@ -20,6 +20,10 @@ public class MemoVectorStore {
     private final EmbeddingClient embedder;
     private final JdbcTemplate jdbc;
 
+    /**
+     * @param embedder 텍스트 임베딩 클라이언트
+     * @param jdbc     pgvector SQL 실행용 JdbcTemplate
+     */
     public MemoVectorStore(EmbeddingClient embedder, JdbcTemplate jdbc) {
         this.embedder = embedder;
         this.jdbc = jdbc;
@@ -28,13 +32,11 @@ public class MemoVectorStore {
     /** 메모 있는 지출 임베딩 적재. 카테고리·감정을 함께 인덱싱(검색 품질↑). */
     public void index(Expense e, String categoryName) {
         if (e.getMemo() == null || e.getMemo().isBlank()) return;
-        Integer cnt = jdbc.queryForObject(
-                "SELECT COUNT(*) FROM memo_embedding WHERE expense_id = ?", Integer.class, e.getId());
-        if (cnt != null && cnt > 0) return;
         String vec = toVectorLiteral(embedder.embed(buildText(categoryName, e.getEmotion(), e.getMemo())));
         jdbc.update(
             "INSERT INTO memo_embedding (expense_id, user_id, category_id, emotion, embedding, ref_date) " +
-            "VALUES (?, ?, ?, ?, CAST(? AS vector), ?)",
+            "VALUES (?, ?, ?, ?, CAST(? AS vector), ?) " +
+            "ON CONFLICT (expense_id) DO NOTHING",
             e.getId(), e.getUserId(), e.getCategoryId(), e.getEmotion(), vec, Date.valueOf(e.getDate()));
     }
 

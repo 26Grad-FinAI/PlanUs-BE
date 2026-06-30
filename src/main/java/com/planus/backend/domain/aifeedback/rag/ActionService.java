@@ -1,5 +1,7 @@
 package com.planus.backend.domain.aifeedback.rag;
 
+import com.planus.backend.domain.aifeedback.entity.Reaction;
+import com.planus.backend.domain.aifeedback.entity.RejectionReason;
 import com.planus.backend.domain.aifeedback.entity.UserReaction;
 import com.planus.backend.domain.aifeedback.repo.UserReactionRepository;
 import org.springframework.stereotype.Service;
@@ -18,6 +20,8 @@ import java.util.stream.Collectors;
 public class ActionService {
 
     private final UserReactionRepository reactionRepo;
+
+    /** @param reactionRepo 사용자 반응 조회 리포지토리 */
     public ActionService(UserReactionRepository reactionRepo) { this.reactionRepo = reactionRepo; }
 
     /**
@@ -33,9 +37,9 @@ public class ActionService {
 
         // 1회 조회 후 메모리에서 reason별 분류
         List<UserReaction> reactions = reactionRepo.findByUserId(userId);
-        Set<Integer> dontReduce = filterByReason(reactions, "DONT_WANT_REDUCE");
-        Set<Integer> alreadyKnown = filterByReason(reactions, "ALREADY_KNOWN");
-        Set<Integer> repetitive = filterByReason(reactions, "TOO_REPETITIVE");
+        Set<Integer> dontReduce = filterByReason(reactions, RejectionReason.DONT_WANT_REDUCE);
+        Set<Integer> alreadyKnown = filterByReason(reactions, RejectionReason.ALREADY_KNOWN);
+        Set<Integer> repetitive = filterByReason(reactions, RejectionReason.TOO_REPETITIVE);
 
         List<Integer> avoided = candidates.stream()
                 .map(Map.Entry::getKey)
@@ -53,10 +57,17 @@ public class ActionService {
         return Optional.of(new ActionPlan(top, amount, vary, savingsGapWon, avoided));
     }
 
-    private Set<Integer> filterByReason(List<UserReaction> reactions, String reason) {
+    /**
+     * 거부 반응 목록에서 특정 사유에 해당하는 카테고리 ID 집합을 추출한다.
+     *
+     * @param reactions 사용자 반응 목록
+     * @param reason    필터링할 거부 사유
+     * @return 해당 사유의 카테고리 ID 집합
+     */
+    private Set<Integer> filterByReason(List<UserReaction> reactions, RejectionReason reason) {
         return reactions.stream()
-                .filter(r -> "NOT_HELPFUL".equalsIgnoreCase(r.getReaction()))
-                .filter(r -> reason.equalsIgnoreCase(r.getRejectionReason()))
+                .filter(r -> r.getReaction() == Reaction.NOT_HELPFUL)
+                .filter(r -> r.getRejectionReason() == reason)
                 .map(UserReaction::getCategoryId)
                 .filter(Objects::nonNull)
                 .collect(Collectors.toSet());

@@ -35,9 +35,12 @@ public class BudgetProjector {
         return predictedTotalSpendWon - availableBudgetWon;
     }
 
-    /** 진척률 = 예상 월말 / 카테고리 예산. */
+    /** 진척률 = 예상 월말 / 카테고리 예산. 예산 0원인데 지출이 있으면 무한대(초과 확정). */
     public double burnRate(long predictedCategorySpendWon, long categoryBudgetWon) {
-        return categoryBudgetWon > 0 ? (double) predictedCategorySpendWon / categoryBudgetWon : 0.0;
+        if (categoryBudgetWon <= 0) {
+            return predictedCategorySpendWon > 0 ? Double.POSITIVE_INFINITY : 0.0;
+        }
+        return (double) predictedCategorySpendWon / categoryBudgetWon;
     }
 
     public record Projection(long predictedMonthEndWon, long remainingVariableWon, double dailyRateWon) {}

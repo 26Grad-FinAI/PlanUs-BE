@@ -6,6 +6,7 @@ import lombok.Builder;
 import lombok.Getter;
 import lombok.NoArgsConstructor;
 
+/** 사용자 계정 엔티티. user 테이블 매핑. 소득·고정지출·저축목표 등 재무 정보 포함. */
 @Entity
 @Table(name = "user")
 @Getter

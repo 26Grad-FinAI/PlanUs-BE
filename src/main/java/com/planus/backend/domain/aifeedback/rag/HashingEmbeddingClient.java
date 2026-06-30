@@ -9,11 +9,18 @@ import org.springframework.stereotype.Component;
  * EmbeddingClient를 Voyage/OpenAI 구현으로 교체.
  */
 @Component
-@ConditionalOnMissingBean(name = "voyageEmbeddingClient") // 운영 임베딩 빈이 있으면 그쪽 우선
+@ConditionalOnMissingBean(value = EmbeddingClient.class, ignored = HashingEmbeddingClient.class) // 운영 임베딩 빈이 있으면 그쪽 우선
 public class HashingEmbeddingClient implements EmbeddingClient {
 
     private static final int DIM = 1024;  // pgvector HNSW 한계(2000) 이하
 
+    /**
+     * 문자 n-gram(2~4) feature hashing으로 텍스트를 1024차원 벡터로 변환한다.
+     * 부호 해싱으로 충돌을 상쇄하며, L2 정규화를 적용한다.
+     *
+     * @param text 임베딩할 텍스트 (null이면 빈 문자열 처리)
+     * @return L2 정규화된 1024차원 실수 벡터
+     */
     @Override
     public float[] embed(String text) {
         float[] v = new float[DIM];

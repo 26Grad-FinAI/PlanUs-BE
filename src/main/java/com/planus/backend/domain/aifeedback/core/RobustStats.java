@@ -6,6 +6,12 @@ import java.util.Arrays;
 public final class RobustStats {
     private RobustStats() {}
 
+    /**
+     * 배열의 중앙값을 구한다. 원본 배열은 변경하지 않는다.
+     *
+     * @param a 대상 배열
+     * @return 중앙값, 빈 배열이면 0.0
+     */
     public static double median(double[] a) {
         if (a.length == 0) return 0.0;
         double[] s = a.clone();
@@ -29,6 +35,12 @@ public final class RobustStats {
         return 0.6745 * (x - med) / madVal;
     }
 
+    /**
+     * 배열의 산술 평균을 구한다.
+     *
+     * @param a 대상 배열
+     * @return 산술 평균, 빈 배열이면 0.0
+     */
     public static double mean(double[] a) {
         if (a.length == 0) return 0.0;
         double s = 0; for (double v : a) s += v; return s / a.length;

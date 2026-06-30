@@ -6,6 +6,7 @@ import lombok.Builder;
 import lombok.Getter;
 import lombok.NoArgsConstructor;
 
+/** 사용자 피드백 반응(유용/비유용·거부 사유) 엔티티. user_reactions 테이블 매핑. */
 @Entity
 @Table(name = "user_reactions")
 @Getter
@@ -23,10 +24,12 @@ public class UserReaction {
     @Column(name = "user_id")
     private Long userId;
 
-    private String reaction;                 // HELPFUL/NOT_HELPFUL
+    @Enumerated(EnumType.STRING)
+    private Reaction reaction;
 
+    @Enumerated(EnumType.STRING)
     @Column(name = "rejection_reason")
-    private String rejectionReason;          // 5-enum or null
+    private RejectionReason rejectionReason;
 
     @Column(name = "category_id")
     private Integer categoryId;              // 권고됐던 카테고리(조회 편의)

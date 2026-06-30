@@ -19,6 +19,8 @@ public class FeedbackRenderer {
     private static final Logger log = LoggerFactory.getLogger(FeedbackRenderer.class);
 
     private final ObjectProvider<LlmClient> llm;
+
+    /** @param llm LLM 클라이언트 (미설정 시 null, 템플릿 폴백) */
     public FeedbackRenderer(ObjectProvider<LlmClient> llm) { this.llm = llm; }
 
     private static final String SYSTEM = """
@@ -30,12 +32,22 @@ public class FeedbackRenderer {
         - 2~4문장, 따뜻하지만 담백하게. 이모지 남발 금지.
         """;
 
+    /**
+     * 분석 재료로 피드백 텍스트를 생성한다. LLM 호출 실패 시 결정적 템플릿으로 폴백.
+     *
+     * @param c 오케스트레이터가 조립한 피드백 재료
+     * @return 렌더링된 피드백 텍스트와 신뢰도
+     */
     public Rendered render(FeedbackContext c) {
         String text;
         try {
             LlmClient client = llm.getIfAvailable();
-            if (client == null) text = template(c);
-            else text = client.complete(SYSTEM, userPrompt(c));
+            if (client == null) {
+                text = template(c);
+            } else {
+                text = client.complete(SYSTEM, userPrompt(c));
+                if (text == null || text.isBlank()) text = template(c);
+            }
         } catch (Exception e) {
             log.warn("LLM 호출 실패 — 템플릿 폴백 사용: {}", e.getMessage());
             text = template(c);
@@ -43,6 +55,7 @@ public class FeedbackRenderer {
         return new Rendered(text, c.overallConfidence());
     }
 
+    /** 분석 재료를 LLM 유저 프롬프트 형식으로 조합한다. */
     private String userPrompt(FeedbackContext c) {
         StringBuilder sb = new StringBuilder();
         sb.append("아래 분석 재료로 이번 주 소비 피드백을 작성해줘.\n\n");
@@ -99,6 +112,7 @@ public class FeedbackRenderer {
         return sb.toString();
     }
 
+    /** 금액(원)을 사용자 친화적 문자열로 변환한다. 만원 이상이면 "N만원" 형식. */
     private static String won(long v) {
         if (Math.abs(v) >= 10_000) return String.format("%,d만원", Math.round(v / 10_000.0));
         return String.format("%,d원", v);

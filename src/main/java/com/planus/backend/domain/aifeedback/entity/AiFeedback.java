@@ -9,8 +9,11 @@ import lombok.NoArgsConstructor;
 import java.time.LocalDate;
 import java.time.LocalDateTime;
 
+/** AI 주간/월간 소비 피드백 엔티티. ai_feedbacks 테이블 매핑. */
 @Entity
-@Table(name = "ai_feedbacks")
+@Table(name = "ai_feedbacks", uniqueConstraints =
+    @UniqueConstraint(name = "uk_feedback_period",
+            columnNames = {"user_id", "period_type", "period_start", "period_end"}))
 @Getter
 @NoArgsConstructor
 @AllArgsConstructor
@@ -41,11 +44,29 @@ public class AiFeedback {
     private String confidence;       // HIGH/MEDIUM/LOW
 
     @Column(name = "category_id")
-    private Integer categoryId;      // 권고 카테고리(BIGINT, 값 1~11)
+    private Integer categoryId;      // 권고 카테고리(값 1~11)
 
     @Column(name = "advice_type")
     private String adviceType;
 
     @Column(name = "created_at")
     private LocalDateTime createdAt;
+
+    /**
+     * 기존 피드백을 최신 분석 결과로 갱신한다 (멱등 upsert용).
+     *
+     * @param feedbackText 새 피드백 텍스트
+     * @param confidence   새 신뢰도
+     * @param categoryId   새 권고 카테고리
+     * @param adviceType   새 권고 유형
+     * @param updatedAt    갱신 시각
+     */
+    public void update(String feedbackText, String confidence,
+                       Integer categoryId, String adviceType, LocalDateTime updatedAt) {
+        this.feedbackText = feedbackText;
+        this.confidence = confidence;
+        this.categoryId = categoryId;
+        this.adviceType = adviceType;
+        this.createdAt = updatedAt;
+    }
 }

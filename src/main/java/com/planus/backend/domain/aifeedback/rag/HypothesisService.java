@@ -22,6 +22,11 @@ public class HypothesisService {
     private final ExpenseRepository expenseRepo;
     private final AiFeedbackProperties p;
 
+    /**
+     * @param store       메모 벡터 저장소 (유사 메모 검색)
+     * @param expenseRepo 선례 원문 메모 조회용 리포지토리
+     * @param p           RAG 설정 프로퍼티
+     */
     public HypothesisService(MemoVectorStore store, ExpenseRepository expenseRepo, AiFeedbackProperties p) {
         this.store = store; this.expenseRepo = expenseRepo; this.p = p;
     }
@@ -46,11 +51,17 @@ public class HypothesisService {
         int strongN = strong.size();
 
         // 선례 원문 메모 해결(DATA-02: 벡터 스토어엔 원문 없음 → expense에서 조회)
+        // findAllById 순서 보존: ids 순서(유사도 순) → Map으로 조회 후 재조립
         List<Long> ids = strong.stream().map(MemoVectorStore.Hit::expenseId).toList();
         List<String> precedentMemos = new ArrayList<>();
         if (!ids.isEmpty()) {
-            for (Expense e : expenseRepo.findAllById(ids))
-                if (e.getMemo() != null && !e.getMemo().isBlank()) precedentMemos.add(e.getMemo());
+            Map<Long, Expense> byId = new HashMap<>();
+            for (Expense e : expenseRepo.findAllById(ids)) byId.put(e.getId(), e);
+            for (Long id : ids) {
+                Expense e = byId.get(id);
+                if (e != null && e.getMemo() != null && !e.getMemo().isBlank())
+                    precedentMemos.add(e.getMemo());
+            }
         }
         Confidence conf = Confidence.of(magnitude, strongN, p.getConfHighMag(), p.getConfHighPrecedents());
         return new Hypothesis(precedentMemos, conf, strongN, magnitude, true);

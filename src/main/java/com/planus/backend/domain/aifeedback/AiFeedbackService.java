@@ -13,7 +13,7 @@ import com.planus.backend.domain.aifeedback.rag.HypothesisService;
 import com.planus.backend.domain.aifeedback.rag.MemoVectorStore;
 import com.planus.backend.domain.aifeedback.repo.*;
 import org.springframework.stereotype.Service;
-import org.springframework.transaction.annotation.Transactional;
+import org.springframework.transaction.support.TransactionTemplate;
 
 import java.time.*;
 import java.time.temporal.ChronoUnit;
@@ -41,22 +41,47 @@ public class AiFeedbackService {
     private final FeedbackRenderer renderer;
     private final AiFeedbackProperties p;
     private final Clock clock;
+    private final TransactionTemplate tx;
 
+    /**
+     * 파이프라인 의존성 주입.
+     *
+     * @param userRepo     사용자 계정 조회
+     * @param expenseRepo  거래 내역 조회
+     * @param budgetRepo   월 예산 조회
+     * @param budgetCatRepo 카테고리별 예산 조회
+     * @param feedbackRepo 피드백 저장
+     * @param detector     이상치 탐지기
+     * @param projector    예산 예측기
+     * @param hypothesis   원인 추론 서비스
+     * @param action       절감 액션 추천 서비스
+     * @param memoStore    메모 벡터 저장소
+     * @param renderer     피드백 텍스트 렌더러
+     * @param p            모듈 설정 프로퍼티
+     * @param clock        시각 제공 (테스트 시 고정 시계 주입 가능)
+     * @param tx           프로그래밍 방식 트랜잭션 (save 시점에만 사용)
+     */
     public AiFeedbackService(UserAccountRepository userRepo, ExpenseRepository expenseRepo,
                              BudgetRepository budgetRepo, BudgetCategoryRepository budgetCatRepo,
                              AiFeedbackRepository feedbackRepo, AnomalyDetector detector,
                              BudgetProjector projector, HypothesisService hypothesis,
                              ActionService action, MemoVectorStore memoStore,
                              FeedbackRenderer renderer, AiFeedbackProperties p,
-                             Clock clock) {
+                             Clock clock, TransactionTemplate tx) {
         this.userRepo = userRepo; this.expenseRepo = expenseRepo; this.budgetRepo = budgetRepo;
         this.budgetCatRepo = budgetCatRepo; this.feedbackRepo = feedbackRepo; this.detector = detector;
         this.projector = projector; this.hypothesis = hypothesis; this.action = action;
         this.memoStore = memoStore; this.renderer = renderer; this.p = p;
-        this.clock = clock;
+        this.clock = clock; this.tx = tx;
     }
 
-    @Transactional
+    /**
+     * 특정 사용자의 주간 AI 소비 피드백을 생성하고 저장한다.
+     *
+     * @param userId  대상 사용자 ID
+     * @param weekEnd 분석 대상 주의 마지막 날(일요일)
+     * @return 저장된 피드백, 생성 불가 시 빈 Optional
+     */
     public Optional<AiFeedback> generateWeekly(Long userId, LocalDate weekEnd) {
         UserAccount user = userRepo.findById(userId).orElse(null);
         if (user == null) return Optional.empty();
@@ -71,9 +96,14 @@ public class AiFeedbackService {
         Map<Integer, Long> catBudget = loadCategoryBudgets(userId, monthStart);
         if (catBudget.isEmpty()) return Optional.empty(); // 예산 없으면 진단 불가(콜드스타트는 별도 처리)
 
-        // 기준선 윈도우(직전 baselineWeeks+1 주) 변동 지출
-        LocalDateTime from = weekStart.minusWeeks(p.getBaselineWeeks()).atStartOfDay();
-        LocalDateTime to = weekEnd.atTime(LocalTime.MAX);
+        // 조회 범위: 이상치 기준선·전월 일평균·미래 예정 지출을 모두 포함
+        LocalDate queryStart = Collections.min(List.of(
+                weekStart.minusWeeks(p.getBaselineWeeks()),
+                monthStart.minusMonths(1)
+        ));
+        LocalDate queryEnd = weekEnd.withDayOfMonth(dim);      // 월말까지 (미래 예정 지출 포함)
+        LocalDateTime from = queryStart.atStartOfDay();
+        LocalDateTime to = queryEnd.atTime(LocalTime.MAX);
         List<Expense> window = expenseRepo.findByUserIdAndExpenseDateBetween(userId, from, to);
 
         // ── 메모 임베딩 인덱싱 (미인덱싱 건만 적재, 멱등) ──
@@ -100,8 +130,6 @@ public class AiFeedbackService {
 
         // ── [4] 이상치 탐지 (보조) ──
         Anomaly top = detectTopAnomaly(window, weekStart, weekEnd, catBudget);
-
-        boolean triggered = savingsImpact > 0 || top != null || !overspend.isEmpty();
 
         // ── [5] 원인 (이상치 있을 때) ──
         HypothesisService.Hypothesis hyp = null;
@@ -134,23 +162,46 @@ public class AiFeedbackService {
 
         FeedbackRenderer.Rendered out = renderer.render(ctx);
 
+        Integer fbCategoryId = plan.map(ActionService.ActionPlan::categoryId).orElse(null);
+        String fbAdviceType = plan.map(a -> Categories.name(a.categoryId()) + " 절감").orElse(null);
+        LocalDateTime now = LocalDateTime.now(clock);
+
+        // 멱등 upsert: 동일 주차 피드백이 이미 존재하면 갱신, 없으면 신규 생성
+        AiFeedback existing = feedbackRepo
+                .findByUserIdAndPeriodTypeAndPeriodStartAndPeriodEnd(userId, "WEEKLY", weekStart, weekEnd)
+                .orElse(null);
+
+        if (existing != null) {
+            return Optional.of(tx.execute(status -> {
+                existing.update(out.text(), out.confidence().name(), fbCategoryId, fbAdviceType, now);
+                return feedbackRepo.save(existing);
+            }));
+        }
+
         AiFeedback fb = AiFeedback.builder()
                 .userId(userId)
-                .yearMonth(monthStart)          // NOT NULL — 분석 주가 속한 달의 1일
+                .yearMonth(monthStart)
                 .periodType("WEEKLY")
                 .periodStart(weekStart)
                 .periodEnd(weekEnd)
                 .feedbackText(out.text())
                 .confidence(out.confidence().name())
-                .categoryId(plan.map(ActionService.ActionPlan::categoryId).orElse(null))
-                .adviceType(plan.map(a -> Categories.name(a.categoryId()) + " 절감").orElse(null))
-                .createdAt(LocalDateTime.now(clock))
+                .categoryId(fbCategoryId)
+                .adviceType(fbAdviceType)
+                .createdAt(now)
                 .build();
-        return Optional.of(feedbackRepo.save(fb));
+        return Optional.of(tx.execute(status -> feedbackRepo.save(fb)));
     }
 
     // ── 헬퍼 ──
 
+    /**
+     * 해당 월의 카테고리별 예산을 조회한다.
+     *
+     * @param userId     사용자 ID
+     * @param monthStart 해당 월 1일
+     * @return 카테고리 ID → 예산(원) 맵, 예산 미등록 시 빈 맵
+     */
     private Map<Integer, Long> loadCategoryBudgets(Long userId, LocalDate monthStart) {
         return budgetRepo.findByUserIdAndYearMonth(userId, monthStart)
                 .map(b -> {
@@ -168,7 +219,7 @@ public class AiFeedbackService {
         // TODO: 콜드스타트 시 설문/온보딩 데이터 기반 피드백으로 대체 (별도 기능 연결 예정)
         long windowDays = ChronoUnit.DAYS.between(
                 window.stream().filter(Expense::isVariable).map(Expense::getDate).min(Comparator.naturalOrder()).orElse(weekEnd),
-                weekEnd);
+                weekEnd.plusDays(1));  // 종료일 포함 (between은 half-open)
         if (windowDays / 7 < p.getMinWeeks()) return null;
 
         Anomaly best = null;
@@ -234,6 +285,14 @@ public class AiFeedbackService {
         return arr;
     }
 
+    /**
+     * 월말까지 남은 고정·예정 지출 합계를 추정한다.
+     *
+     * @param window     기준선 윈도우 거래 목록
+     * @param monthStart 해당 월 1일
+     * @param weekEnd    분석 주 마지막 날
+     * @return 추정 남은 고정·예정 지출 합계(원)
+     */
     private long estimateRemainingFixedPlanned(List<Expense> window, LocalDate monthStart, LocalDate weekEnd) {
         // 남은 예정(RECORD-04): 이번 달 미래 일자 is_planned
         long plannedFuture = window.stream()
@@ -248,6 +307,13 @@ public class AiFeedbackService {
         return plannedFuture + recurringRemaining;
     }
 
+    /**
+     * 전월 변동 지출 일평균을 계산한다. 예측 블렌딩에 사용.
+     *
+     * @param window     기준선 윈도우 거래 목록
+     * @param monthStart 이번 달 1일 (전월 = monthStart - 1개월)
+     * @return 전월 변동 지출 일평균(원), 거래 없으면 0.0
+     */
     private double priorVariableDailyRate(List<Expense> window, LocalDate monthStart) {
         LocalDate prevMonth = monthStart.minusMonths(1);
         long sum = window.stream()

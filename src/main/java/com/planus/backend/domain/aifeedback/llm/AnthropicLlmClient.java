@@ -3,9 +3,12 @@ package com.planus.backend.domain.aifeedback.llm;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnMissingBean;
 import org.springframework.http.MediaType;
+import org.springframework.http.client.JdkClientHttpRequestFactory;
 import org.springframework.stereotype.Component;
 import org.springframework.web.client.RestClient;
 
+import java.net.http.HttpClient;
+import java.time.Duration;
 import java.util.List;
 import java.util.Map;
 
@@ -19,12 +22,33 @@ import java.util.Map;
 @ConditionalOnMissingBean(LlmClient.class)
 public class AnthropicLlmClient implements LlmClient {
 
-    private final RestClient client = RestClient.builder().baseUrl("https://api.anthropic.com").build();
+    private static final Duration CONNECT_TIMEOUT = Duration.ofSeconds(5);
+    private static final Duration READ_TIMEOUT = Duration.ofSeconds(30);
+
+    private final RestClient client;
+
+    {
+        JdkClientHttpRequestFactory factory = new JdkClientHttpRequestFactory(
+                HttpClient.newBuilder().connectTimeout(CONNECT_TIMEOUT).build());
+        factory.setReadTimeout(READ_TIMEOUT);
+        client = RestClient.builder()
+                .baseUrl("https://api.anthropic.com")
+                .requestFactory(factory)
+                .build();
+    }
 
     @Value("${planus.ai.llm.api-key:}") private String apiKey;
     @Value("${planus.ai.llm.model:claude-sonnet-4-5}") private String model;
     @Value("${planus.ai.llm.max-tokens:600}") private int maxTokens;
 
+    /**
+     * Anthropic Messages API를 호출하여 텍스트를 생성한다.
+     *
+     * @param systemPrompt 시스템 프롬프트 (역할·규칙)
+     * @param userPrompt   사용자 프롬프트 (분석 재료)
+     * @return 생성된 텍스트
+     * @throws IllegalStateException API 키가 미설정인 경우
+     */
     @Override
     public String complete(String systemPrompt, String userPrompt) {
         if (apiKey == null || apiKey.isBlank())

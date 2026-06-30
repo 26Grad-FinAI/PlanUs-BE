@@ -38,6 +38,7 @@ class BudgetProjectorTest {
     @Test
     void burnRate_ratio_and_zero_budget_guard() {
         assertThat(projector.burnRate(120_000, 100_000)).isCloseTo(1.2, within(1e-9));
-        assertThat(projector.burnRate(50_000, 0)).isEqualTo(0.0); // 예산 0 → 0 반환(0 나눗셈 방지)
+        assertThat(projector.burnRate(50_000, 0)).isEqualTo(Double.POSITIVE_INFINITY); // 예산 0 + 지출 있음 → 초과 확정
+        assertThat(projector.burnRate(0, 0)).isEqualTo(0.0); // 예산 0 + 지출 없음 → 0
     }
 }

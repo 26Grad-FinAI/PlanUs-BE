@@ -16,6 +16,8 @@ import java.util.OptionalDouble;
 public class AnomalyDetector {
 
     private final AiFeedbackProperties p;
+
+    /** @param p 이상치 탐지 임계값 등 설정 프로퍼티 */
     public AnomalyDetector(AiFeedbackProperties p) { this.p = p; }
 
     /**
@@ -43,6 +45,12 @@ public class AnomalyDetector {
         return OptionalDouble.empty();
     }
 
+    /**
+     * 고빈도 카테고리 여부를 반환한다. 주간 추세 탐지 대상 판별에 사용.
+     *
+     * @param categoryId 카테고리 ID
+     * @return 고빈도 카테고리이면 true
+     */
     public boolean isHighFreq(int categoryId) {
         for (int c : p.getHighFreqCategories()) if (c == categoryId) return true;
         return false;

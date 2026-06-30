@@ -9,8 +9,10 @@ import lombok.NoArgsConstructor;
 import java.time.LocalDate;
 import java.time.LocalDateTime;
 
+/** 거래(수입/지출) 엔티티. expense 테이블 매핑. */
 @Entity
-@Table(name = "expense")
+@Table(name = "expense", indexes =
+        @Index(name = "idx_expense_user_date", columnList = "user_id, expense_date"))
 @Getter
 @NoArgsConstructor
 @AllArgsConstructor
@@ -44,7 +46,12 @@ public class Expense {
     @Column(name = "created_at")
     private LocalDateTime createdAt;
 
+    /** 거래 일자(시간 제외)를 반환한다. */
     public LocalDate getDate() { return expenseDate.toLocalDate(); }
+
+    /** 지출 여부를 반환한다. type이 "EXPENSE"이면 true. */
     public boolean isExpense() { return "EXPENSE".equalsIgnoreCase(type); }
+
+    /** 변동 지출 여부를 반환한다. 지출이면서 반복·예정이 아닌 거래. */
     public boolean isVariable() { return isExpense() && !recurring && !planned; }
 }

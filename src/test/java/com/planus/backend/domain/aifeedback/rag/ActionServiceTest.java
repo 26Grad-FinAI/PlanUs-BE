@@ -1,5 +1,7 @@
 package com.planus.backend.domain.aifeedback.rag;
 
+import com.planus.backend.domain.aifeedback.entity.Reaction;
+import com.planus.backend.domain.aifeedback.entity.RejectionReason;
 import com.planus.backend.domain.aifeedback.entity.UserReaction;
 import com.planus.backend.domain.aifeedback.repo.UserReactionRepository;
 import org.junit.jupiter.api.DisplayName;
@@ -42,9 +44,9 @@ class ActionServiceTest {
             Map<Integer, Long> overspend = Map.of(1, 50_000L, 6, 30_000L, 10, 20_000L);
 
             when(reactionRepo.findByUserId(userId)).thenReturn(List.of(
-                    reaction(userId, "DONT_WANT_REDUCE", 1),
-                    reaction(userId, "ALREADY_KNOWN", 6),
-                    reaction(userId, "TOO_REPETITIVE", 10)
+                    reaction(userId, RejectionReason.DONT_WANT_REDUCE, 1),
+                    reaction(userId, RejectionReason.ALREADY_KNOWN, 6),
+                    reaction(userId, RejectionReason.TOO_REPETITIVE, 10)
             ));
 
             actionService.recommend(userId, overspend, 40_000L);
@@ -85,7 +87,7 @@ class ActionServiceTest {
             Map<Integer, Long> overspend = Map.of(1, 80_000L, 6, 30_000L);
 
             when(reactionRepo.findByUserId(userId)).thenReturn(List.of(
-                    reaction(userId, "DONT_WANT_REDUCE", 1)
+                    reaction(userId, RejectionReason.DONT_WANT_REDUCE, 1)
             ));
 
             var result = actionService.recommend(userId, overspend, 50_000L);
@@ -103,7 +105,7 @@ class ActionServiceTest {
             Map<Integer, Long> overspend = Map.of(6, 80_000L, 8, 50_000L);
 
             when(reactionRepo.findByUserId(userId)).thenReturn(List.of(
-                    reaction(userId, "ALREADY_KNOWN", 6)
+                    reaction(userId, RejectionReason.ALREADY_KNOWN, 6)
             ));
 
             var result = actionService.recommend(userId, overspend, 60_000L);
@@ -119,7 +121,7 @@ class ActionServiceTest {
             Map<Integer, Long> overspend = Map.of(10, 40_000L);
 
             when(reactionRepo.findByUserId(userId)).thenReturn(List.of(
-                    reaction(userId, "TOO_REPETITIVE", 10)
+                    reaction(userId, RejectionReason.TOO_REPETITIVE, 10)
             ));
 
             var result = actionService.recommend(userId, overspend, 30_000L);
@@ -150,8 +152,8 @@ class ActionServiceTest {
             Map<Integer, Long> overspend = Map.of(1, 50_000L, 6, 30_000L);
 
             when(reactionRepo.findByUserId(userId)).thenReturn(List.of(
-                    reaction(userId, "DONT_WANT_REDUCE", 1),
-                    reaction(userId, "DONT_WANT_REDUCE", 6)
+                    reaction(userId, RejectionReason.DONT_WANT_REDUCE, 1),
+                    reaction(userId, RejectionReason.DONT_WANT_REDUCE, 6)
             ));
 
             var result = actionService.recommend(userId, overspend, 40_000L);
@@ -214,10 +216,10 @@ class ActionServiceTest {
 
     // ── 헬퍼 ──
 
-    private static UserReaction reaction(Long userId, String reason, int categoryId) {
+    private static UserReaction reaction(Long userId, RejectionReason reason, int categoryId) {
         return UserReaction.builder()
                 .userId(userId)
-                .reaction("NOT_HELPFUL")
+                .reaction(Reaction.NOT_HELPFUL)
                 .rejectionReason(reason)
                 .categoryId(categoryId)
                 .build();
