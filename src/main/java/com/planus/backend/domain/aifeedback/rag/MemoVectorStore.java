@@ -58,6 +58,12 @@ public class MemoVectorStore {
             q, userId, Date.valueOf(before), q, k);
     }
 
+    /** 적재된 임베딩 총 개수(백필·검증용). */
+    public long count() {
+        Long n = jdbc.queryForObject("SELECT COUNT(*) FROM memo_embedding", Long.class);
+        return n == null ? 0 : n;
+    }
+
     /** 카테고리를 2회 반복해 가중(감정이 여러 상황에 공유될 때 카테고리로 구분 — 실험에서 검증). */
     public String buildText(String categoryName, String emotion, String memo) {
         return categoryName + " " + categoryName + " "

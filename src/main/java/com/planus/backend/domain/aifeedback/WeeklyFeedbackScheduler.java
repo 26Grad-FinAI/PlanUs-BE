@@ -1,6 +1,7 @@
 package com.planus.backend.domain.aifeedback;
 
-import com.planus.backend.domain.aifeedback.repo.UserAccountRepository;
+import com.planus.backend.domain.aifeedback.repository.UserAccountRepository;
+import com.planus.backend.domain.aifeedback.service.AiFeedbackService;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.scheduling.annotation.Scheduled;
