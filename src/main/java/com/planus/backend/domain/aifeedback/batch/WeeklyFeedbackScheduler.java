@@ -39,11 +39,17 @@ public class WeeklyFeedbackScheduler {
         List<Long> userIds = userRepo.findAllIds();
         log.info("AI-01 주간 시작 weekEnd={} 대상={}명", weekEnd, userIds.size());
 
-        int ok = 0, fail = 0;
+        int ok = 0, skipped = 0, fail = 0;
         for (Long userId : userIds) {
-            try { service.generateWeekly(userId, weekEnd); ok++; }
-            catch (Exception e) { fail++; log.warn("AI-01 실패 user={}", userId, e); }
+            try {
+                if (service.generateWeekly(userId, weekEnd).isPresent()) {
+                    ok++;
+                } else {
+                    skipped++;
+                    log.info("AI-01 스킵 user={} weekEnd={}", userId, weekEnd);
+                }
+            } catch (Exception e) { fail++; log.warn("AI-01 실패 user={}", userId, e); }
         }
-        log.info("AI-01 주간 완료 weekEnd={} 성공={} 실패={}", weekEnd, ok, fail);
+        log.info("AI-01 주간 완료 weekEnd={} 성공={} 스킵={} 실패={}", weekEnd, ok, skipped, fail);
     }
 }

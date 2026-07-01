@@ -8,6 +8,7 @@ import com.planus.backend.domain.aifeedback.service.AiFeedbackService;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.format.annotation.DateTimeFormat;
+import org.springframework.context.annotation.Profile;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.RequestParam;
@@ -19,10 +20,10 @@ import java.util.List;
 import java.util.Map;
 
 /**
- * 개발·검증용 내부 엔드포인트.
- * ⚠️ 운영 배포 전 제거하거나 인증/내부망 제한을 걸 것.
+ * 개발·검증용 내부 엔드포인트. dev/local 프로필에서만 활성화.
  */
 @RestController
+@Profile({"dev", "local"})
 @RequestMapping("/internal/aifeedback")
 public class AiFeedbackDevController {
 
@@ -78,7 +79,7 @@ public class AiFeedbackDevController {
                             "reason", "생성 조건 미충족(예산 초과·이상치·카테고리 초과 없음)"));
         } catch (Exception e) {
             log.error("주간 피드백 수동 실행 실패 — userId={}, weekEnd={}", userId, weekEnd, e);
-            return Map.of("created", false, "error", String.valueOf(e.getMessage()));
+            return Map.of("created", false, "error", "피드백 생성 중 오류가 발생했습니다.");
         }
     }
 }
