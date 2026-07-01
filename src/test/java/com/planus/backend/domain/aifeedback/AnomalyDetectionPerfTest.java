@@ -4,6 +4,7 @@ import com.planus.backend.domain.aifeedback.config.AiFeedbackProperties;
 import com.planus.backend.domain.aifeedback.core.AnomalyDetector;
 import com.planus.backend.domain.aifeedback.core.BudgetProjector;
 import com.planus.backend.domain.aifeedback.entity.Expense;
+import com.planus.backend.domain.aifeedback.service.AiFeedbackService;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Nested;

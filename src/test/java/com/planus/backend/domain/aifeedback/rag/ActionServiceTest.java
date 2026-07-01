@@ -3,7 +3,7 @@ package com.planus.backend.domain.aifeedback.rag;
 import com.planus.backend.domain.aifeedback.entity.Reaction;
 import com.planus.backend.domain.aifeedback.entity.RejectionReason;
 import com.planus.backend.domain.aifeedback.entity.UserReaction;
-import com.planus.backend.domain.aifeedback.repo.UserReactionRepository;
+import com.planus.backend.domain.aifeedback.repository.UserReactionRepository;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Nested;
 import org.junit.jupiter.api.Test;

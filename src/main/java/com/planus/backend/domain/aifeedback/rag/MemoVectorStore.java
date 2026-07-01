@@ -29,15 +29,23 @@ public class MemoVectorStore {
         this.jdbc = jdbc;
     }
 
-    /** 메모 있는 지출 임베딩 적재. 카테고리·감정을 함께 인덱싱(검색 품질↑). */
+    /** 메모 있는 지출 임베딩 적재. 이미 적재된 건은 임베딩 계산 없이 스킵(비용 절감). */
     public void index(Expense e, String categoryName) {
         if (e.getMemo() == null || e.getMemo().isBlank()) return;
+        if (existsByExpenseId(e.getId())) return;
         String vec = toVectorLiteral(embedder.embed(buildText(categoryName, e.getEmotion(), e.getMemo())));
         jdbc.update(
             "INSERT INTO memo_embedding (expense_id, user_id, category_id, emotion, embedding, ref_date) " +
             "VALUES (?, ?, ?, ?, CAST(? AS vector), ?) " +
             "ON CONFLICT (expense_id) DO NOTHING",
             e.getId(), e.getUserId(), e.getCategoryId(), e.getEmotion(), vec, Date.valueOf(e.getDate()));
+    }
+
+    /** expense_id로 이미 임베딩이 적재되었는지 확인한다. */
+    private boolean existsByExpenseId(Long expenseId) {
+        Integer cnt = jdbc.queryForObject(
+                "SELECT COUNT(*) FROM memo_embedding WHERE expense_id = ?", Integer.class, expenseId);
+        return cnt != null && cnt > 0;
     }
 
     /** 같은 사용자의 과거(before 이전) 메모 중 코사인 유사 상위 k건. DB가 직접 검색. */
@@ -56,6 +64,12 @@ public class MemoVectorStore {
                     (Integer) (rs.getObject("category_id") == null ? null : rs.getInt("category_id")),
                     rs.getString("emotion")),
             q, userId, Date.valueOf(before), q, k);
+    }
+
+    /** 적재된 임베딩 총 개수(백필·검증용). */
+    public long count() {
+        Long n = jdbc.queryForObject("SELECT COUNT(*) FROM memo_embedding", Long.class);
+        return n == null ? 0 : n;
     }
 
     /** 카테고리를 2회 반복해 가중(감정이 여러 상황에 공유될 때 카테고리로 구분 — 실험에서 검증). */

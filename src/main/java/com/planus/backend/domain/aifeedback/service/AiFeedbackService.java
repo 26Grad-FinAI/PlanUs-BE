@@ -1,4 +1,4 @@
-package com.planus.backend.domain.aifeedback;
+package com.planus.backend.domain.aifeedback.service;
 
 import com.planus.backend.domain.aifeedback.config.AiFeedbackProperties;
 import com.planus.backend.domain.aifeedback.core.*;
@@ -11,7 +11,7 @@ import com.planus.backend.domain.aifeedback.llm.FeedbackRenderer.FeedbackContext
 import com.planus.backend.domain.aifeedback.rag.ActionService;
 import com.planus.backend.domain.aifeedback.rag.HypothesisService;
 import com.planus.backend.domain.aifeedback.rag.MemoVectorStore;
-import com.planus.backend.domain.aifeedback.repo.*;
+import com.planus.backend.domain.aifeedback.repository.*;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.support.TransactionTemplate;
 

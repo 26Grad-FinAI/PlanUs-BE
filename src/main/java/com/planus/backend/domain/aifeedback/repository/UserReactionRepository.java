@@ -1,4 +1,4 @@
-package com.planus.backend.domain.aifeedback.repo;
+package com.planus.backend.domain.aifeedback.repository;
 
 import com.planus.backend.domain.aifeedback.entity.UserReaction;
 import org.springframework.data.jpa.repository.JpaRepository;

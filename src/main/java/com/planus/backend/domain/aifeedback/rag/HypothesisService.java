@@ -3,7 +3,7 @@ package com.planus.backend.domain.aifeedback.rag;
 import com.planus.backend.domain.aifeedback.config.AiFeedbackProperties;
 import com.planus.backend.domain.aifeedback.core.Confidence;
 import com.planus.backend.domain.aifeedback.entity.Expense;
-import com.planus.backend.domain.aifeedback.repo.ExpenseRepository;
+import com.planus.backend.domain.aifeedback.repository.ExpenseRepository;
 import org.springframework.stereotype.Service;
 
 import java.time.LocalDate;
