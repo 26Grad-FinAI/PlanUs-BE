@@ -1,4 +1,6 @@
 spring:
+  profiles:
+    include: aifeedback
   autoconfigure:
     exclude:
       - org.springframework.ai.vectorstore.pgvector.autoconfigure.PgVectorStoreAutoConfiguration

@@ -74,11 +74,19 @@ public class FeedbackRenderer {
             sb.append("\n[이상 신호 — 신뢰도 높음, 노출 가능]\n");
             sb.append("- 카테고리: ").append(c.anomalyCategoryName())
               .append(", 평소 대비 약 ").append(String.format("%.1f", c.anomalyMagnitude())).append("배\n");
+            if (c.anomalyBaselineAvgWon() > 0)
+                sb.append("- 비교: 평소 평균 ").append(won(c.anomalyBaselineAvgWon()))
+                  .append(" → 이번 주 ").append(won(c.anomalyCurrentWon())).append("\n");
             if (!c.precedentMemos().isEmpty())
                 sb.append("- 과거 비슷한 상황 메모: ").append(String.join(" / ", c.precedentMemos()))
                   .append(" (이걸 근거로 원인을 자연스럽게 추정)\n");
         } else if (c.hasAnomaly()) {
             sb.append("\n[이상 신호 — 신뢰도 낮음/중간: 원인 단정 금지, 언급은 선택]\n");
+        }
+
+        if (!c.stableCategories().isEmpty()) {
+            sb.append("\n[안정 카테고리 — 짧게 칭찬]\n");
+            sb.append("- 예산 내 유지 중: ").append(String.join(", ", c.stableCategories())).append("\n");
         }
 
         if (c.hasAction()) {
@@ -106,8 +114,16 @@ public class FeedbackRenderer {
         if (c.hasAnomaly() && c.anomalyConfidence() == Confidence.HIGH) {
             sb.append(" 참고로 ").append(c.anomalyCategoryName())
               .append(" 지출이 평소보다 눈에 띄게 늘었어요");
-            if (!c.precedentMemos().isEmpty()) sb.append(" (예: ").append(c.precedentMemos().get(0)).append(")");
+            if (c.anomalyBaselineAvgWon() > 0)
+                sb.append(" (평소 ").append(won(c.anomalyBaselineAvgWon()))
+                  .append(" → 이번 주 ").append(won(c.anomalyCurrentWon())).append(")");
+            else if (!c.precedentMemos().isEmpty())
+                sb.append(" (예: ").append(c.precedentMemos().get(0)).append(")");
             sb.append(".");
+        }
+        if (!c.stableCategories().isEmpty()) {
+            sb.append(" 반면 ").append(String.join("·", c.stableCategories()))
+              .append("은 예산 안에서 안정적이에요.");
         }
         return sb.toString();
     }
@@ -125,7 +141,9 @@ public class FeedbackRenderer {
             boolean hasAnomaly, String anomalyCategoryName, double anomalyMagnitude,
             List<String> precedentMemos, Confidence anomalyConfidence,
             boolean hasAction, String actionCategoryName, long actionAmountWon, boolean varyMessage,
-            Confidence overallConfidence) {}
+            Confidence overallConfidence,
+            List<String> stableCategories,
+            long anomalyBaselineAvgWon, long anomalyCurrentWon) {}
 
     public record Rendered(String text, Confidence confidence) {}
 }

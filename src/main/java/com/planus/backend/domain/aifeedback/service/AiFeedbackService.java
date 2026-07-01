@@ -141,6 +141,31 @@ public class AiFeedbackService {
         // ── [7] 액션 ──
         Optional<ActionService.ActionPlan> plan = action.recommend(userId, overspend, savingsImpact);
 
+        // ── 안심 메시지: 예산 내 안정 카테고리 ──
+        List<String> stableCategories = new ArrayList<>();
+        for (var entry : catBudget.entrySet()) {
+            int cat = entry.getKey();
+            if (!overspend.containsKey(cat)) {
+                stableCategories.add(Categories.name(cat));
+            }
+        }
+
+        // ── 근거 숫자: 이상치 카테고리의 평소 주간 평균 vs 이번 주 ──
+        long anomalyBaselineAvg = 0;
+        long anomalyCurrent = 0;
+        if (top != null) {
+            int anomalyCat = top.categoryId();
+            double[] weeklyHist = weeklySeries(window, anomalyCat, weekEnd, p.getBaselineWeeks());
+            // 마지막(현재 주) 제외한 과거 주간 평균
+            double histSum = 0;
+            int histCount = 0;
+            for (int i = 0; i < weeklyHist.length - 1; i++) {
+                if (weeklyHist[i] > 0) { histSum += weeklyHist[i]; histCount++; }
+            }
+            anomalyBaselineAvg = histCount > 0 ? Math.round(histSum / histCount) : 0;
+            anomalyCurrent = Math.round(weeklyHist[weeklyHist.length - 1]);
+        }
+
         // ── 렌더 + 저장 ──
         Integer topOverCat = overspend.entrySet().stream()
                 .max(Map.Entry.comparingByValue()).map(Map.Entry::getKey).orElse(null);
@@ -158,7 +183,8 @@ public class AiFeedbackService {
                 plan.isPresent(), plan.map(a -> Categories.name(a.categoryId())).orElse(null),
                 plan.map(ActionService.ActionPlan::amountWon).orElse(0L),
                 plan.map(ActionService.ActionPlan::varyMessage).orElse(false),
-                overall);
+                overall,
+                stableCategories, anomalyBaselineAvg, anomalyCurrent);
 
         FeedbackRenderer.Rendered out = renderer.render(ctx);
 

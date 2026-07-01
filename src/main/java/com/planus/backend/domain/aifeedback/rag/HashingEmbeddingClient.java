@@ -12,14 +12,14 @@ import org.springframework.stereotype.Component;
 @ConditionalOnMissingBean(value = EmbeddingClient.class, ignored = HashingEmbeddingClient.class) // 운영 임베딩 빈이 있으면 그쪽 우선
 public class HashingEmbeddingClient implements EmbeddingClient {
 
-    private static final int DIM = 1024;  // pgvector HNSW 한계(2000) 이하
+    private static final int DIM = 2000;  // V2 마이그레이션의 vector(2000)과 일치
 
     /**
-     * 문자 n-gram(2~4) feature hashing으로 텍스트를 1024차원 벡터로 변환한다.
+     * 문자 n-gram(2~4) feature hashing으로 텍스트를 2000차원 벡터로 변환한다.
      * 부호 해싱으로 충돌을 상쇄하며, L2 정규화를 적용한다.
      *
      * @param text 임베딩할 텍스트 (null이면 빈 문자열 처리)
-     * @return L2 정규화된 1024차원 실수 벡터
+     * @return L2 정규화된 2000차원 실수 벡터
      */
     @Override
     public float[] embed(String text) {

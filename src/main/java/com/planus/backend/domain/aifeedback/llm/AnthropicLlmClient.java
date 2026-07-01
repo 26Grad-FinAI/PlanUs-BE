@@ -1,7 +1,7 @@
 package com.planus.backend.domain.aifeedback.llm;
 
 import org.springframework.beans.factory.annotation.Value;
-import org.springframework.boot.autoconfigure.condition.ConditionalOnMissingBean;
+import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
 import org.springframework.http.MediaType;
 import org.springframework.http.client.JdkClientHttpRequestFactory;
 import org.springframework.stereotype.Component;
@@ -19,7 +19,7 @@ import java.util.Map;
  * 다른 공급자를 쓰면 LlmClient 를 직접 구현(이 빈은 @ConditionalOnMissingBean 으로 비활성).
  */
 @Component
-@ConditionalOnMissingBean(LlmClient.class)
+@ConditionalOnProperty(name = "planus.ai.llm.api-key")
 public class AnthropicLlmClient implements LlmClient {
 
     private static final Duration CONNECT_TIMEOUT = Duration.ofSeconds(5);

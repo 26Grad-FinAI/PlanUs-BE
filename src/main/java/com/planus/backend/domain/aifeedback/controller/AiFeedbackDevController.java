@@ -9,7 +9,6 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.format.annotation.DateTimeFormat;
 import org.springframework.context.annotation.Profile;
-import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RequestMapping;
@@ -44,7 +43,7 @@ public class AiFeedbackDevController {
      * 기존 지출 중 메모 있는 건을 임베딩 적재(백필). 멱등 — 여러 번 호출해도 중복 적재 안 됨.
      * 신규 지출은 주간 파이프라인이 처리하므로, 이 호출은 과거 데이터용으로 한 번이면 충분.
      */
-    @PostMapping("/backfill-embeddings")
+    @GetMapping("/backfill-embeddings")
     public Map<String, Object> backfillEmbeddings() {
         long before = vectorStore.count();
         List<Expense> all = expenseRepo.findAll();
