@@ -58,6 +58,21 @@ public class AnomalyDetector {
     }
 
     /**
+     * 스파이크성 카테고리(의료·경조사 등) 여부를 반환한다.
+     * 원래 가끔 크게 나오는 카테고리이므로 단발 이상치 탐지를 스킵해야 한다.
+     * 호출 측에서 이 메서드로 필터링한다.
+     *
+     * @param categoryId 카테고리 ID
+     * @return 스파이크성 카테고리이면 true
+     */
+    public boolean isSpikeProne(int categoryId) {
+        for (long c : p.getCategory().getSpikeProne()) {
+            if (c == categoryId) return true;
+        }
+        return false;
+    }
+
+    /**
      * 주간 추세(상승) 확정 여부. 고빈도 카테고리에만 호출.
      * 2-윈도우: 최근 2주 평균 ≥ 직전 4주 평균 × ratio AND (최근-직전) ≥ 예산×frac, 2주 연속 충족.
      * @param weekly  주간 합계 시계열(과거→현재 순, 변동 지출만; 고정·예정 제외)

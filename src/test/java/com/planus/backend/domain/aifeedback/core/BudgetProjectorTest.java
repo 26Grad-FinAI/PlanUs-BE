@@ -30,9 +30,11 @@ class BudgetProjectorTest {
     }
 
     @Test
-    void savingsImpact_positive_when_over_negative_when_under() {
-        assertThat(projector.savingsImpact(800_000, 600_000)).isEqualTo(200_000); // 가용예산 초과
-        assertThat(projector.savingsImpact(500_000, 600_000)).isEqualTo(-100_000); // 여유(더 저축)
+    void savingsImpact_negative_when_overspend_positive_when_surplus() {
+        // 가용예산(600k) - 예상지출(800k) = -200k → 초과 위험
+        assertThat(projector.savingsImpact(800_000, 600_000)).isEqualTo(-200_000);
+        // 가용예산(600k) - 예상지출(500k) = +100k → 여유
+        assertThat(projector.savingsImpact(500_000, 600_000)).isEqualTo(100_000);
     }
 
     @Test
