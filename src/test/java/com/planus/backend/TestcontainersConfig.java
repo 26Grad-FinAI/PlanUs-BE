@@ -10,8 +10,7 @@ import org.testcontainers.utility.DockerImageName;
 public class TestcontainersConfig {
 
     private static final DockerImageName PGVECTOR_IMAGE =
-            DockerImageName.parse("pgvector/pgvector:pg16")
-                    .asCompatibleSubstituteFor("postgres");
+            DockerImageName.parse("pgvector/pgvector:pg16").asCompatibleSubstituteFor("postgres");
 
     @Bean
     PostgreSQLContainer<?> postgresContainer() {

@@ -1,22 +1,21 @@
 package com.planus.backend.domain.aifeedback;
 
+import static org.assertj.core.api.Assertions.assertThat;
+
 import com.planus.backend.domain.aifeedback.config.AiFeedbackProperties;
 import com.planus.backend.domain.aifeedback.core.AnomalyDetector;
 import com.planus.backend.domain.aifeedback.core.BudgetProjector;
 import com.planus.backend.domain.aifeedback.entity.Expense;
 import com.planus.backend.domain.aifeedback.service.AiFeedbackService;
+import java.lang.reflect.Method;
+import java.time.Clock;
+import java.time.LocalDate;
+import java.util.*;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Nested;
 import org.junit.jupiter.api.Tag;
 import org.junit.jupiter.api.Test;
-
-import java.lang.reflect.Method;
-import java.time.Clock;
-import java.time.LocalDate;
-import java.util.*;
-
-import static org.assertj.core.api.Assertions.assertThat;
 
 /**
  * detectTopAnomaly() 검증.
@@ -30,15 +29,15 @@ class AnomalyDetectionPerfTest {
     private AiFeedbackService service;
     private Method detectMethod;
 
-    private static final LocalDate WEEK_END = LocalDate.of(2026, 6, 28);   // 일요일
-    private static final LocalDate WEEK_START = WEEK_END.minusDays(6);     // 월요일
+    private static final LocalDate WEEK_END = LocalDate.of(2026, 6, 28); // 일요일
+    private static final LocalDate WEEK_START = WEEK_END.minusDays(6); // 월요일
 
     private static final Map<Integer, Long> CAT_BUDGET = Map.of(
-            1, 200_000L,    // 식료품
-            6, 150_000L,    // 교통
-            8, 100_000L,    // 오락·문화
-            10, 300_000L    // 외식·숙박
-    );
+            1, 200_000L, // 식료품
+            6, 150_000L, // 교통
+            8, 100_000L, // 오락·문화
+            10, 300_000L // 외식·숙박
+            );
 
     @BeforeEach
     void setUp() throws Exception {
@@ -46,10 +45,17 @@ class AnomalyDetectionPerfTest {
         AnomalyDetector detector = new AnomalyDetector(props);
 
         service = new AiFeedbackService(
-                null, null, null, null, null,
-                detector, new BudgetProjector(), null, null, null, null, props,
-                Clock.systemDefaultZone(), null
-        );
+                null,
+                null,
+                null,
+                null,
+                null,
+                detector,
+                new BudgetProjector(),
+                null,
+                props,
+                Clock.systemDefaultZone(),
+                null);
 
         detectMethod = AiFeedbackService.class.getDeclaredMethod(
                 "detectTopAnomaly", List.class, LocalDate.class, LocalDate.class, Map.class);
@@ -83,7 +89,8 @@ class AnomalyDetectionPerfTest {
                 }
                 avgNs[i] = total / runs;
 
-                System.out.printf("W=%4d  →  avg %4dms  (이번주 변동거래 ~%d건)%n",
+                System.out.printf(
+                        "W=%4d  →  avg %4dms  (이번주 변동거래 ~%d건)%n",
                         sizes[i], avgNs[i] / 1_000_000, countThisWeekVariable(window));
             }
 
@@ -92,8 +99,12 @@ class AnomalyDetectionPerfTest {
             for (int i = 1; i < sizes.length; i++) {
                 double sizeRatio = (double) sizes[i] / sizes[i - 1];
                 double timeRatio = avgNs[i - 1] > 0 ? (double) avgNs[i] / avgNs[i - 1] : 0;
-                System.out.printf("W %d→%d (x%.1f)  시간 x%.1f  %s%n",
-                        sizes[i - 1], sizes[i], sizeRatio, timeRatio,
+                System.out.printf(
+                        "W %d→%d (x%.1f)  시간 x%.1f  %s%n",
+                        sizes[i - 1],
+                        sizes[i],
+                        sizeRatio,
+                        timeRatio,
                         timeRatio > sizeRatio * 2.0 ? "⚠ O(n²) 의심" : "✓ 선형 범위");
             }
 
@@ -120,10 +131,8 @@ class AnomalyDetectionPerfTest {
             Random rng = new Random(42);
             for (int i = 0; i < 50; i++) {
                 int daysAgo = rng.nextInt(14);
-                long amount = rng.nextDouble() < 0.2
-                        ? 300_000 + rng.nextInt(200_000)
-                        : 5_000 + rng.nextInt(50_000);
-                shortWindow.add(expense(i, new int[]{1, 6, 8, 10}[rng.nextInt(4)], amount, daysAgo));
+                long amount = rng.nextDouble() < 0.2 ? 300_000 + rng.nextInt(200_000) : 5_000 + rng.nextInt(50_000);
+                shortWindow.add(expense(i, new int[] {1, 6, 8, 10}[rng.nextInt(4)], amount, daysAgo));
             }
 
             Object result = detectMethod.invoke(service, shortWindow, WEEK_START, WEEK_END, CAT_BUDGET);
@@ -189,10 +198,15 @@ class AnomalyDetectionPerfTest {
             }
             // 이번 주에 거액 INCOME — 이것이 이상치로 감지되면 안 됨
             window.add(Expense.builder()
-                    .id(200L).userId(1L).categoryId(1)
-                    .type("INCOME").amount(5_000_000L)
+                    .id(200L)
+                    .userId(1L)
+                    .categoryId(1)
+                    .type("INCOME")
+                    .amount(5_000_000L)
                     .expenseDate(WEEK_END.atTime(12, 0))
-                    .recurring(false).planned(false).build());
+                    .recurring(false)
+                    .planned(false)
+                    .build());
 
             Object result = detectMethod.invoke(service, window, WEEK_START, WEEK_END, CAT_BUDGET);
 
@@ -216,23 +230,35 @@ class AnomalyDetectionPerfTest {
             }
             // 이번 주에 거액 반복 지출 — 변동이 아니므로 이상치 대상이 아님
             window.add(Expense.builder()
-                    .id(300L).userId(1L).categoryId(1)
-                    .type("EXPENSE").amount(3_000_000L)
+                    .id(300L)
+                    .userId(1L)
+                    .categoryId(1)
+                    .type("EXPENSE")
+                    .amount(3_000_000L)
                     .expenseDate(WEEK_END.atTime(12, 0))
-                    .recurring(true).planned(false).build());
+                    .recurring(true)
+                    .planned(false)
+                    .build());
             // 이번 주에 거액 예정 지출
             window.add(Expense.builder()
-                    .id(301L).userId(1L).categoryId(1)
-                    .type("EXPENSE").amount(2_000_000L)
+                    .id(301L)
+                    .userId(1L)
+                    .categoryId(1)
+                    .type("EXPENSE")
+                    .amount(2_000_000L)
                     .expenseDate(WEEK_END.minusDays(1).atTime(12, 0))
-                    .recurring(false).planned(true).build());
+                    .recurring(false)
+                    .planned(true)
+                    .build());
 
             Object result = detectMethod.invoke(service, window, WEEK_START, WEEK_END, CAT_BUDGET);
 
             if (result != null) {
                 var repField = result.getClass().getDeclaredMethod("rep");
                 Expense rep = (Expense) repField.invoke(result);
-                assertThat(rep.isVariable()).as("이상치 대표 거래는 변동(non-recurring, non-planned)이어야 함").isTrue();
+                assertThat(rep.isVariable())
+                        .as("이상치 대표 거래는 변동(non-recurring, non-planned)이어야 함")
+                        .isTrue();
             }
         }
     }
@@ -273,10 +299,14 @@ class AnomalyDetectionPerfTest {
             }
 
             list.add(Expense.builder()
-                    .id((long) i).userId(1L).categoryId(cat)
-                    .type(type).amount(amount)
+                    .id((long) i)
+                    .userId(1L)
+                    .categoryId(cat)
+                    .type(type)
+                    .amount(amount)
                     .expenseDate(WEEK_END.minusDays(daysAgo).atTime(12, 0))
-                    .recurring(recurring).planned(planned)
+                    .recurring(recurring)
+                    .planned(planned)
                     .build());
         }
         return list;
@@ -285,10 +315,14 @@ class AnomalyDetectionPerfTest {
     /** 간편 변동 EXPENSE 생성 헬퍼 */
     private Expense expense(int id, int categoryId, long amount, int daysAgo) {
         return Expense.builder()
-                .id((long) id).userId(1L).categoryId(categoryId)
-                .type("EXPENSE").amount(amount)
+                .id((long) id)
+                .userId(1L)
+                .categoryId(categoryId)
+                .type("EXPENSE")
+                .amount(amount)
                 .expenseDate(WEEK_END.minusDays(daysAgo).atTime(12, 0))
-                .recurring(false).planned(false)
+                .recurring(false)
+                .planned(false)
                 .build();
     }
 

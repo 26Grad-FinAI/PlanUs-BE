@@ -1,12 +1,11 @@
 package com.planus.backend.domain.aifeedback.llm;
 
 import com.planus.backend.domain.aifeedback.core.Confidence;
+import java.util.List;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.ObjectProvider;
 import org.springframework.stereotype.Service;
-
-import java.util.List;
 
 /**
  * [5]·[7] 재료 → 사용자에게 보일 한국어 피드백 문장.
@@ -21,9 +20,12 @@ public class FeedbackRenderer {
     private final ObjectProvider<LlmClient> llm;
 
     /** @param llm LLM 클라이언트 (미설정 시 null, 템플릿 폴백) */
-    public FeedbackRenderer(ObjectProvider<LlmClient> llm) { this.llm = llm; }
+    public FeedbackRenderer(ObjectProvider<LlmClient> llm) {
+        this.llm = llm;
+    }
 
-    private static final String SYSTEM = """
+    private static final String SYSTEM =
+            """
         너는 한국 20대를 위한 친근하고 간결한 가계부 코치다. 규칙:
         - 1순위 메시지는 '예산 진척률과 저축 목표 영향'이다. 항상 이걸 중심에 둔다.
         - 숫자는 주어진 값만 쓴다. 과장/추측 금지. 없는 사실을 만들지 않는다.
@@ -64,29 +66,37 @@ public class FeedbackRenderer {
         sb.append("- 가용예산: ").append(won(c.availableBudgetWon())).append("\n");
         if (c.savingsImpactWon() > 0)
             sb.append("- 이대로면 저축 목표에서 ").append(won(c.savingsImpactWon())).append(" 멀어짐\n");
-        else
-            sb.append("- 현재 페이스는 예산 안. 저축 목표 달성 가능\n");
+        else sb.append("- 현재 페이스는 예산 안. 저축 목표 달성 가능\n");
         if (c.topOverCategoryName() != null)
-            sb.append("- 가장 초과 예상 카테고리: ").append(c.topOverCategoryName())
-              .append(" (+").append(won(c.topOverAmountWon())).append(")\n");
+            sb.append("- 가장 초과 예상 카테고리: ")
+                    .append(c.topOverCategoryName())
+                    .append(" (+")
+                    .append(won(c.topOverAmountWon()))
+                    .append(")\n");
 
         if (c.hasAnomaly() && c.anomalyConfidence() == Confidence.HIGH) {
             sb.append("\n[이상 신호 — 신뢰도 높음, 노출 가능]\n");
-            sb.append("- 카테고리: ").append(c.anomalyCategoryName())
-              .append(", 평소 대비 약 ").append(String.format("%.1f", c.anomalyMagnitude())).append("배\n");
+            sb.append("- 카테고리: ")
+                    .append(c.anomalyCategoryName())
+                    .append(", 평소 대비 약 ")
+                    .append(String.format("%.1f", c.anomalyMagnitude()))
+                    .append("배\n");
             if (!c.precedentMemos().isEmpty())
-                sb.append("- 과거 비슷한 상황 메모: ").append(String.join(" / ", c.precedentMemos()))
-                  .append(" (이걸 근거로 원인을 자연스럽게 추정)\n");
+                sb.append("- 과거 비슷한 상황 메모: ")
+                        .append(String.join(" / ", c.precedentMemos()))
+                        .append(" (이걸 근거로 원인을 자연스럽게 추정)\n");
         } else if (c.hasAnomaly()) {
             sb.append("\n[이상 신호 — 신뢰도 낮음/중간: 원인 단정 금지, 언급은 선택]\n");
         }
 
         if (c.hasAction()) {
             sb.append("\n[절약 액션]\n");
-            sb.append("- 제안: ").append(c.actionCategoryName())
-              .append("에서 ").append(won(c.actionAmountWon())).append(" 줄이면 저축 목표에 도움\n");
-            if (c.varyMessage())
-                sb.append("- (이 사용자는 과거 같은 제안을 '반복적'이라며 거부 → 표현을 새롭게)\n");
+            sb.append("- 제안: ")
+                    .append(c.actionCategoryName())
+                    .append("에서 ")
+                    .append(won(c.actionAmountWon()))
+                    .append(" 줄이면 저축 목표에 도움\n");
+            if (c.varyMessage()) sb.append("- (이 사용자는 과거 같은 제안을 '반복적'이라며 거부 → 표현을 새롭게)\n");
         }
         return sb.toString();
     }
@@ -95,18 +105,24 @@ public class FeedbackRenderer {
     private String template(FeedbackContext c) {
         StringBuilder sb = new StringBuilder();
         if (c.savingsImpactWon() > 0) {
-            sb.append("이번 달 이대로 가면 약 ").append(won(c.predictedMonthEndWon()))
-              .append("을 써서 저축 목표에서 ").append(won(c.savingsImpactWon())).append(" 멀어질 것 같아요.");
+            sb.append("이번 달 이대로 가면 약 ")
+                    .append(won(c.predictedMonthEndWon()))
+                    .append("을 써서 저축 목표에서 ")
+                    .append(won(c.savingsImpactWon()))
+                    .append(" 멀어질 것 같아요.");
             if (c.hasAction())
-                sb.append(" ").append(c.actionCategoryName()).append("에서 ")
-                  .append(won(c.actionAmountWon())).append("만 줄여도 목표에 한결 가까워져요.");
+                sb.append(" ")
+                        .append(c.actionCategoryName())
+                        .append("에서 ")
+                        .append(won(c.actionAmountWon()))
+                        .append("만 줄여도 목표에 한결 가까워져요.");
         } else {
             sb.append("이번 달은 예산 안에서 잘 가고 있어요. 지금 페이스면 저축 목표도 무리 없어요.");
         }
         if (c.hasAnomaly() && c.anomalyConfidence() == Confidence.HIGH) {
-            sb.append(" 참고로 ").append(c.anomalyCategoryName())
-              .append(" 지출이 평소보다 눈에 띄게 늘었어요");
-            if (!c.precedentMemos().isEmpty()) sb.append(" (예: ").append(c.precedentMemos().get(0)).append(")");
+            sb.append(" 참고로 ").append(c.anomalyCategoryName()).append(" 지출이 평소보다 눈에 띄게 늘었어요");
+            if (!c.precedentMemos().isEmpty())
+                sb.append(" (예: ").append(c.precedentMemos().get(0)).append(")");
             sb.append(".");
         }
         return sb.toString();
@@ -120,11 +136,20 @@ public class FeedbackRenderer {
 
     /** 오케스트레이터가 채워 넘기는 모든 재료. category는 이름으로 전달. */
     public record FeedbackContext(
-            long predictedMonthEndWon, long availableBudgetWon, long savingsImpactWon,
-            String topOverCategoryName, long topOverAmountWon,
-            boolean hasAnomaly, String anomalyCategoryName, double anomalyMagnitude,
-            List<String> precedentMemos, Confidence anomalyConfidence,
-            boolean hasAction, String actionCategoryName, long actionAmountWon, boolean varyMessage,
+            long predictedMonthEndWon,
+            long availableBudgetWon,
+            long savingsImpactWon,
+            String topOverCategoryName,
+            long topOverAmountWon,
+            boolean hasAnomaly,
+            String anomalyCategoryName,
+            double anomalyMagnitude,
+            List<String> precedentMemos,
+            Confidence anomalyConfidence,
+            boolean hasAction,
+            String actionCategoryName,
+            long actionAmountWon,
+            boolean varyMessage,
             Confidence overallConfidence) {}
 
     public record Rendered(String text, Confidence confidence) {}

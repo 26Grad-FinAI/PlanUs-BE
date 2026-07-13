@@ -1,5 +1,10 @@
 package com.planus.backend.apiPayload.handler;
 
+import static org.hamcrest.Matchers.containsString;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.*;
+import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
+import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
+
 import com.planus.backend.global.apiPayload.code.GeneralErrorCode;
 import com.planus.backend.global.apiPayload.exception.GeneralException;
 import com.planus.backend.global.apiPayload.handler.GeneralExceptionAdvice;
@@ -16,19 +21,13 @@ import org.springframework.test.web.servlet.setup.MockMvcBuilders;
 import org.springframework.validation.annotation.Validated;
 import org.springframework.web.bind.annotation.*;
 
-import static org.hamcrest.Matchers.containsString;
-import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.*;
-import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
-import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
-
 class GeneralExceptionAdviceTest {
 
     private MockMvc mockMvc;
 
     @BeforeEach
     void setup() {
-        mockMvc = MockMvcBuilders
-                .standaloneSetup(new GeneralExceptionAdviceTestController())
+        mockMvc = MockMvcBuilders.standaloneSetup(new GeneralExceptionAdviceTestController())
                 .setControllerAdvice(new GeneralExceptionAdvice())
                 .build();
     }
@@ -72,9 +71,8 @@ class GeneralExceptionAdviceTest {
 
         @GetMapping("/constraint-violation")
         public void constraintViolation(@RequestParam String name) {
-            var violations = Validation.buildDefaultValidatorFactory()
-                    .getValidator()
-                    .validate(new NameBean(name));
+            var violations =
+                    Validation.buildDefaultValidatorFactory().getValidator().validate(new NameBean(name));
             if (!violations.isEmpty()) {
                 throw new ConstraintViolationException(violations);
             }
@@ -185,9 +183,7 @@ class GeneralExceptionAdviceTest {
      */
     @Test
     void mediaTypeNotSupported_textPlain_returns415() throws Exception {
-        mockMvc.perform(post("/test/valid")
-                        .contentType(MediaType.TEXT_PLAIN)
-                        .content("plain text"))
+        mockMvc.perform(post("/test/valid").contentType(MediaType.TEXT_PLAIN).content("plain text"))
                 .andExpect(status().isUnsupportedMediaType())
                 .andExpect(jsonPath("$.isSuccess").value(false))
                 .andExpect(jsonPath("$.code").value("COMMON_415_001"));

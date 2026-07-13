@@ -1,10 +1,9 @@
 package com.planus.backend.domain.aifeedback.core;
 
 import com.planus.backend.domain.aifeedback.config.AiFeedbackProperties;
-import org.springframework.stereotype.Component;
-
 import java.util.Arrays;
 import java.util.OptionalDouble;
+import org.springframework.stereotype.Component;
 
 /**
  * [4] 이상치 / 변화 탐지.
@@ -18,7 +17,9 @@ public class AnomalyDetector {
     private final AiFeedbackProperties p;
 
     /** @param p 이상치 탐지 임계값 등 설정 프로퍼티 */
-    public AnomalyDetector(AiFeedbackProperties p) { this.p = p; }
+    public AnomalyDetector(AiFeedbackProperties p) {
+        this.p = p;
+    }
 
     /**
      * 단발 이상치 판정. 양성이면 modified-z(또는 대체 점수)를, 아니면 비어있음.
@@ -31,14 +32,14 @@ public class AnomalyDetector {
         if (history.length >= 2) {
             double med = RobustStats.median(history);
             double madVal = RobustStats.mad(history);
-            if (madVal > med * 0.10) {                          // 분산 충분 → robust z
+            if (madVal > med * 0.10) { // 분산 충분 → robust z
                 double z = RobustStats.modifiedZ(amount, med, madVal);
                 if (z >= p.getPointZ() && amount >= absThr) return OptionalDouble.of(z);
-            } else {                                            // 분산 미미 → 중앙값 N배
+            } else { // 분산 미미 → 중앙값 N배
                 if (amount >= med * p.getLowSpreadMult() && amount >= absThr)
                     return OptionalDouble.of(med > 0 ? amount / med : p.getLowSpreadMult());
             }
-        } else {                                                // 과거 거의 없음 → 큰 단건만
+        } else { // 과거 거의 없음 → 큰 단건만
             if (amount >= Math.max(categoryBudgetWon * p.getSparseFrac(), p.getSparseMin()))
                 return OptionalDouble.of(p.getSparseFrac() * 10); // 대략적 강도
         }
@@ -68,8 +69,8 @@ public class AnomalyDetector {
 
     private boolean rising(double[] weekly, int w, long budgetWon) {
         if (w < 6) return false; // 직전 4주(w-6..w-3) + 최근 2주(w-1..w) 확보 필요
-        double[] recent = { weekly[w - 1], weekly[w] };
-        double[] prior  = Arrays.copyOfRange(weekly, w - 6, w - 2); // w-6,w-5,w-4,w-3 (비중첩)
+        double[] recent = {weekly[w - 1], weekly[w]};
+        double[] prior = Arrays.copyOfRange(weekly, w - 6, w - 2); // w-6,w-5,w-4,w-3 (비중첩)
         double rm = RobustStats.mean(recent), pm = RobustStats.mean(prior);
         double frac = budgetWon * p.getTrendFrac();
         if (pm <= 0) return rm > 0 && rm >= frac;

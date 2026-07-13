@@ -1,8 +1,8 @@
 package com.planus.backend.domain.aifeedback.repository;
 
 import com.planus.backend.domain.aifeedback.entity.BudgetCategory;
-import org.springframework.data.jpa.repository.JpaRepository;
 import java.util.List;
+import org.springframework.data.jpa.repository.JpaRepository;
 
 /** 카테고리별 예산 배분 리포지토리. */
 public interface BudgetCategoryRepository extends JpaRepository<BudgetCategory, Long> {

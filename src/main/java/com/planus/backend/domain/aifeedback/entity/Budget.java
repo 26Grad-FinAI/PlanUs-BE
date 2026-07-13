@@ -1,17 +1,20 @@
 package com.planus.backend.domain.aifeedback.entity;
 
 import jakarta.persistence.*;
+import java.time.LocalDate;
 import lombok.AllArgsConstructor;
 import lombok.Builder;
 import lombok.Getter;
 import lombok.NoArgsConstructor;
 
-import java.time.LocalDate;
-
 /** 월별 총 예산 엔티티. budget 테이블 매핑. */
 @Entity
-@Table(name = "budget", uniqueConstraints =
-        @UniqueConstraint(name = "uk_budget_user_month", columnNames = {"user_id", "year_month"}))
+@Table(
+        name = "budget",
+        uniqueConstraints =
+                @UniqueConstraint(
+                        name = "uk_budget_user_month",
+                        columnNames = {"user_id", "year_month"}))
 @Getter
 @NoArgsConstructor
 @AllArgsConstructor

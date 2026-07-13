@@ -5,6 +5,7 @@ import com.planus.backend.global.apiPayload.code.BaseErrorCode;
 import com.planus.backend.global.apiPayload.code.GeneralErrorCode;
 import com.planus.backend.global.apiPayload.exception.GeneralException;
 import jakarta.validation.ConstraintViolationException;
+import java.util.List;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.http.HttpHeaders;
@@ -19,12 +20,6 @@ import org.springframework.web.bind.annotation.ExceptionHandler;
 import org.springframework.web.bind.annotation.RestControllerAdvice;
 import org.springframework.web.method.annotation.HandlerMethodValidationException;
 import org.springframework.web.method.annotation.MethodArgumentTypeMismatchException;
-
-import java.nio.charset.StandardCharsets;
-import java.security.MessageDigest;
-import java.security.NoSuchAlgorithmException;
-import java.util.HexFormat;
-import java.util.List;
 
 /**
  * 전역 예외 처리 어드바이스.
@@ -43,8 +38,7 @@ public class GeneralExceptionAdvice {
     public ResponseEntity<ApiResponse<?>> handleGeneralException(GeneralException ex) {
         BaseErrorCode ec = ex.getErrorCode();
         log.warn("[GeneralException] code={}, message={}", ec.getCode(), ex.getMessage());
-        return ResponseEntity.status(ec.getHttpStatus())
-                .body(ApiResponse.onFailure(ec, List.of(ex.getMessage())));
+        return ResponseEntity.status(ec.getHttpStatus()).body(ApiResponse.onFailure(ec, List.of(ex.getMessage())));
     }
 
     /**
@@ -66,8 +60,7 @@ public class GeneralExceptionAdvice {
                 .toList();
 
         log.debug("[ValidationFail] {}", detail);
-        return ResponseEntity.status(ec.getHttpStatus())
-                .body(ApiResponse.onFailure(ec, detail));
+        return ResponseEntity.status(ec.getHttpStatus()).body(ApiResponse.onFailure(ec, detail));
     }
 
     /**
@@ -83,8 +76,7 @@ public class GeneralExceptionAdvice {
                 .toList();
 
         log.debug("[ConstraintViolation] {}", detail);
-        return ResponseEntity.status(ec.getHttpStatus())
-                .body(ApiResponse.onFailure(ec, detail));
+        return ResponseEntity.status(ec.getHttpStatus()).body(ApiResponse.onFailure(ec, detail));
     }
 
     /**
@@ -95,13 +87,11 @@ public class GeneralExceptionAdvice {
     public ResponseEntity<ApiResponse<?>> handleTypeMismatch(MethodArgumentTypeMismatchException ex) {
         BaseErrorCode ec = GeneralErrorCode.VALIDATION_ERROR;
 
-        String requiredType = ex.getRequiredType() == null
-                ? "알 수 없음"
-                : ex.getRequiredType().getSimpleName();
+        String requiredType =
+                ex.getRequiredType() == null ? "알 수 없음" : ex.getRequiredType().getSimpleName();
         String detail = ex.getName() + ": 타입이 올바르지 않습니다. (기대 타입: " + requiredType + ")";
         log.debug("[TypeMismatch] parameter={}, requiredType={}", ex.getName(), requiredType);
-        return ResponseEntity.status(ec.getHttpStatus())
-                .body(ApiResponse.onFailure(ec, List.of(detail)));
+        return ResponseEntity.status(ec.getHttpStatus()).body(ApiResponse.onFailure(ec, List.of(detail)));
     }
 
     /**
@@ -114,8 +104,7 @@ public class GeneralExceptionAdvice {
 
         String detail = ex.getParameterName() + ": 필수 파라미터가 누락되었습니다.";
         log.debug("[MissingParam] {}", detail);
-        return ResponseEntity.status(ec.getHttpStatus())
-                .body(ApiResponse.onFailure(ec, List.of(detail)));
+        return ResponseEntity.status(ec.getHttpStatus()).body(ApiResponse.onFailure(ec, List.of(detail)));
     }
 
     /**
@@ -176,18 +165,16 @@ public class GeneralExceptionAdvice {
         BaseErrorCode ec = GeneralErrorCode.VALIDATION_ERROR;
 
         List<String> detail = ex.getParameterValidationResults().stream()
-                .flatMap(result -> result.getResolvableErrors().stream()
-                        .map(error -> {
-                            if (error instanceof FieldError fe) {
-                                return fe.getField() + ": " + fe.getDefaultMessage();
-                            }
-                            return result.getMethodParameter().getParameterName() + ": " + error.getDefaultMessage();
-                        }))
+                .flatMap(result -> result.getResolvableErrors().stream().map(error -> {
+                    if (error instanceof FieldError fe) {
+                        return fe.getField() + ": " + fe.getDefaultMessage();
+                    }
+                    return result.getMethodParameter().getParameterName() + ": " + error.getDefaultMessage();
+                }))
                 .toList();
 
         log.debug("[HandlerMethodValidation] {}", detail);
-        return ResponseEntity.status(ec.getHttpStatus())
-                .body(ApiResponse.onFailure(ec, detail));
+        return ResponseEntity.status(ec.getHttpStatus()).body(ApiResponse.onFailure(ec, detail));
     }
 
     /**
@@ -199,7 +186,6 @@ public class GeneralExceptionAdvice {
         log.error("Unhandled exception", ex);
 
         BaseErrorCode ec = GeneralErrorCode.INTERNAL_SERVER_ERROR;
-        return ResponseEntity.status(ec.getHttpStatus())
-                .body(ApiResponse.onFailure(ec, List.of()));
+        return ResponseEntity.status(ec.getHttpStatus()).body(ApiResponse.onFailure(ec, List.of()));
     }
 }

@@ -1,9 +1,8 @@
 package com.planus.backend.global.apiPayload.exception;
 
 import com.planus.backend.global.apiPayload.code.BaseErrorCode;
-import lombok.Getter;
-
 import java.util.Objects;
+import lombok.Getter;
 
 @Getter
 public class GeneralException extends RuntimeException {
@@ -23,9 +22,11 @@ public class GeneralException extends RuntimeException {
      * 상세 메시지가 없으면 에러 코드의 기본 메시지를 사용한다.
      */
     public GeneralException(BaseErrorCode errorCode, String detailMessage) {
-        super((detailMessage == null || detailMessage.isBlank())
-                ? Objects.requireNonNull(errorCode, "errorCode must not be null").getMessage()
-                : detailMessage);
+        super(
+                (detailMessage == null || detailMessage.isBlank())
+                        ? Objects.requireNonNull(errorCode, "errorCode must not be null")
+                                .getMessage()
+                        : detailMessage);
         this.errorCode = Objects.requireNonNull(errorCode, "errorCode must not be null");
     }
 }

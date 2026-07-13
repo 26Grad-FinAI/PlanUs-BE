@@ -13,14 +13,17 @@ import org.springframework.stereotype.Component;
 public class BudgetProjector {
 
     /** 단일 카테고리(또는 전체) 월말 예측. 금액 단위 원. */
-    public Projection project(long variableMtdWon, long fixedPlannedMtdWon, long remainingFixedPlannedWon,
-                              int dayOfMonth, int daysInMonth,
-                              double priorVariableDailyRateWon) {
+    public Projection project(
+            long variableMtdWon,
+            long fixedPlannedMtdWon,
+            long remainingFixedPlannedWon,
+            int dayOfMonth,
+            int daysInMonth,
+            double priorVariableDailyRateWon) {
         double w = (double) dayOfMonth / daysInMonth;
         double currentRate = (dayOfMonth > 0) ? (double) variableMtdWon / dayOfMonth : 0.0;
-        double blendedRate = (priorVariableDailyRateWon > 0)
-                ? w * currentRate + (1 - w) * priorVariableDailyRateWon
-                : currentRate;
+        double blendedRate =
+                (priorVariableDailyRateWon > 0) ? w * currentRate + (1 - w) * priorVariableDailyRateWon : currentRate;
         long remainingVariable = Math.round(blendedRate * (daysInMonth - dayOfMonth));
         long mtdAll = variableMtdWon + fixedPlannedMtdWon;
         long predictedMonthEnd = mtdAll + remainingFixedPlannedWon + remainingVariable;
