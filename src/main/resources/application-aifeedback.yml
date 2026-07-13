@@ -30,9 +30,13 @@ planus:
     trend-ratio: 1.40
     high-freq-categories: [1, 6, 8, 10]
     baseline-weeks: 8
-    point-min-transactions: 30
+    # [3] 이상치 신뢰도 표본 기준
+    conf-high-min-samples: 30
+    conf-medium-min-samples: 15
     # [1.5] 활동성 가드
     activity-threshold: 0.50
+    # [6] 절약 액션
+    reduction-ratio: 0.50
     # [3.5] 메모 질문 큐
     weekly-question-cap: 3
     # 월말 검증 배치

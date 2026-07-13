@@ -73,6 +73,11 @@ public class AiFeedback {
     @Column(name = "logic_version", length = 20)
     private String logicVersion;
 
+    /** 해당 주에 카테고리 예산 초과가 있었는지 여부. complianceRate 산출에 사용. */
+    @Column(name = "had_overspend")
+    @Builder.Default
+    private boolean hadOverspend = false;
+
     @Column(name = "created_at")
     private LocalDateTime createdAt;
 

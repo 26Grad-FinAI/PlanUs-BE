@@ -30,8 +30,12 @@ public class AiFeedbackProperties {
     // ── [1.5] 활동성 가드 ──
     private double activityThreshold = 0.50;
 
-    // ── [3] 이상치 표본 기준 ──
-    private int pointMinTransactions = 30;
+    // ── [3] 이상치 신뢰도 표본 기준 ──
+    private int confHighMinSamples = 30;
+    private int confMediumMinSamples = 15;
+
+    // ── [6] 절약 액션 ──
+    private double reductionRatio = 0.50;
 
     // ── [3.5] 메모 질문 큐 ──
     private int weeklyQuestionCap = 3;
@@ -180,12 +184,28 @@ public class AiFeedbackProperties {
         activityThreshold = v;
     }
 
-    public int getPointMinTransactions() {
-        return pointMinTransactions;
+    public int getConfHighMinSamples() {
+        return confHighMinSamples;
     }
 
-    public void setPointMinTransactions(int v) {
-        pointMinTransactions = v;
+    public void setConfHighMinSamples(int v) {
+        confHighMinSamples = v;
+    }
+
+    public int getConfMediumMinSamples() {
+        return confMediumMinSamples;
+    }
+
+    public void setConfMediumMinSamples(int v) {
+        confMediumMinSamples = v;
+    }
+
+    public double getReductionRatio() {
+        return reductionRatio;
+    }
+
+    public void setReductionRatio(double v) {
+        reductionRatio = v;
     }
 
     public int getWeeklyQuestionCap() {

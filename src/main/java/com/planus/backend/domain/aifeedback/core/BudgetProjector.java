@@ -31,11 +31,11 @@ public class BudgetProjector {
     }
 
     /**
-     * 저축 영향: 예상 총지출이 가용예산을 넘어서는 금액(= 저축 목표에서 멀어지는 금액).
-     * 음수면 여유(목표보다 더 저축).
+     * 저축 영향: 가용예산 − 예상총지출.
+     * 양수면 여유(목표보다 더 저축), 음수면 초과 위험.
      */
     public long savingsImpact(long predictedTotalSpendWon, long availableBudgetWon) {
-        return predictedTotalSpendWon - availableBudgetWon;
+        return availableBudgetWon - predictedTotalSpendWon;
     }
 
     /** 진척률 = 예상 월말 / 카테고리 예산. 예산 0원인데 지출이 있으면 무한대(초과 확정). */

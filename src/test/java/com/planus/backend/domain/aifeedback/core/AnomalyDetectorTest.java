@@ -78,6 +78,16 @@ class AnomalyDetectorTest {
         assertThat(detector.isHighFreq(999)).isFalse(); // 존재하지 않는 카테고리
     }
 
+    // ---------- 스파이크성 카테고리 ----------
+
+    @Test
+    void isSpikeProne_matchesConfigured() {
+        // spikeProne 기본값: [5, 20]
+        assertThat(detector.isSpikeProne(5)).isTrue();
+        assertThat(detector.isSpikeProne(20)).isTrue();
+        assertThat(detector.isSpikeProne(1)).isFalse();
+    }
+
     /** 중앙값≈base, MAD가 median*0.10 을 넘도록 분산을 둔 소액 이력(robust-z 분기 진입). */
     private static double[] stableHistory(double base) {
         return new double[] {
