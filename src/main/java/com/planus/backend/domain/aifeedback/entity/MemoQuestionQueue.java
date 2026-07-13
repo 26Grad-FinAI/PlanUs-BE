@@ -17,7 +17,12 @@ import lombok.NoArgsConstructor;
  * 주당 질문 수 상한은 {@code weeklyQuestionCap} 설정으로 제어한다.
  */
 @Entity
-@Table(name = "memo_question_queue", indexes = @Index(name = "idx_mqq_user_status", columnList = "user_id, status"))
+@Table(
+        name = "memo_question_queue",
+        indexes = {
+            @Index(name = "idx_mqq_user_status", columnList = "user_id, status"),
+            @Index(name = "idx_mqq_user_week_status", columnList = "user_id, question_week, status")
+        })
 @Getter
 @NoArgsConstructor
 @AllArgsConstructor

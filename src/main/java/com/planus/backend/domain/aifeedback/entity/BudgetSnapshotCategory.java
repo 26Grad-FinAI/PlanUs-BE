@@ -14,7 +14,13 @@ import lombok.NoArgsConstructor;
  * @see BudgetSnapshot 상위 스냅샷
  */
 @Entity
-@Table(name = "budget_snapshot_category")
+@Table(
+        name = "budget_snapshot_category",
+        uniqueConstraints =
+                @UniqueConstraint(
+                        name = "uk_bsc_snapshot_category",
+                        columnNames = {"snapshot_id", "category_id"}),
+        indexes = @Index(name = "idx_bsc_snapshot", columnList = "snapshot_id"))
 @Getter
 @NoArgsConstructor
 @AllArgsConstructor

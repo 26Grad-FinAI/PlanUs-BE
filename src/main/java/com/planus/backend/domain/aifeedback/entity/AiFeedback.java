@@ -38,8 +38,8 @@ public class AiFeedback {
     @Column(name = "user_id")
     private Long userId;
 
-    @Column(name = "year_month")
-    private LocalDate yearMonth; // NOT NULL — 해당 월 1일
+    @Column(name = "year_month", nullable = false)
+    private LocalDate yearMonth;
 
     @Column(name = "period_type")
     private String periodType; // WEEKLY/MONTHLY
@@ -56,7 +56,7 @@ public class AiFeedback {
     private String confidence; // HIGH/MEDIUM/LOW
 
     @Column(name = "category_id")
-    private Integer categoryId; // 권고 카테고리(값 1~11)
+    private Long categoryId;
 
     @Column(name = "advice_type")
     private String adviceType;
@@ -86,7 +86,7 @@ public class AiFeedback {
      * @param updatedAt    갱신 시각
      */
     public void update(
-            String feedbackText, String confidence, Integer categoryId, String adviceType, LocalDateTime updatedAt) {
+            String feedbackText, String confidence, Long categoryId, String adviceType, LocalDateTime updatedAt) {
         this.feedbackText = feedbackText;
         this.confidence = confidence;
         this.categoryId = categoryId;

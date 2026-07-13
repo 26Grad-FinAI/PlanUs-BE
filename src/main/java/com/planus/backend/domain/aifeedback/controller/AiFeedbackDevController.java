@@ -2,6 +2,7 @@ package com.planus.backend.domain.aifeedback.controller;
 
 import com.planus.backend.domain.aifeedback.service.AiFeedbackService;
 import java.time.LocalDate;
+import java.util.HashMap;
 import java.util.Map;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -41,12 +42,15 @@ public class AiFeedbackDevController {
         try {
             return feedbackService
                     .generateWeekly(userId, weekEnd)
-                    .<Map<String, Object>>map(fb -> Map.of(
-                            "created", true,
-                            "id", fb.getId(),
-                            "confidence", String.valueOf(fb.getConfidence()),
-                            "adviceType", String.valueOf(fb.getAdviceType()),
-                            "feedback", String.valueOf(fb.getFeedbackText())))
+                    .<Map<String, Object>>map(fb -> {
+                        Map<String, Object> response = new HashMap<>();
+                        response.put("created", true);
+                        response.put("id", fb.getId());
+                        response.put("confidence", fb.getConfidence());
+                        response.put("adviceType", fb.getAdviceType());
+                        response.put("feedback", fb.getFeedbackText());
+                        return response;
+                    })
                     .orElse(Map.of("created", false, "reason", "생성 조건 미충족(예산 초과·이상치·카테고리 초과 없음)"));
         } catch (Exception e) {
             log.error("주간 피드백 수동 실행 실패 — userId={}, weekEnd={}", userId, weekEnd, e);
