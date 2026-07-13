@@ -1,5 +1,6 @@
 package com.planus.backend.domain.aifeedback.cause;
 
+import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.core.type.TypeReference;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.planus.backend.domain.aifeedback.entity.Expense;
@@ -7,6 +8,8 @@ import com.planus.backend.domain.aifeedback.entity.UserProfile;
 import java.time.LocalDate;
 import java.util.*;
 import java.util.stream.Collectors;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.springframework.stereotype.Component;
 
 /**
@@ -36,6 +39,8 @@ public class CauseSignalAssembler {
     private static final long MIN_BASELINE_AVG = 10_000L;
     private static final double SELF_RATIO_THRESHOLD = 1.5;
     private static final double DOMINANT_CONTRIBUTION = 0.65;
+
+    private static final Logger log = LoggerFactory.getLogger(CauseSignalAssembler.class);
 
     private final ObjectMapper objectMapper;
 
@@ -208,7 +213,8 @@ public class CauseSignalAssembler {
             Object streak = entry.get("streak");
             if (streak instanceof Number n) return n.intValue();
             return null;
-        } catch (Exception e) {
+        } catch (JsonProcessingException e) {
+            log.warn("repeat_patterns 파싱 실패: userId={}", profile.getUserId(), e);
             return null;
         }
     }

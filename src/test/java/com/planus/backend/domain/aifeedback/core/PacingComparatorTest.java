@@ -85,4 +85,22 @@ class PacingComparatorTest {
         assertThat(result).isNotNull();
         assertThat(result.bandWidth()).isEqualTo(BandWidth.WIDE);
     }
+
+    @Test
+    @DisplayName("과거와 경과일이 다르면 비율 보정 적용")
+    void compare_differentElapsedDays_appliesRateCorrection() {
+        // 과거: 5일차에 예산 50% 사용, 현재: 10일차
+        // 보정된 과거 소진율 = 0.5 * (10/5) = 1.0
+        // 현재 소진율 = 0.6, pacingRatio = 0.6 / 1.0 = 0.6
+        List<PastMonth> past = List.of(
+                new PastMonth(500_000, 5, 1_000_000),
+                new PastMonth(500_000, 5, 1_000_000),
+                new PastMonth(500_000, 5, 1_000_000));
+
+        PacingResult result = comparator.compare(600_000, 1_000_000, 10, 30, past);
+
+        assertThat(result).isNotNull();
+        assertThat(result.historicalAvgRate()).isCloseTo(1.0, within(1e-6));
+        assertThat(result.pacingRatio()).isCloseTo(0.6, within(1e-6));
+    }
 }

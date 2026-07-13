@@ -57,11 +57,11 @@ public class PacingComparator {
         }
 
         double historicalAvgRate =
-                pastMonths.size() >= 3 ? RobustStats.median(historicalRates) : RobustStats.mean(historicalRates);
+                historicalRates.length >= 3 ? RobustStats.median(historicalRates) : RobustStats.mean(historicalRates);
 
         double pacingRatio = historicalAvgRate > 0 ? currentRate / historicalAvgRate : 0.0;
 
-        BandWidth bandWidth = determineBandWidth(elapsedDays, totalDays, pastMonths.size());
+        BandWidth bandWidth = determineBandWidth(elapsedDays, totalDays, historicalRates.length);
 
         return new PacingResult(currentRate, historicalAvgRate, pacingRatio, bandWidth);
     }
