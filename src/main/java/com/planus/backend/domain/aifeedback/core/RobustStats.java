@@ -17,7 +17,7 @@ public final class RobustStats {
         double[] s = a.clone();
         Arrays.sort(s);
         int n = s.length;
-        return (n % 2 == 1) ? s[n/2] : (s[n/2 - 1] + s[n/2]) / 2.0;
+        return (n % 2 == 1) ? s[n / 2] : (s[n / 2 - 1] + s[n / 2]) / 2.0;
     }
 
     /** 중앙값 절대편차(MAD). */
@@ -43,6 +43,8 @@ public final class RobustStats {
      */
     public static double mean(double[] a) {
         if (a.length == 0) return 0.0;
-        double s = 0; for (double v : a) s += v; return s / a.length;
+        double s = 0;
+        for (double v : a) s += v;
+        return s / a.length;
     }
 }

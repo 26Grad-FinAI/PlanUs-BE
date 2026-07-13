@@ -32,5 +32,5 @@ public class UserReaction {
     private RejectionReason rejectionReason;
 
     @Column(name = "category_id")
-    private Integer categoryId;              // 권고됐던 카테고리(조회 편의)
+    private Integer categoryId; // 권고됐던 카테고리(조회 편의)
 }

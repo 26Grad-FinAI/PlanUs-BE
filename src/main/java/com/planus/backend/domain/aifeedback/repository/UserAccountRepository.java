@@ -1,10 +1,9 @@
 package com.planus.backend.domain.aifeedback.repository;
 
 import com.planus.backend.domain.aifeedback.entity.UserAccount;
+import java.util.List;
 import org.springframework.data.jpa.repository.JpaRepository;
 import org.springframework.data.jpa.repository.Query;
-
-import java.util.List;
 
 public interface UserAccountRepository extends JpaRepository<UserAccount, Long> {
 

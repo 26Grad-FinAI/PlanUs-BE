@@ -1,9 +1,9 @@
 package com.planus.backend.domain.aifeedback.core;
 
-import org.junit.jupiter.api.Test;
-
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.within;
+
+import org.junit.jupiter.api.Test;
 
 /** BudgetProjector: 월말 예측·저축 영향·진척률 계산. */
 class BudgetProjectorTest {
@@ -31,8 +31,8 @@ class BudgetProjectorTest {
 
     @Test
     void savingsImpact_positive_when_over_negative_when_under() {
-        assertThat(projector.savingsImpact(800_000, 600_000)).isEqualTo(200_000);   // 가용예산 초과
-        assertThat(projector.savingsImpact(500_000, 600_000)).isEqualTo(-100_000);  // 여유(더 저축)
+        assertThat(projector.savingsImpact(800_000, 600_000)).isEqualTo(200_000); // 가용예산 초과
+        assertThat(projector.savingsImpact(500_000, 600_000)).isEqualTo(-100_000); // 여유(더 저축)
     }
 
     @Test

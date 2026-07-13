@@ -1,8 +1,8 @@
 package com.planus.backend.domain.aifeedback.repository;
 
 import com.planus.backend.domain.aifeedback.entity.UserReaction;
-import org.springframework.data.jpa.repository.JpaRepository;
 import java.util.List;
+import org.springframework.data.jpa.repository.JpaRepository;
 
 /** 사용자 피드백 반응 리포지토리. */
 public interface UserReactionRepository extends JpaRepository<UserReaction, Long> {

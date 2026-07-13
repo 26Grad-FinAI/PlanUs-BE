@@ -1,17 +1,16 @@
-package com.planus.backend.domain.aifeedback;
+package com.planus.backend.domain.aifeedback.batch;
 
 import com.planus.backend.domain.aifeedback.repository.UserAccountRepository;
 import com.planus.backend.domain.aifeedback.service.AiFeedbackService;
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
-import org.springframework.scheduling.annotation.Scheduled;
-import org.springframework.stereotype.Component;
-
 import java.time.Clock;
 import java.time.DayOfWeek;
 import java.time.LocalDate;
 import java.time.temporal.TemporalAdjusters;
 import java.util.List;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
+import org.springframework.scheduling.annotation.Scheduled;
+import org.springframework.stereotype.Component;
 
 /** AI-01 주간 배치. 기본 매주 월 09:00. 대상 주 = 직전 주(월~일). */
 @Component
@@ -29,7 +28,9 @@ public class WeeklyFeedbackScheduler {
      * @param clock    시각 제공 (테스트 시 고정 시계 주입 가능)
      */
     public WeeklyFeedbackScheduler(UserAccountRepository userRepo, AiFeedbackService service, Clock clock) {
-        this.userRepo = userRepo; this.service = service; this.clock = clock;
+        this.userRepo = userRepo;
+        this.service = service;
+        this.clock = clock;
     }
 
     /** 매주 월요일 09:00에 전체 사용자 대상 주간 피드백을 생성한다. 실패한 사용자는 로그 경고 후 건너뛴다. */
@@ -48,7 +49,10 @@ public class WeeklyFeedbackScheduler {
                     skipped++;
                     log.info("AI-01 스킵 user={} weekEnd={}", userId, weekEnd);
                 }
-            } catch (Exception e) { fail++; log.warn("AI-01 실패 user={}", userId, e); }
+            } catch (Exception e) {
+                fail++;
+                log.warn("AI-01 실패 user={}", userId, e);
+            }
         }
         log.info("AI-01 주간 완료 weekEnd={} 성공={} 스킵={} 실패={}", weekEnd, ok, skipped, fail);
     }

@@ -1,28 +1,29 @@
 package com.planus.backend.domain.aifeedback.core;
 
 /**
- * 신뢰도 밴드 — 규칙 기반(LLM 자기보고 % 폐기).
- * 이상치 단독 알림은 HIGH일 때만 사용자에게 노출(base-rate 한계 대응).
- *   HIGH  : 이상치 큼(배수≥기준) + 동일테마 선례 다수(≥기준)
- *   MEDIUM: 선례 일부
- *   LOW   : 이상은 있으나 과거 근거 부족 → 단독 노출 금지
+ * 이상치 신뢰도 — 통계량으로만 정의 (메모 유무와 독립).
+ * 메모 유무는 [5]에서 "원인 단정 가능 여부"를 결정하는 별개 축.
+ *   HIGH  : magnitude ≥ 4.0 → 단독 알림 가능
+ *   MEDIUM: magnitude ≥ 2.8 → 근거 보강용
+ *   LOW   : 나머지
  */
 public enum Confidence {
-    HIGH, MEDIUM, LOW;
+    HIGH,
+    MEDIUM,
+    LOW;
+
+    private static final double HIGH_THRESHOLD = 4.0;
+    private static final double MEDIUM_THRESHOLD = 2.8;
 
     /**
-     * 이상치 강도와 선례 수로 신뢰도 밴드를 결정한다.
+     * 이상치 강도(magnitude)로 신뢰도를 결정한다.
      *
-     * @param anomalyMagnitude 이상치 배수(z-score 또는 중앙값 대비 배수)
-     * @param strongPrecedents 유사도 임계 이상인 과거 선례 수
-     * @param highMag          HIGH 판정 최소 이상치 배수
-     * @param highPrecedents   HIGH 판정 최소 선례 수
+     * @param magnitude 이상치 크기 (robust z-score 또는 중앙값 대비 배수)
      * @return 산출된 신뢰도 밴드
      */
-    public static Confidence of(double anomalyMagnitude, int strongPrecedents,
-                                double highMag, int highPrecedents) {
-        if (anomalyMagnitude >= highMag && strongPrecedents >= highPrecedents) return HIGH;
-        if (strongPrecedents >= 1) return MEDIUM;
+    public static Confidence of(double magnitude) {
+        if (magnitude >= HIGH_THRESHOLD) return HIGH;
+        if (magnitude >= MEDIUM_THRESHOLD) return MEDIUM;
         return LOW;
     }
 }

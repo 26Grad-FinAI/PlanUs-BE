@@ -10,8 +10,6 @@ import org.springframework.test.context.ActiveProfiles;
 @Import(TestcontainersConfig.class)
 class BackendApplicationTests {
 
-	@Test
-	void contextLoads() {
-	}
-
+    @Test
+    void contextLoads() {}
 }
