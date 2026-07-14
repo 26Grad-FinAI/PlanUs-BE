@@ -165,12 +165,21 @@ public class ProfileUpdater {
     }
 
     private Set<Long> parseSensitiveAreas(UserProfile profile) {
+        return new HashSet<>(parseSensitiveAreaIds(objectMapper, profile));
+    }
+
+    /**
+     * UserProfile의 sensitiveAreas JSON을 파싱한다. 공용 헬퍼.
+     *
+     * @return 민감 카테고리 ID 리스트, 파싱 실패 시 빈 리스트
+     */
+    public static List<Long> parseSensitiveAreaIds(ObjectMapper objectMapper, UserProfile profile) {
+        if (profile == null || profile.getSensitiveAreas() == null) return List.of();
         try {
-            List<Long> list = objectMapper.readValue(profile.getSensitiveAreas(), new TypeReference<List<Long>>() {});
-            return new HashSet<>(list);
+            return objectMapper.readValue(profile.getSensitiveAreas(), new TypeReference<List<Long>>() {});
         } catch (Exception e) {
             log.warn("프로필 sensitive_areas 파싱 실패. userId={}", profile.getUserId(), e);
-            return new HashSet<>();
+            return List.of();
         }
     }
 

@@ -1,6 +1,5 @@
 package com.planus.backend.domain.aifeedback.service;
 
-import com.fasterxml.jackson.core.type.TypeReference;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.planus.backend.domain.aifeedback.action.ActionPlan;
 import com.planus.backend.domain.aifeedback.action.SavingsActionCalculator;
@@ -164,8 +163,8 @@ public class AiFeedbackService {
         // ── [1.5] 활동성 가드 ──
         List<Long> weeklyCounts = new ArrayList<>();
         for (int w = 1; w <= p.getBaselineWeeks(); w++) {
-            LocalDate ws = weekEnd.minusWeeks(w).plusDays(1);
-            LocalDate we = weekEnd.minusWeeks(w - 1);
+            LocalDate ws = weekEnd.minusWeeks(w + 1).plusDays(1);
+            LocalDate we = weekEnd.minusWeeks(w);
             long count = window.stream()
                     .filter(e -> e.isExpense()
                             && !e.getDate().isBefore(ws)
@@ -215,7 +214,10 @@ public class AiFeedbackService {
                     sum(window, e -> inMonth(e, monthStart, weekEnd) && e.isExpense() && !e.isVariable());
             long remainingFixPlan = estimateRemainingFixedPlanned(window, monthStart, weekEnd);
             double priorRate = priorVariableDailyRate(window, monthStart);
-            var proj = projector.project(totalVarMtd, totalFixPlanMtd, remainingFixPlan, day, dim, priorRate);
+            double[] dowWeights = computeDayOfWeekWeights(window, weekEnd);
+            var proj = projector.project(
+                    totalVarMtd, totalFixPlanMtd, remainingFixPlan,
+                    day, dim, priorRate, dowWeights, monthStart);
             predictedMonthEnd = proj.predictedMonthEndWon();
             savingsImpact = projector.savingsImpact(predictedMonthEnd, available);
             burnRate = available > 0 ? (double) predictedMonthEnd / available : 0;
@@ -304,62 +306,81 @@ public class AiFeedbackService {
         String payload = buildPayload(feedbackType, pacing, overspend, actions);
 
         // ── [11+12] 멱등 upsert + 프로필 갱신 (단일 트랜잭션) ──
+        // 동시 실행 시 INSERT 유니크 위반이 발생할 수 있으므로 재시도로 흡수한다.
         final Map<Integer, Long> finalOverspend = overspend;
         final boolean finalIsLowData = isLowData;
 
-        return Optional.ofNullable(tx.execute(status -> {
-            // [11] 멱등 upsert
-            AiFeedback existing = feedbackRepo
-                    .findByUserIdAndPeriodTypeAndPeriodStartAndPeriodEnd(userId, "WEEKLY", weekStart, weekEnd)
-                    .orElse(null);
+        try {
+            return Optional.ofNullable(tx.execute(
+                    status -> upsertFeedbackAndProfile(
+                            userId, weekStart, weekEnd, monthStart, out, topOverCat,
+                            feedbackType, finalOverspend, payload, now, reactions, finalIsLowData)));
+        } catch (org.springframework.dao.DataIntegrityViolationException e) {
+            log.info("피드백 중복 삽입 감지 — 재조회 후 갱신: userId={}, weekEnd={}", userId, weekEnd);
+            return Optional.ofNullable(tx.execute(
+                    status -> upsertFeedbackAndProfile(
+                            userId, weekStart, weekEnd, monthStart, out, topOverCat,
+                            feedbackType, finalOverspend, payload, now, reactions, finalIsLowData)));
+        }
+    }
 
-            AiFeedback fb;
-            if (existing != null) {
-                existing.update(
-                        out.text(),
-                        out.confidence().name(),
-                        topOverCat != null ? topOverCat.longValue() : null,
-                        null,
-                        feedbackType.name(),
-                        !finalOverspend.isEmpty(),
-                        payload,
-                        PROMPT_VERSION,
-                        LOGIC_VERSION,
-                        now);
-                fb = feedbackRepo.save(existing);
-            } else {
-                fb = feedbackRepo.save(AiFeedback.builder()
+    /** [11+12] 피드백 멱등 upsert + 프로필 갱신. 트랜잭션 콜백 내부에서 실행. */
+    private AiFeedback upsertFeedbackAndProfile(
+            Long userId, LocalDate weekStart, LocalDate weekEnd, LocalDate monthStart,
+            FeedbackRenderer.Rendered out, Integer topOverCat,
+            FeedbackType feedbackType, Map<Integer, Long> overspend,
+            String payload, LocalDateTime now,
+            List<UserReaction> reactions, boolean isLowData) {
+
+        AiFeedback existing = feedbackRepo
+                .findByUserIdAndPeriodTypeAndPeriodStartAndPeriodEnd(userId, "WEEKLY", weekStart, weekEnd)
+                .orElse(null);
+
+        AiFeedback fb;
+        if (existing != null) {
+            existing.update(
+                    out.text(),
+                    out.confidence().name(),
+                    topOverCat != null ? topOverCat.longValue() : null,
+                    null,
+                    feedbackType.name(),
+                    !overspend.isEmpty(),
+                    payload,
+                    PROMPT_VERSION,
+                    LOGIC_VERSION,
+                    now);
+            fb = feedbackRepo.save(existing);
+        } else {
+            fb = feedbackRepo.save(AiFeedback.builder()
+                    .userId(userId)
+                    .yearMonth(monthStart)
+                    .periodType("WEEKLY")
+                    .periodStart(weekStart)
+                    .periodEnd(weekEnd)
+                    .feedbackText(out.text())
+                    .confidence(out.confidence().name())
+                    .feedbackType(feedbackType.name())
+                    .hadOverspend(!overspend.isEmpty())
+                    .payload(payload)
+                    .promptVersion(PROMPT_VERSION)
+                    .logicVersion(LOGIC_VERSION)
+                    .createdAt(now)
+                    .build());
+        }
+
+        UserProfile profileEntity = userProfileRepo
+                .findByUserId(userId)
+                .orElseGet(() -> UserProfile.builder()
                         .userId(userId)
-                        .yearMonth(monthStart)
-                        .periodType("WEEKLY")
-                        .periodStart(weekStart)
-                        .periodEnd(weekEnd)
-                        .feedbackText(out.text())
-                        .confidence(out.confidence().name())
-                        .feedbackType(feedbackType.name())
-                        .hadOverspend(!finalOverspend.isEmpty())
-                        .payload(payload)
-                        .promptVersion(PROMPT_VERSION)
-                        .logicVersion(LOGIC_VERSION)
-                        .createdAt(now)
+                        .repeatPatterns("{}")
+                        .sensitiveAreas("[]")
                         .build());
-            }
+        List<AiFeedback> recentFeedbacks =
+                feedbackRepo.findByUserIdAndPeriodTypeOrderByPeriodStartDesc(userId, "WEEKLY");
+        profileUpdater.update(profileEntity, overspend.keySet(), reactions, recentFeedbacks, isLowData);
+        userProfileRepo.save(profileEntity);
 
-            // [12] 프로필 갱신 (같은 트랜잭션 — 피드백 저장 실패 시 프로필도 롤백)
-            UserProfile profileEntity = userProfileRepo
-                    .findByUserId(userId)
-                    .orElseGet(() -> UserProfile.builder()
-                            .userId(userId)
-                            .repeatPatterns("{}")
-                            .sensitiveAreas("[]")
-                            .build());
-            List<AiFeedback> recentFeedbacks =
-                    feedbackRepo.findByUserIdAndPeriodTypeOrderByPeriodStartDesc(userId, "WEEKLY");
-            profileUpdater.update(profileEntity, finalOverspend.keySet(), reactions, recentFeedbacks, finalIsLowData);
-            userProfileRepo.save(profileEntity);
-
-            return fb;
-        }));
+        return fb;
     }
 
     // ── 헬퍼 ──
@@ -540,11 +561,12 @@ public class AiFeedbackService {
                                 && ChronoUnit.DAYS.between(x.getDate(), d) <= p.getBaselineWeeks() * 7L)
                         .mapToDouble(Expense::getAmount)
                         .toArray();
+                // 히스토리 없으면 mag 산출 불가 — z-score와 단위가 다르므로 스킵
+                if (hist.length == 0) continue;
+
                 var z = detector.checkPoint(e.getAmount(), hist, budget);
                 if (z.isPresent()) {
-                    // mag 기준으로 통일 (z-score가 아닌 중앙값 대비 배수)
-                    double mag =
-                            hist.length > 0 ? e.getAmount() / Math.max(RobustStats.median(hist), 1) : z.getAsDouble();
+                    double mag = e.getAmount() / Math.max(RobustStats.median(hist), 1);
                     if (mag >= p.getMemoMinMagnitude()) {
                         candidates.add(new AnomalyCandidate(e, mag));
                     }
@@ -642,15 +664,9 @@ public class AiFeedbackService {
         return base;
     }
 
-    /** UserProfile의 sensitiveAreas JSON을 파싱한다. */
+    /** UserProfile의 sensitiveAreas JSON을 파싱한다. ProfileUpdater의 공용 헬퍼 재사용. */
     private List<Long> parseSensitiveAreas(UserProfile profile) {
-        if (profile == null || profile.getSensitiveAreas() == null) return List.of();
-        try {
-            return objectMapper.readValue(profile.getSensitiveAreas(), new TypeReference<List<Long>>() {});
-        } catch (Exception e) {
-            log.warn("sensitiveAreas 파싱 실패: userId={}", profile.getUserId(), e);
-            return List.of();
-        }
+        return ProfileUpdater.parseSensitiveAreaIds(objectMapper, profile);
     }
 
     /** 페이로드 JSON 조립 (버전 포함). */
@@ -744,6 +760,68 @@ public class AiFeedbackService {
                 .sum();
         int days = prevMonth.lengthOfMonth();
         return sum > 0 ? (double) sum / days : 0.0;
+    }
+
+    private static final int MIN_DOW_SAMPLE = 20;
+    private static final double MIN_DOW_WEIGHT = 0.1;
+
+    /**
+     * 윈도우 내 변동 지출에서 요일별 가중치를 산출한다.
+     * 가중치 = 해당 요일 일평균(=합계/날짜수) / 전체 일평균.
+     * 전체 거래 건수가 MIN_DOW_SAMPLE 미만이면 null → BudgetProjector가 균등 처리.
+     *
+     * @return 길이 7 배열 (인덱스 0=월 ~ 6=일, 평균 1.0으로 정규화), 또는 null
+     */
+    private double[] computeDayOfWeekWeights(List<Expense> window, LocalDate weekEnd) {
+        LocalDate cutoff = weekEnd.minusWeeks(p.getBaselineWeeks());
+
+        // 1단계: 기간 내 각 요일이 몇 번 등장하는지 (날짜 수)
+        int[] dayCountByDow = new int[7];
+        for (LocalDate d = cutoff; !d.isAfter(weekEnd); d = d.plusDays(1)) {
+            dayCountByDow[d.getDayOfWeek().getValue() - 1]++;
+        }
+
+        // 2단계: 요일별 변동 지출 합계
+        long[] sumByDow = new long[7];
+        int totalTxCount = 0;
+        for (Expense e : window) {
+            if (!e.isVariable()) continue;
+            LocalDate d = e.getDate();
+            if (d.isAfter(weekEnd) || d.isBefore(cutoff)) continue;
+            sumByDow[d.getDayOfWeek().getValue() - 1] += e.getAmount();
+            totalTxCount++;
+        }
+
+        // 가드: 전체 거래 건수가 너무 적으면 가중치 신뢰 불가
+        if (totalTxCount < MIN_DOW_SAMPLE) return null;
+
+        // 3단계: 요일별 일평균 (합계 / 날짜 수)
+        double[] avgByDow = new double[7];
+        double totalAvg = 0;
+        for (int i = 0; i < 7; i++) {
+            avgByDow[i] = dayCountByDow[i] > 0
+                    ? (double) sumByDow[i] / dayCountByDow[i]
+                    : 0.0;
+            totalAvg += avgByDow[i];
+        }
+        totalAvg /= 7;
+
+        if (totalAvg <= 0) return null;
+
+        // 4단계: 가중치 = 일평균 / 전체평균, 하한 적용
+        double[] weights = new double[7];
+        for (int i = 0; i < 7; i++) {
+            weights[i] = Math.max(avgByDow[i] / totalAvg, MIN_DOW_WEIGHT);
+        }
+
+        // 5단계: 재정규화 — 가중치 평균이 1.0이 되도록 (합 = 7.0)
+        double weightSum = 0;
+        for (double w : weights) weightSum += w;
+        for (int i = 0; i < 7; i++) {
+            weights[i] = weights[i] * 7.0 / weightSum;
+        }
+
+        return weights;
     }
 
     private interface Pred {

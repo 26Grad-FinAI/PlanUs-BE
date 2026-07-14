@@ -126,6 +126,11 @@ public class FeedbackRenderer {
 
         for (CategoryOverspend ov : c.overspendCategories()) {
             addWithRounded(values, ov.overAmountWon());
+            if (ov.causeSignals() != null) {
+                for (MemoEvidence memo : ov.causeSignals().memos()) {
+                    addWithRounded(values, memo.amount());
+                }
+            }
         }
         for (ActionSummary a : c.actions()) {
             addWithRounded(values, a.reductionWon());
@@ -364,13 +369,13 @@ public class FeedbackRenderer {
      * LLM이 정확한 값을 받으면 반올림을 최소화하여 숫자 후검증 통과율이 올라간다.
      */
     private static String exactWon(long v) {
-        return String.format("%,d원", v);
+        return String.format(java.util.Locale.KOREA, "%,d원", v);
     }
 
     /** 사용자 대면 친화적 금액. 만원 이상이면 "N만원" 형식. 템플릿 폴백에서만 사용. */
     private static String won(long v) {
-        if (Math.abs(v) >= 10_000) return String.format("%,d만원", Math.round(v / 10_000.0));
-        return String.format("%,d원", v);
+        if (Math.abs(v) >= 10_000) return String.format(java.util.Locale.KOREA, "%,d만원", Math.round(v / 10_000.0));
+        return String.format(java.util.Locale.KOREA, "%,d원", v);
     }
 
     /** 소진율을 퍼센트 문자열로 변환한다. */

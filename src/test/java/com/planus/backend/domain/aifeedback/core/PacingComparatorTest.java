@@ -116,9 +116,8 @@ class PacingComparatorTest {
         assertThat(result).isNotNull();
         assertThat(result.displayType()).isEqualTo(PacingDisplay.RANGE);
         assertThat(result.monthsAvailable()).isEqualTo(2);
-        assertThat(result.referenceMin()).isNotNull();
-        assertThat(result.referenceMax()).isNotNull();
-        assertThat(result.referenceMin()).isLessThanOrEqualTo(result.referenceMax());
+        assertThat(result.referenceMin()).isCloseTo(0.2, within(1e-6));
+        assertThat(result.referenceMax()).isCloseTo(0.3, within(1e-6));
     }
 
     @Test

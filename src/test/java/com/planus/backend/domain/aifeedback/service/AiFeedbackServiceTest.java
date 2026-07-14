@@ -181,7 +181,7 @@ class AiFeedbackServiceTest {
     }
 
     private void stubProjection(long predictedMonthEnd, long savingsImpact) {
-        when(projector.project(anyLong(), anyLong(), anyLong(), anyInt(), anyInt(), anyDouble()))
+        when(projector.project(anyLong(), anyLong(), anyLong(), anyInt(), anyInt(), anyDouble(), any(), any()))
                 .thenReturn(new BudgetProjector.Projection(predictedMonthEnd, 500_000, 20_000));
         when(projector.savingsImpact(predictedMonthEnd, 1_500_000)).thenReturn(savingsImpact);
     }
@@ -232,11 +232,14 @@ class AiFeedbackServiceTest {
         assertThat(fb.getFeedbackType()).isEqualTo("LOW_DATA");
         assertThat(fb.isHadOverspend()).isFalse();
 
-        // [2]~[7] 스킵 확인: pacingComparator, feedbackTypeResolver 호출 안 됨
+        // [2]~[7] 스킵 확인: 분석 컴포넌트 호출 안 됨
         verifyNoInteractions(pacingComparator);
+        verifyNoInteractions(detector);
+        verifyNoInteractions(projector);
         verifyNoInteractions(feedbackTypeResolver);
         verifyNoInteractions(savingsCalculator);
         verifyNoInteractions(causeAssembler);
+        verifyNoInteractions(memoQueueRepo);
     }
 
     @Test
@@ -299,8 +302,11 @@ class AiFeedbackServiceTest {
 
         service.generateWeekly(USER_ID, WEEK_END);
 
-        // update()가 호출되면 feedbackText가 갱신됨
+        // update()가 호출되면 feedbackText, payload, 버전이 모두 갱신됨
         assertThat(existing.getFeedbackText()).isEqualTo("좋은 소비 습관이에요.");
+        assertThat(existing.getPayload()).isNotNull();
+        assertThat(existing.getPromptVersion()).isEqualTo("v2.0");
+        assertThat(existing.getLogicVersion()).isEqualTo("v2.0");
         verify(feedbackRepo).save(existing);
     }
 
@@ -362,8 +368,8 @@ class AiFeedbackServiceTest {
     }
 
     @Test
-    @DisplayName("페이로드에 version 포함")
-    void generateWeekly_payloadContainsVersion() {
+    @DisplayName("페이로드에 version 포함 — JSON 구조 검증")
+    void generateWeekly_payloadContainsVersion() throws Exception {
         stubCommon();
         stubNormalActivity();
         stubPositive();
@@ -372,9 +378,9 @@ class AiFeedbackServiceTest {
 
         assertThat(result).isPresent();
         String payload = result.get().getPayload();
-        assertThat(payload).contains("\"prompt\"");
-        assertThat(payload).contains("\"logic\"");
-        assertThat(payload).contains("v2.0");
+        var tree = new ObjectMapper().readTree(payload);
+        assertThat(tree.path("version").path("prompt").asText()).isEqualTo("v2.0");
+        assertThat(tree.path("version").path("logic").asText()).isEqualTo("v2.0");
     }
 
     @Test
@@ -387,5 +393,23 @@ class AiFeedbackServiceTest {
         service.generateWeekly(USER_ID, WEEK_END);
 
         verify(tx).execute(any());
+    }
+
+    @Test
+    @DisplayName("저장이 트랜잭션 콜백 내부에서만 실행된다")
+    void generateWeekly_savesOnlyInsideTransaction() {
+        stubCommon();
+        stubNormalActivity();
+        stubPositive();
+
+        // tx.execute()가 콜백을 실행하지 않도록 재설정
+        reset(tx);
+        when(tx.execute(any())).thenReturn(null);
+
+        service.generateWeekly(USER_ID, WEEK_END);
+
+        // 콜백 미실행 → 저장이 호출되지 않아야 함
+        verify(feedbackRepo, never()).save(any(AiFeedback.class));
+        verify(userProfileRepo, never()).save(any(UserProfile.class));
     }
 }

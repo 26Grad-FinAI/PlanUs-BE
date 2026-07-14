@@ -60,7 +60,7 @@ class FeedbackRendererTest {
     }
 
     @Test
-    @DisplayName("LLM 예외 → 템플릿 폴백")
+    @DisplayName("LLM 예외 → 템플릿 폴백 (결정적 출력)")
     void render_llmFails_templateFallback() {
         LlmClient client = mock(LlmClient.class);
         when(llmProvider.getIfAvailable()).thenReturn(client);
@@ -70,7 +70,14 @@ class FeedbackRendererTest {
 
         Rendered result = renderer.render(ctx);
 
-        assertThat(result.text()).isNotBlank();
+        // LLM 없이 렌더링한 결과와 동일해야 함 (결정적 폴백)
+        @SuppressWarnings("unchecked")
+        ObjectProvider<LlmClient> noLlm = mock(ObjectProvider.class);
+        when(noLlm.getIfAvailable()).thenReturn(null);
+        FeedbackRenderer noLlmRenderer = new FeedbackRenderer(noLlm);
+        Rendered expected = noLlmRenderer.render(ctx);
+
+        assertThat(result.text()).isEqualTo(expected.text());
     }
 
     // ── 숫자 후검증 ──
@@ -200,6 +207,25 @@ class FeedbackRendererTest {
         var captor = org.mockito.ArgumentCaptor.forClass(String.class);
         verify(client).complete(captor.capture(), anyString());
         assertThat(captor.getValue()).contains("범위");
+    }
+
+    @Test
+    @DisplayName("NARROW 밴드 → 시스템 프롬프트에 확신 있는 톤 포함")
+    void render_narrowBand_systemPromptContainsConfidentTone() {
+        LlmClient client = mock(LlmClient.class);
+        when(llmProvider.getIfAvailable()).thenReturn(client);
+        when(client.complete(anyString(), anyString())).thenReturn("기록을 잘 남기고 계세요.");
+
+        FeedbackContext ctx = contextBuilder()
+                .feedbackType(FeedbackType.POSITIVE)
+                .bandWidth(BandWidth.NARROW)
+                .build();
+
+        renderer.render(ctx);
+
+        var captor = org.mockito.ArgumentCaptor.forClass(String.class);
+        verify(client).complete(captor.capture(), anyString());
+        assertThat(captor.getValue()).contains("구체적이고 확신 있는");
     }
 
     // ── 헬퍼 ──
