@@ -84,18 +84,37 @@ public class AiFeedback {
     /**
      * 기존 피드백을 최신 분석 결과로 갱신한다 (멱등 upsert용).
      *
-     * @param feedbackText 새 피드백 텍스트
-     * @param confidence   새 신뢰도
-     * @param categoryId   새 권고 카테고리
-     * @param adviceType   새 권고 유형
-     * @param updatedAt    갱신 시각
+     * @param feedbackText   새 피드백 텍스트
+     * @param confidence     새 신뢰도
+     * @param categoryId     새 권고 카테고리
+     * @param adviceType     새 권고 유형
+     * @param feedbackType   피드백 유형 (ALERT/POSITIVE/LOW_DATA)
+     * @param hadOverspend   예산 초과 여부
+     * @param payload        구조화된 분석 결과 JSON
+     * @param promptVersion  프롬프트 버전
+     * @param logicVersion   로직 버전
+     * @param updatedAt      갱신 시각
      */
     public void update(
-            String feedbackText, String confidence, Long categoryId, String adviceType, LocalDateTime updatedAt) {
+            String feedbackText,
+            String confidence,
+            Long categoryId,
+            String adviceType,
+            String feedbackType,
+            boolean hadOverspend,
+            String payload,
+            String promptVersion,
+            String logicVersion,
+            LocalDateTime updatedAt) {
         this.feedbackText = feedbackText;
         this.confidence = confidence;
         this.categoryId = categoryId;
         this.adviceType = adviceType;
+        this.feedbackType = feedbackType;
+        this.hadOverspend = hadOverspend;
+        this.payload = payload;
+        this.promptVersion = promptVersion;
+        this.logicVersion = logicVersion;
         this.createdAt = updatedAt;
     }
 }

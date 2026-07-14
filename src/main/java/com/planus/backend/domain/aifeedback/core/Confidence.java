@@ -70,7 +70,7 @@ public enum Confidence {
      * @param b 두 번째 신뢰도
      * @return 둘 중 낮은 신뢰도
      */
-    static Confidence lower(Confidence a, Confidence b) {
+    public static Confidence lower(Confidence a, Confidence b) {
         return a.ordinal() >= b.ordinal() ? a : b;
     }
 }

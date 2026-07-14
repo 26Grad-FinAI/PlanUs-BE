@@ -45,17 +45,27 @@ class AnomalyDetectionPerfTest {
         AnomalyDetector detector = new AnomalyDetector(props);
 
         service = new AiFeedbackService(
-                null,
-                null,
-                null,
-                null,
-                null,
+                null, // userRepo
+                null, // expenseRepo
+                null, // budgetRepo
+                null, // budgetCatRepo
+                null, // feedbackRepo
+                null, // userProfileRepo
+                null, // reactionRepo
+                null, // memoQueueRepo
                 detector,
                 new BudgetProjector(),
-                null,
+                null, // renderer
+                null, // activityGuard
+                null, // pacingComparator
+                null, // feedbackTypeResolver
+                null, // causeAssembler
+                null, // savingsCalculator
+                null, // profileUpdater
                 props,
+                null, // objectMapper
                 Clock.systemDefaultZone(),
-                null);
+                null); // tx
 
         detectMethod = AiFeedbackService.class.getDeclaredMethod(
                 "detectTopAnomaly", List.class, LocalDate.class, LocalDate.class, Map.class);

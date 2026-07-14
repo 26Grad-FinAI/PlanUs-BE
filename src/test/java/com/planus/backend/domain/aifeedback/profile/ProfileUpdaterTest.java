@@ -31,7 +31,7 @@ class ProfileUpdaterTest {
         void increments_streak() throws Exception {
             UserProfile profile = profileWithPatterns("{\"1\":{\"streak\":2}}");
 
-            updater.update(profile, Set.of(1), List.of(), List.of());
+            updater.update(profile, Set.of(1), List.of(), List.of(), false);
 
             Map<String, Map<String, Object>> result = parsePatterns(profile);
             assertThat(result.get("1").get("streak")).isEqualTo(3);
@@ -42,7 +42,7 @@ class ProfileUpdaterTest {
         void creates_new_entry() throws Exception {
             UserProfile profile = profileWithPatterns("{}");
 
-            updater.update(profile, Set.of(2), List.of(), List.of());
+            updater.update(profile, Set.of(2), List.of(), List.of(), false);
 
             Map<String, Map<String, Object>> result = parsePatterns(profile);
             assertThat(result).containsKey("2");
@@ -54,7 +54,7 @@ class ProfileUpdaterTest {
         void resets_non_overspend() throws Exception {
             UserProfile profile = profileWithPatterns("{\"1\":{\"streak\":3},\"2\":{\"streak\":1}}");
 
-            updater.update(profile, Set.of(1), List.of(), List.of()); // 2번은 비초과
+            updater.update(profile, Set.of(1), List.of(), List.of(), false); // 2번은 비초과
 
             Map<String, Map<String, Object>> result = parsePatterns(profile);
             assertThat(result).containsKey("1");
@@ -67,11 +67,24 @@ class ProfileUpdaterTest {
             UserProfile profile = profileWithPatterns("{}");
 
             // 3주 연속 호출
-            updater.update(profile, Set.of(1), List.of(), List.of());
-            updater.update(profile, Set.of(1), List.of(), List.of());
-            updater.update(profile, Set.of(1), List.of(), List.of());
+            updater.update(profile, Set.of(1), List.of(), List.of(), false);
+            updater.update(profile, Set.of(1), List.of(), List.of(), false);
+            updater.update(profile, Set.of(1), List.of(), List.of(), false);
 
             Map<String, Map<String, Object>> result = parsePatterns(profile);
+            assertThat(result.get("1").get("streak")).isEqualTo(3);
+        }
+
+        @Test
+        @DisplayName("LOW_DATA일 때 repeatPatterns 갱신 스킵 (streak 보호)")
+        void lowData_skips_repeat_patterns() throws Exception {
+            UserProfile profile = profileWithPatterns("{\"1\":{\"streak\":3}}");
+
+            // isLowData=true → 빈 overspend로도 streak 유지
+            updater.update(profile, Set.of(), List.of(), List.of(), true);
+
+            Map<String, Map<String, Object>> result = parsePatterns(profile);
+            assertThat(result).containsKey("1");
             assertThat(result.get("1").get("streak")).isEqualTo(3);
         }
     }
@@ -89,7 +102,7 @@ class ProfileUpdaterTest {
                     rejection(2, RejectionReason.DONT_WANT_REDUCE), rejection(2, RejectionReason.DONT_WANT_REDUCE));
             UserProfile profile = profileWithSensitive("[]");
 
-            updater.update(profile, Set.of(), reactions, List.of());
+            updater.update(profile, Set.of(), reactions, List.of(), false);
 
             List<Long> result = parseSensitive(profile);
             assertThat(result).contains(2L);
@@ -101,7 +114,7 @@ class ProfileUpdaterTest {
             List<UserReaction> reactions = List.of(rejection(2, RejectionReason.DONT_WANT_REDUCE));
             UserProfile profile = profileWithSensitive("[]");
 
-            updater.update(profile, Set.of(), reactions, List.of());
+            updater.update(profile, Set.of(), reactions, List.of(), false);
 
             List<Long> result = parseSensitive(profile);
             assertThat(result).doesNotContain(2L);
@@ -114,7 +127,7 @@ class ProfileUpdaterTest {
                     rejection(2, RejectionReason.DONT_WANT_REDUCE), rejection(2, RejectionReason.DONT_WANT_REDUCE));
             UserProfile profile = profileWithSensitive("[2]"); // 이미 있음
 
-            updater.update(profile, Set.of(), reactions, List.of());
+            updater.update(profile, Set.of(), reactions, List.of(), false);
 
             List<Long> result = parseSensitive(profile);
             assertThat(result.stream().filter(v -> v == 2L).count()).isEqualTo(1);
@@ -136,7 +149,7 @@ class ProfileUpdaterTest {
                     weeklyFeedback("ALERT", true, 3)); // 초과 → 미준수
 
             UserProfile profile = defaultProfile();
-            updater.update(profile, Set.of(), List.of(), feedbacks);
+            updater.update(profile, Set.of(), List.of(), feedbacks, false);
 
             // 2/3 = 0.667
             assertThat(profile.getComplianceRate()).isCloseTo(0.667, within(0.01));
@@ -151,7 +164,7 @@ class ProfileUpdaterTest {
                     weeklyFeedback("ALERT", true, 3));
 
             UserProfile profile = defaultProfile();
-            updater.update(profile, Set.of(), List.of(), feedbacks);
+            updater.update(profile, Set.of(), List.of(), feedbacks, false);
 
             // 판정 가능: POSITIVE(준수) + ALERT(미준수) = 2주, 준수 1주 → 0.5
             assertThat(profile.getComplianceRate()).isCloseTo(0.5, within(0.01));
@@ -164,7 +177,7 @@ class ProfileUpdaterTest {
             List<AiFeedback> feedbacks = List.of(weeklyFeedback("ALERT", false, 1), weeklyFeedback("ALERT", false, 2));
 
             UserProfile profile = defaultProfile();
-            updater.update(profile, Set.of(), List.of(), feedbacks);
+            updater.update(profile, Set.of(), List.of(), feedbacks, false);
 
             assertThat(profile.getComplianceRate()).isEqualTo(1.0);
         }
@@ -176,7 +189,7 @@ class ProfileUpdaterTest {
 
             UserProfile profile = defaultProfile();
             double before = profile.getComplianceRate();
-            updater.update(profile, Set.of(), List.of(), feedbacks);
+            updater.update(profile, Set.of(), List.of(), feedbacks, false);
 
             assertThat(profile.getComplianceRate()).isEqualTo(before);
         }
