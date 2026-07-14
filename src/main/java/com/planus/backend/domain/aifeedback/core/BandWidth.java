@@ -7,8 +7,10 @@ package com.planus.backend.domain.aifeedback.core;
  * 월말에는 밴드가 좁아(NARROW) 구체적인 경고가 가능하다.
  */
 public enum BandWidth {
-    /** 월초: 데이터 부족, 단정 회피 톤 */
+    /** 월초 또는 과거 1개월: 데이터 부족, 단정 회피 톤 */
     WIDE,
-    /** 월말: 데이터 충분, 구체적 경고 가능 */
+    /** 중간 시점 또는 과거 2개월: 범위로 표현, 추이 관찰 */
+    MEDIUM,
+    /** 월말 + 과거 3개월+: 데이터 충분, 구체적 경고 가능 */
     NARROW
 }

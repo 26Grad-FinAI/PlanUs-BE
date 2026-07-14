@@ -93,5 +93,24 @@ class ConfidenceTest {
         void highVsMedium() {
             assertThat(Confidence.lower(Confidence.HIGH, Confidence.MEDIUM)).isEqualTo(Confidence.MEDIUM);
         }
+
+        @Test
+        @DisplayName("교환법칙: lower(a, b) == lower(b, a)")
+        void commutative() {
+            for (Confidence a : Confidence.values()) {
+                for (Confidence b : Confidence.values()) {
+                    assertThat(Confidence.lower(a, b))
+                            .as("lower(%s, %s) == lower(%s, %s)", a, b, b, a)
+                            .isEqualTo(Confidence.lower(b, a));
+                }
+            }
+        }
+
+        @Test
+        @DisplayName("ordinal 순서: HIGH(0) < MEDIUM(1) < LOW(2) — 역전 시 lower() 오동작")
+        void ordinal_order_invariant() {
+            assertThat(Confidence.HIGH.ordinal()).isLessThan(Confidence.MEDIUM.ordinal());
+            assertThat(Confidence.MEDIUM.ordinal()).isLessThan(Confidence.LOW.ordinal());
+        }
     }
 }

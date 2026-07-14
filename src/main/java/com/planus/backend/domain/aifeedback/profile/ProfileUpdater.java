@@ -51,14 +51,20 @@ public class ProfileUpdater {
      * @param overspendCategories 이번 주 초과 카테고리 ID 목록
      * @param reactions           전체 거부 이력
      * @param recentFeedbacks     최근 12주 주간 피드백 (complianceRate 산출용)
+     * @param isLowData           이번 주 LOW_DATA 여부. true면 repeatPatterns 갱신 스킵.
+     *                            기록 부족으로 판정을 못 한 것이지 예산을 지킨 게 아니므로
+     *                            빈 overspend로 기존 streak를 리셋하면 안 된다.
      */
     public void update(
             UserProfile profile,
             Set<Integer> overspendCategories,
             List<UserReaction> reactions,
-            List<AiFeedback> recentFeedbacks) {
+            List<AiFeedback> recentFeedbacks,
+            boolean isLowData) {
 
-        updateRepeatPatterns(profile, overspendCategories);
+        if (!isLowData) {
+            updateRepeatPatterns(profile, overspendCategories);
+        }
         updateSensitiveAreas(profile, reactions);
         updateComplianceRate(profile, recentFeedbacks);
     }

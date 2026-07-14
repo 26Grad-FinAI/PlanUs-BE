@@ -53,6 +53,22 @@ public interface ExpenseRepository extends JpaRepository<Expense, Long> {
     long sumExpensesByPeriod(Long userId, LocalDateTime from, LocalDateTime to);
 
     /**
+     * [2] PacingComparator용. 특정 기간 내 변동 지출(반복·예정 제외) 합계를 조회한다.
+     * 페이싱 비교에서 분자(지출)와 분모(예산)의 기준을 일치시키기 위해
+     * 고정·예정 지출을 제외한 변동 지출만 집계한다.
+     *
+     * @param userId 사용자 ID
+     * @param from   조회 시작 일시 (포함)
+     * @param to     조회 종료 일시 (포함)
+     * @return 기간 내 변동 지출 합계 (원), 거래 없으면 0
+     */
+    @Query(
+            "SELECT COALESCE(SUM(e.amount), 0) FROM Expense e WHERE e.userId = :userId"
+                    + " AND e.type = 'EXPENSE' AND e.recurring = false AND e.planned = false"
+                    + " AND e.expenseDate BETWEEN :from AND :to")
+    long sumVariableExpensesByPeriod(Long userId, LocalDateTime from, LocalDateTime to);
+
+    /**
      * [1.5] ActivityGuard용. 특정 기간 내 사용자 거래(EXPENSE) 건수를 센다.
      *
      * @param userId 사용자 ID

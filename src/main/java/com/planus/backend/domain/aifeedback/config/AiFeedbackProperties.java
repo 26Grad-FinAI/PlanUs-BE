@@ -39,6 +39,8 @@ public class AiFeedbackProperties {
 
     // ── [3.5] 메모 질문 큐 ──
     private int weeklyQuestionCap = 3;
+    /** 메모 질문 큐 적재 임계: 중앙값 대비 배수(mag) 기준. pointZ(z-score 임계)와 단위가 다름. */
+    private double memoMinMagnitude = 4.0;
 
     // ── 월말 검증 배치 ──
     private String monthEndCron = "0 0 3 1 * *";
@@ -214,6 +216,14 @@ public class AiFeedbackProperties {
 
     public void setWeeklyQuestionCap(int v) {
         weeklyQuestionCap = v;
+    }
+
+    public double getMemoMinMagnitude() {
+        return memoMinMagnitude;
+    }
+
+    public void setMemoMinMagnitude(double v) {
+        memoMinMagnitude = v;
     }
 
     public String getMonthEndCron() {

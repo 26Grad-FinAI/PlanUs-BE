@@ -3,6 +3,7 @@ package com.planus.backend.domain.aifeedback.core;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.within;
 
+import com.planus.backend.domain.aifeedback.core.PacingComparator.PacingDisplay;
 import com.planus.backend.domain.aifeedback.core.PacingComparator.PacingResult;
 import com.planus.backend.domain.aifeedback.core.PacingComparator.PastMonth;
 import java.util.List;
@@ -16,7 +17,6 @@ class PacingComparatorTest {
     @Test
     @DisplayName("과거 대비 빠른 소진이면 pacingRatio > 1.0")
     void compare_fasterPacing() {
-        // 과거: 7일차에 예산의 22% 사용, 현재: 35% 사용
         List<PastMonth> past = List.of(
                 new PastMonth(220_000, 7, 1_000_000),
                 new PastMonth(240_000, 7, 1_000_000),
@@ -65,9 +65,24 @@ class PacingComparatorTest {
     }
 
     @Test
-    @DisplayName("월말(경과일/총일 >= 0.4, 과거 2개월+)이면 NARROW 밴드")
-    void compare_lateMonth_narrowBand() {
-        List<PastMonth> past = List.of(new PastMonth(700_000, 25, 1_000_000), new PastMonth(750_000, 25, 1_000_000));
+    @DisplayName("중간 시점(0.4 ≤ progress < 0.6) + 2개월이면 MEDIUM 밴드")
+    void compare_midMonth_twoMonths_mediumBand() {
+        List<PastMonth> past =
+                List.of(new PastMonth(400_000, 15, 1_000_000), new PastMonth(450_000, 15, 1_000_000));
+
+        PacingResult result = comparator.compare(500_000, 1_000_000, 15, 30, past);
+
+        assertThat(result).isNotNull();
+        assertThat(result.bandWidth()).isEqualTo(BandWidth.MEDIUM);
+    }
+
+    @Test
+    @DisplayName("월말(progress ≥ 0.6) + 3개월+이면 NARROW 밴드")
+    void compare_lateMonth_threeMonths_narrowBand() {
+        List<PastMonth> past = List.of(
+                new PastMonth(700_000, 25, 1_000_000),
+                new PastMonth(750_000, 25, 1_000_000),
+                new PastMonth(720_000, 25, 1_000_000));
 
         PacingResult result = comparator.compare(800_000, 1_000_000, 25, 30, past);
 
@@ -76,22 +91,56 @@ class PacingComparatorTest {
     }
 
     @Test
-    @DisplayName("과거 1개월만 있으면 WIDE 밴드")
-    void compare_singlePastMonth_wideBand() {
+    @DisplayName("과거 1개월만 있으면 WIDE 밴드 + SINGLE displayType")
+    void compare_singlePastMonth_wideBandAndSingle() {
         List<PastMonth> past = List.of(new PastMonth(220_000, 15, 1_000_000));
 
         PacingResult result = comparator.compare(250_000, 1_000_000, 15, 30, past);
 
         assertThat(result).isNotNull();
         assertThat(result.bandWidth()).isEqualTo(BandWidth.WIDE);
+        assertThat(result.displayType()).isEqualTo(PacingDisplay.SINGLE);
+        assertThat(result.monthsAvailable()).isEqualTo(1);
+        assertThat(result.referenceMin()).isNull();
+        assertThat(result.referenceMax()).isNull();
+    }
+
+    @Test
+    @DisplayName("과거 2개월이면 RANGE displayType + referenceMin/Max 제공")
+    void compare_twoMonths_rangeDisplayType() {
+        List<PastMonth> past =
+                List.of(new PastMonth(200_000, 10, 1_000_000), new PastMonth(300_000, 10, 1_000_000));
+
+        PacingResult result = comparator.compare(250_000, 1_000_000, 10, 30, past);
+
+        assertThat(result).isNotNull();
+        assertThat(result.displayType()).isEqualTo(PacingDisplay.RANGE);
+        assertThat(result.monthsAvailable()).isEqualTo(2);
+        assertThat(result.referenceMin()).isNotNull();
+        assertThat(result.referenceMax()).isNotNull();
+        assertThat(result.referenceMin()).isLessThanOrEqualTo(result.referenceMax());
+    }
+
+    @Test
+    @DisplayName("과거 3개월+이면 MEDIAN displayType")
+    void compare_threeMonths_medianDisplayType() {
+        List<PastMonth> past = List.of(
+                new PastMonth(200_000, 10, 1_000_000),
+                new PastMonth(300_000, 10, 1_000_000),
+                new PastMonth(250_000, 10, 1_000_000));
+
+        PacingResult result = comparator.compare(250_000, 1_000_000, 10, 30, past);
+
+        assertThat(result).isNotNull();
+        assertThat(result.displayType()).isEqualTo(PacingDisplay.MEDIAN);
+        assertThat(result.monthsAvailable()).isEqualTo(3);
+        assertThat(result.referenceMin()).isNull();
+        assertThat(result.referenceMax()).isNull();
     }
 
     @Test
     @DisplayName("과거와 경과일이 다르면 비율 보정 적용")
     void compare_differentElapsedDays_appliesRateCorrection() {
-        // 과거: 5일차에 예산 50% 사용, 현재: 10일차
-        // 보정된 과거 소진율 = 0.5 * (10/5) = 1.0
-        // 현재 소진율 = 0.6, pacingRatio = 0.6 / 1.0 = 0.6
         List<PastMonth> past = List.of(
                 new PastMonth(500_000, 5, 1_000_000),
                 new PastMonth(500_000, 5, 1_000_000),
@@ -102,5 +151,18 @@ class PacingComparatorTest {
         assertThat(result).isNotNull();
         assertThat(result.historicalAvgRate()).isCloseTo(1.0, within(1e-6));
         assertThat(result.pacingRatio()).isCloseTo(0.6, within(1e-6));
+    }
+
+    @Test
+    @DisplayName("월말(progress ≥ 0.4) + 2개월이면 MEDIUM 밴드 (3개월 미만)")
+    void compare_lateMonth_twoMonths_stillMedium() {
+        List<PastMonth> past =
+                List.of(new PastMonth(700_000, 25, 1_000_000), new PastMonth(750_000, 25, 1_000_000));
+
+        PacingResult result = comparator.compare(800_000, 1_000_000, 25, 30, past);
+
+        assertThat(result).isNotNull();
+        // progress=0.83 ≥ 0.6 but pastMonthCount=2 < 3 → MEDIUM
+        assertThat(result.bandWidth()).isEqualTo(BandWidth.MEDIUM);
     }
 }
