@@ -46,6 +46,9 @@ tasks.named('test') {
 	useJUnitPlatform {
 		excludeTags 'benchmark'
 	}
+	testLogging {
+		showStandardStreams = true
+	}
 }
 
 spotless {

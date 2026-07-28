@@ -252,9 +252,22 @@ class FeedbackRendererTest {
         private boolean hasAnomaly = false;
         private String anomalyCategoryName = null;
         private double anomalyMagnitude = 0;
+        private long anomalyWeeklyAmountWon = 0;
         private Confidence anomalyConfidence = Confidence.LOW;
+        private String anomalyEmotion = null;
+        private boolean hasSecondaryAnomaly = false;
+        private String secondaryAnomalyCategoryName = null;
+        private double secondaryAnomalyMagnitude = 0;
+        private long secondaryAnomalyWeeklyAmountWon = 0;
+        private Confidence secondaryAnomalyConfidence = Confidence.LOW;
+        private String secondaryAnomalyEmotion = null;
+        private FeedbackRenderer.WeekEmotionSummary weekEmotion = null;
+        private long weekTotalWon = 0L;
+        private long prevWeekTotalWon = 0L;
+        private double complianceRate = 0.0;
         private List<CategoryOverspend> overspendCategories = List.of();
         private List<ActionSummary> actions = List.of();
+        private List<FeedbackRenderer.TransactionHighlight> weekHighlights = List.of();
         private FeedbackType feedbackType = FeedbackType.POSITIVE;
         private BandWidth bandWidth = null;
         private Confidence overallConfidence = Confidence.HIGH;
@@ -294,9 +307,22 @@ class FeedbackRendererTest {
                     hasAnomaly,
                     anomalyCategoryName,
                     anomalyMagnitude,
+                    anomalyWeeklyAmountWon,
                     anomalyConfidence,
+                    anomalyEmotion,
+                    hasSecondaryAnomaly,
+                    secondaryAnomalyCategoryName,
+                    secondaryAnomalyMagnitude,
+                    secondaryAnomalyWeeklyAmountWon,
+                    secondaryAnomalyConfidence,
+                    secondaryAnomalyEmotion,
+                    weekEmotion,
+                    weekTotalWon,
+                    prevWeekTotalWon,
+                    complianceRate,
                     overspendCategories,
                     actions,
+                    weekHighlights,
                     feedbackType,
                     bandWidth,
                     overallConfidence);

@@ -71,6 +71,7 @@ public class CauseSignalAssembler {
 
         // 감정태그: 변동 지출만 집계 (고정·예정 지출의 감정태그는 행동 개선 대상이 아님)
         Map<String, Long> emotionCounts = countEmotions(categoryExpenses, weekStart, weekEnd);
+        Map<String, Long> emotionAmounts = sumEmotionAmounts(categoryExpenses, weekStart, weekEnd);
 
         Integer repeatStreak = extractRepeatStreak(categoryId, profile);
 
@@ -85,6 +86,7 @@ public class CauseSignalAssembler {
                 freqPrice[0],
                 freqPrice[1],
                 emotionCounts,
+                emotionAmounts,
                 repeatStreak,
                 memos,
                 !memos.isEmpty());
@@ -194,6 +196,16 @@ public class CauseSignalAssembler {
                 .filter(e -> !e.getDate().isBefore(weekStart) && !e.getDate().isAfter(weekEnd))
                 .filter(e -> e.getEmotion() != null && !e.getEmotion().isBlank())
                 .collect(Collectors.groupingBy(Expense::getEmotion, Collectors.counting()));
+    }
+
+    /** 감정태그별 금액 합계. 이번 주 변동 지출만 대상. */
+    private Map<String, Long> sumEmotionAmounts(List<Expense> categoryExpenses, LocalDate weekStart, LocalDate weekEnd) {
+        return categoryExpenses.stream()
+                .filter(Expense::isVariable)
+                .filter(e -> !e.getDate().isBefore(weekStart) && !e.getDate().isAfter(weekEnd))
+                .filter(e -> e.getEmotion() != null && !e.getEmotion().isBlank())
+                .collect(Collectors.groupingBy(Expense::getEmotion,
+                        Collectors.summingLong(Expense::getAmount)));
     }
 
     /**

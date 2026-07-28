@@ -50,6 +50,7 @@ class AnomalyDetectionPerfTest {
                 null, // budgetRepo
                 null, // budgetCatRepo
                 null, // feedbackRepo
+                null, // monthEndVerifRepo
                 null, // userProfileRepo
                 null, // reactionRepo
                 null, // memoQueueRepo
