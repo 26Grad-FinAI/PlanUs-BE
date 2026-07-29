@@ -155,7 +155,7 @@ class SavingsActionCalculatorTest {
         @DisplayName("CauseSignals의 dominantFactor가 ActionPlan에 전달됨")
         void passes_dominant_factor() {
             Map<Integer, Long> overspend = Map.of(2, 100_000L);
-            CauseSignals signals = new CauseSignals(2.5, "FREQUENCY", 0.8, 0.2, Map.of(), null, List.of(), false);
+            CauseSignals signals = new CauseSignals(2.5, "FREQUENCY", 0.8, 0.2, Map.of(), Map.of(), null, List.of(), false);
             Map<Integer, CauseSignals> causeMap = Map.of(2, signals);
 
             List<ActionPlan> plans = calculator.calculate(

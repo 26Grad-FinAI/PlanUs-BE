@@ -13,7 +13,11 @@ import com.planus.backend.domain.aifeedback.entity.*;
 import com.planus.backend.domain.aifeedback.llm.FeedbackRenderer;
 import com.planus.backend.domain.aifeedback.llm.FeedbackRenderer.ActionSummary;
 import com.planus.backend.domain.aifeedback.llm.FeedbackRenderer.CategoryOverspend;
+import com.planus.backend.domain.aifeedback.llm.FeedbackRenderer.CategoryResult;
 import com.planus.backend.domain.aifeedback.llm.FeedbackRenderer.FeedbackContext;
+import com.planus.backend.domain.aifeedback.llm.FeedbackRenderer.MonthEndContext;
+import com.planus.backend.domain.aifeedback.llm.FeedbackRenderer.TransactionHighlight;
+import com.planus.backend.domain.aifeedback.llm.FeedbackRenderer.WeekEmotionSummary;
 import com.planus.backend.domain.aifeedback.profile.ProfileUpdater;
 import com.planus.backend.domain.aifeedback.repository.*;
 import java.time.*;
@@ -58,11 +62,15 @@ public class AiFeedbackService {
     /** 추세 magnitude 계산에 필요한 최소 주 수 (4주 recent + 4주 prior). */
     private static final int TREND_MIN_WEEKS = 8;
 
+    /** PRIMARY를 포함한 피드백에 사용할 HIGH 이상치 최대 개수. */
+    private static final int MAX_HIGH_ANOMALIES = 3;
+
     private final UserAccountRepository userRepo;
     private final ExpenseRepository expenseRepo;
     private final BudgetRepository budgetRepo;
     private final BudgetCategoryRepository budgetCatRepo;
     private final AiFeedbackRepository feedbackRepo;
+    private final MonthEndVerificationRepository monthEndVerifRepo;
     private final UserProfileRepository userProfileRepo;
     private final UserReactionRepository reactionRepo;
     private final MemoQuestionQueueRepository memoQueueRepo;
@@ -86,6 +94,7 @@ public class AiFeedbackService {
             BudgetRepository budgetRepo,
             BudgetCategoryRepository budgetCatRepo,
             AiFeedbackRepository feedbackRepo,
+            MonthEndVerificationRepository monthEndVerifRepo,
             UserProfileRepository userProfileRepo,
             UserReactionRepository reactionRepo,
             MemoQuestionQueueRepository memoQueueRepo,
@@ -107,6 +116,7 @@ public class AiFeedbackService {
         this.budgetRepo = budgetRepo;
         this.budgetCatRepo = budgetCatRepo;
         this.feedbackRepo = feedbackRepo;
+        this.monthEndVerifRepo = monthEndVerifRepo;
         this.userProfileRepo = userProfileRepo;
         this.reactionRepo = reactionRepo;
         this.memoQueueRepo = memoQueueRepo;
@@ -192,6 +202,7 @@ public class AiFeedbackService {
         long savingsImpact = 0;
         double burnRate = 0;
         Confidence overallConfidence;
+        List<Anomaly> allAnomalies = List.of();
 
         if (isLowData) {
             feedbackType = FeedbackType.LOW_DATA;
@@ -201,8 +212,9 @@ public class AiFeedbackService {
             long varMtdSpend = sum(window, e -> inMonth(e, monthStart, weekEnd) && e.isVariable());
             pacing = buildPacing(userId, varMtdSpend, available, day, dim, monthStart);
 
-            // ── [3] 이상치 탐지 (spikeProne 필터 + histLength 추적 + 추세 4+4 대칭) ──
-            top = detectTopAnomaly(window, weekStart, weekEnd, catBudget);
+            // ── [3] 이상치 탐지 — 카테고리별 best 수집 후 magnitude 내림차순 정렬 ──
+            allAnomalies = detectAllAnomalies(window, weekStart, weekEnd, catBudget);
+            top = allAnomalies.isEmpty() ? null : allAnomalies.get(0);
 
             // ── [3.5] 메모 질문 큐 적재 (mag 기준, memoMinMagnitude 설정) ──
             List<AnomalyCandidate> memoCandidates = collectAnomalyCandidates(window, weekStart, weekEnd, catBudget);
@@ -261,6 +273,12 @@ public class AiFeedbackService {
             overallConfidence = deriveOverallConfidence(pacing, anomalyConfidence, top != null);
         }
 
+        // ── [5.5] 이번 주 주목 거래 수집 ──
+        // 이상치 감지 OR REGRET/IMPULSE 감정 OR 메모 있는 거래, 금액 상위 5건
+        List<TransactionHighlight> weekHighlights = isLowData
+                ? List.of()
+                : collectWeekHighlights(window, weekStart, weekEnd, catBudget);
+
         // ── [8] FeedbackContext 조립 ──
         final Map<Integer, CauseSignals> finalCauseSignals = causeSignalsByCategory;
 
@@ -269,10 +287,18 @@ public class AiFeedbackService {
                 .map(Map.Entry::getKey)
                 .orElse(null);
 
+        final LocalDate finalWeekStart = weekStart;
         List<CategoryOverspend> overspendList = overspend.entrySet().stream()
                 .sorted(Map.Entry.<Integer, Long>comparingByValue().reversed())
-                .map(e -> new CategoryOverspend(
-                        Categories.name(e.getKey()), e.getValue(), finalCauseSignals.get(e.getKey())))
+                .map(e -> {
+                    int cat = e.getKey();
+                    long thisWeekAmt = sum(window, ex -> ex.getCategoryId() == cat
+                            && !ex.getDate().isBefore(finalWeekStart)
+                            && !ex.getDate().isAfter(weekEnd)
+                            && ex.isVariable());
+                    return new CategoryOverspend(
+                            Categories.name(cat), e.getValue(), thisWeekAmt, finalCauseSignals.get(cat));
+                })
                 .toList();
 
         List<ActionSummary> actionSummaries = actions.stream()
@@ -280,7 +306,77 @@ public class AiFeedbackService {
                         Categories.name(a.categoryId()), a.reductionWon(), a.dominantFactor(), a.feasibilityScore()))
                 .toList();
 
-        BandWidth bandWidth = pacing != null ? pacing.bandWidth() : null;
+        // 월 경계를 넘는 주(예: 6/29~7/5)는 BandWidth 톤 억제:
+        // weekEnd 기준 월초 판정이 부적절하므로 null로 처리한다.
+        BandWidth bandWidth = (pacing != null && weekStart.getMonth() == weekEnd.getMonth())
+                ? pacing.bandWidth()
+                : null;
+
+        // 이상치 카테고리의 이번 주 실지출액 (LLM에 구체적 금액 제공용)
+        final int anomalyCatId = top != null ? top.categoryId() : -1;
+        long anomalyWeeklyAmount = anomalyCatId >= 0
+                ? sum(window, e -> e.getCategoryId() == anomalyCatId
+                        && !e.getDate().isBefore(weekStart)
+                        && !e.getDate().isAfter(weekEnd)
+                        && e.isVariable())
+                : 0L;
+        // 이상치 대표 거래의 감정 태그 (LLM 톤 결정용)
+        String anomalyEmotion = top != null ? top.rep().getEmotion() : null;
+
+        // 추가 HIGH 이상치: primary 제외 나머지 중 HIGH confidence인 것 (최대 MAX_HIGH_ANOMALIES-1개)
+        final LocalDate finalWeekStart2 = weekStart;
+        final LocalDate finalWeekEnd2 = weekEnd;
+        List<FeedbackRenderer.AnomalyInfo> additionalHighAnomalies = allAnomalies.stream()
+                .skip(1)
+                .filter(a -> Confidence.of(a.magnitude(), a.histLength(),
+                        p.getConfHighMinSamples(), p.getConfMediumMinSamples()) == Confidence.HIGH)
+                .limit(MAX_HIGH_ANOMALIES - 1)
+                .map(a -> {
+                    long weeklyAmt = sum(window, e -> e.getCategoryId() == a.categoryId()
+                            && !e.getDate().isBefore(finalWeekStart2)
+                            && !e.getDate().isAfter(finalWeekEnd2)
+                            && e.isVariable());
+                    return new FeedbackRenderer.AnomalyInfo(
+                            Categories.name(a.categoryId()),
+                            a.magnitude(),
+                            weeklyAmt,
+                            a.rep().getEmotion());
+                })
+                .toList();
+
+        // 이번 주 전체 변동지출 감정 분포 (POSITIVE 주차 포함 항상 계산)
+        Map<String, Long> weekEmoCounts = new java.util.LinkedHashMap<>();
+        Map<String, Long> weekEmoAmounts = new java.util.LinkedHashMap<>();
+        long weekUntaggedWon = 0L;
+        for (Expense e : window) {
+            if (!e.isVariable()) continue;
+            if (e.getDate().isBefore(weekStart) || e.getDate().isAfter(weekEnd)) continue;
+            String emo = e.getEmotion();
+            if (emo != null && !emo.isBlank()) {
+                weekEmoCounts.merge(emo, 1L, Long::sum);
+                weekEmoAmounts.merge(emo, e.getAmount(), Long::sum);
+            } else {
+                weekUntaggedWon += e.getAmount();
+            }
+        }
+        WeekEmotionSummary weekEmotion = weekEmoCounts.isEmpty()
+                ? null
+                : new WeekEmotionSummary(weekEmoCounts, weekEmoAmounts, weekUntaggedWon);
+
+        // 이번 주 총 변동지출 (LLM에 구체적 금액 제공)
+        long weekTotalWon = sum(window, e -> e.isVariable()
+                && !e.getDate().isBefore(weekStart)
+                && !e.getDate().isAfter(weekEnd));
+
+        // 전주 총 변동지출 (전주 대비 증감 계산용)
+        LocalDate prevWeekStart = weekStart.minusWeeks(1);
+        LocalDate prevWeekEnd = weekEnd.minusWeeks(1);
+        long prevWeekTotalWon = sum(window, e -> e.isVariable()
+                && !e.getDate().isBefore(prevWeekStart)
+                && !e.getDate().isAfter(prevWeekEnd));
+
+        // 예산 준수율 (UserProfile에 저장된 최근 12주 비율)
+        double complianceRate = profile != null ? profile.getComplianceRate() : 0.0;
 
         FeedbackContext ctx = new FeedbackContext(
                 predictedMonthEnd,
@@ -291,9 +387,17 @@ public class AiFeedbackService {
                 top != null,
                 top != null ? Categories.name(top.categoryId()) : null,
                 top != null ? top.magnitude() : 0,
+                anomalyWeeklyAmount,
                 anomalyConfidence,
+                anomalyEmotion,
+                additionalHighAnomalies,
+                weekEmotion,
+                weekTotalWon,
+                prevWeekTotalWon,
+                complianceRate,
                 overspendList,
                 actionSummaries,
+                weekHighlights,
                 feedbackType,
                 bandWidth,
                 overallConfidence);
@@ -303,7 +407,7 @@ public class AiFeedbackService {
         LocalDateTime now = LocalDateTime.now(clock);
 
         // ── [10] 페이로드 JSON (버전 포함) ──
-        String payload = buildPayload(feedbackType, pacing, overspend, actions);
+        String payload = buildPayload(feedbackType, pacing, overspend, actions, predictedMonthEnd);
 
         // ── [11+12] 멱등 upsert + 프로필 갱신 (단일 트랜잭션) ──
         // 동시 실행 시 INSERT 유니크 위반이 발생할 수 있으므로 재시도로 흡수한다.
@@ -321,6 +425,186 @@ public class AiFeedbackService {
                     status -> upsertFeedbackAndProfile(
                             userId, weekStart, weekEnd, monthStart, out, topOverCat,
                             feedbackType, finalOverspend, payload, now, reactions, finalIsLowData)));
+        }
+    }
+
+    /**
+     * 특정 사용자의 월말 결산 AI 피드백을 생성하고 저장한다.
+     *
+     * <p>월 확정 지출을 합산하고, 직전 주간 피드백의 예측 총지출과 대조하여
+     * {@link MonthEndVerification}을 기록한다. 결산 피드백은 {@code AiFeedback(MONTHLY)}로 저장.
+     *
+     * @param userId    대상 사용자 ID
+     * @param yearMonth 결산 대상 월
+     * @return 저장된 피드백, 생성 불가 시 빈 Optional
+     */
+    public Optional<AiFeedback> generateMonthEnd(Long userId, YearMonth yearMonth) {
+        // ── [0] 사용자·예산 로드 ──
+        UserAccount user = userRepo.findById(userId).orElse(null);
+        if (user == null) return Optional.empty();
+
+        LocalDate monthStart = yearMonth.atDay(1);
+        LocalDate monthEnd = yearMonth.atEndOfMonth();
+        long available = user.availableBudget();
+
+        Map<Integer, Long> catBudget = loadCategoryBudgets(userId, monthStart);
+        if (catBudget.isEmpty()) return Optional.empty();
+
+        // ── [1] 월 전체 지출 조회 ──
+        LocalDateTime from = monthStart.atStartOfDay();
+        LocalDateTime to = monthEnd.atTime(LocalTime.MAX);
+        List<Expense> expenses = expenseRepo.findByUserIdAndExpenseDateBetween(userId, from, to);
+
+        // 실제 총지출 (변동+고정 포함)
+        long actualTotal = expenses.stream()
+                .filter(Expense::isExpense)
+                .mapToLong(Expense::getAmount)
+                .sum();
+        if (actualTotal == 0) return Optional.empty(); // 지출 없는 달 스킵
+
+        long budgetDiff = available - actualTotal; // 양수=절약, 음수=초과
+
+        // ── [2] 카테고리별 실적 대비 예산 ──
+        Map<Integer, Long> catActual = new HashMap<>();
+        for (Expense e : expenses) {
+            if (!e.isExpense()) continue;
+            catActual.merge(e.getCategoryId(), e.getAmount(), Long::sum);
+        }
+
+        List<CategoryResult> overspend = new ArrayList<>();
+        List<CategoryResult> savings = new ArrayList<>();
+        for (var entry : catBudget.entrySet()) {
+            int cat = entry.getKey();
+            long budget = entry.getValue();
+            long actual = catActual.getOrDefault(cat, 0L);
+            long diff = actual - budget;
+            if (diff > 0) {
+                overspend.add(new CategoryResult(Categories.name(cat), diff));
+            } else if (diff < 0 && actual > 0) {
+                savings.add(new CategoryResult(Categories.name(cat), -diff));
+            }
+        }
+        overspend.sort(Comparator.comparingLong(CategoryResult::amountWon).reversed());
+        savings.sort(Comparator.comparingLong(CategoryResult::amountWon).reversed());
+
+        // ── [3] 렌더링 ──
+        MonthEndContext ctx = new MonthEndContext(yearMonth, actualTotal, available, budgetDiff, overspend, savings);
+        FeedbackRenderer.Rendered out = renderer.renderMonthEnd(ctx);
+        LocalDateTime now = LocalDateTime.now(clock);
+
+        // ── [4] MonthEndVerification 저장 ──
+        long predictedTotal = loadPredictedTotal(userId, monthStart);
+        // 예측값이 없으면 null — 0.0은 "완벽 예측"으로 오독되어 집계 오염
+        // 분모는 actualTotal (표준 MAPE 정의)
+        Double mape = (predictedTotal > 0 && actualTotal > 0)
+                ? Math.abs((double) (actualTotal - predictedTotal) / actualTotal)
+                : null;
+        saveMonthEndVerification(userId, monthStart, predictedTotal, actualTotal, mape, catActual, catBudget, now);
+
+        // ── [5] AiFeedback(MONTHLY) 멱등 upsert ──
+        return Optional.ofNullable(tx.execute(status -> {
+            AiFeedback existing = feedbackRepo
+                    .findByUserIdAndPeriodTypeAndPeriodStartAndPeriodEnd(userId, "MONTHLY", monthStart, monthEnd)
+                    .orElse(null);
+            if (existing != null) {
+                existing.update(
+                        out.text(),
+                        out.confidence().name(),
+                        null,
+                        null,
+                        "MONTHLY_SUMMARY",
+                        !overspend.isEmpty(),
+                        "{}",
+                        PROMPT_VERSION,
+                        LOGIC_VERSION,
+                        now);
+                return feedbackRepo.save(existing);
+            }
+            return feedbackRepo.save(AiFeedback.builder()
+                    .userId(userId)
+                    .yearMonth(monthStart)
+                    .periodType("MONTHLY")
+                    .periodStart(monthStart)
+                    .periodEnd(monthEnd)
+                    .feedbackText(out.text())
+                    .confidence(out.confidence().name())
+                    .feedbackType("MONTHLY_SUMMARY")
+                    .hadOverspend(!overspend.isEmpty())
+                    .payload("{}")
+                    .promptVersion(PROMPT_VERSION)
+                    .logicVersion(LOGIC_VERSION)
+                    .createdAt(now)
+                    .build());
+        }));
+    }
+
+    /**
+     * 해당 월의 마지막 주간 피드백 payload에서 {@code predictedMonthEnd} 값을 읽는다.
+     * 없으면 0 반환.
+     */
+    private long loadPredictedTotal(Long userId, LocalDate monthStart) {
+        return feedbackRepo
+                .findByUserIdAndPeriodTypeOrderByPeriodStartDesc(userId, "WEEKLY")
+                .stream()
+                .filter(f -> f.getYearMonth() != null && f.getYearMonth().equals(monthStart))
+                .filter(f -> f.getPayload() != null && !f.getPayload().isBlank())
+                .findFirst()
+                .map(f -> {
+                    try {
+                        @SuppressWarnings("unchecked")
+                        Map<String, Object> map = objectMapper.readValue(f.getPayload(), Map.class);
+                        Object v = map.get("predictedMonthEnd");
+                        return v instanceof Number num ? num.longValue() : 0L;
+                    } catch (Exception ex) {
+                        return 0L;
+                    }
+                })
+                .orElse(0L);
+    }
+
+    /** MonthEndVerification 멱등 upsert. 동일 (userId, yearMonth) 레코드가 있으면 갱신. */
+    private void saveMonthEndVerification(
+            Long userId,
+            LocalDate monthStart,
+            long predictedTotal,
+            long actualTotal,
+            Double mape,
+            Map<Integer, Long> catActual,
+            Map<Integer, Long> catBudget,
+            LocalDateTime now) {
+        try {
+            String postChange = buildPostSuggestionChange(catActual, catBudget);
+            MonthEndVerification existing =
+                    monthEndVerifRepo.findByUserIdAndYearMonth(userId, monthStart).orElse(null);
+            if (existing == null) {
+                monthEndVerifRepo.save(MonthEndVerification.builder()
+                        .userId(userId)
+                        .yearMonth(monthStart)
+                        .predictedTotal(predictedTotal)
+                        .actualTotal(actualTotal)
+                        .mape(mape)
+                        .postSuggestionChange(postChange)
+                        .createdAt(now)
+                        .build());
+            }
+            // 이미 존재하면 덮어쓰지 않는다 — 재실행 시 최초 결과를 보존
+        } catch (Exception e) {
+            log.warn("MonthEndVerification 저장 실패 userId={} month={}: {}", userId, monthStart, e.getMessage());
+        }
+    }
+
+    /** 카테고리별 실적-예산 차이를 JSON 문자열로 직렬화한다. */
+    private String buildPostSuggestionChange(Map<Integer, Long> catActual, Map<Integer, Long> catBudget) {
+        try {
+            Map<String, Long> diff = new LinkedHashMap<>();
+            for (var entry : catBudget.entrySet()) {
+                int cat = entry.getKey();
+                long actual = catActual.getOrDefault(cat, 0L);
+                diff.merge(Categories.name(cat), actual - entry.getValue(), Long::sum);
+            }
+            return objectMapper.writeValueAsString(diff);
+        } catch (Exception e) {
+            return "{}";
         }
     }
 
@@ -438,7 +722,11 @@ public class AiFeedbackService {
      * spikeProne 필터, histLength(8주 기준선 내 거래 건수) 추적,
      * 추세 magnitude는 4주 vs 4주 대칭 평균 비율로 실계산.
      */
-    private Anomaly detectTopAnomaly(
+    /**
+     * [3] 이상치 탐지 — 카테고리별 best 이상치를 수집해 magnitude 내림차순으로 반환한다.
+     * 단일 스캔으로 모든 카테고리를 처리하므로 중복 순회 비용이 없다.
+     */
+    private List<Anomaly> detectAllAnomalies(
             List<Expense> window, LocalDate weekStart, LocalDate weekEnd, Map<Integer, Long> catBudget) {
         long windowDays = ChronoUnit.DAYS.between(
                 window.stream()
@@ -447,9 +735,10 @@ public class AiFeedbackService {
                         .min(Comparator.naturalOrder())
                         .orElse(weekEnd),
                 weekEnd.plusDays(1));
-        if (windowDays / 7 < p.getMinWeeks()) return null;
+        if (windowDays / 7 < p.getMinWeeks()) return List.of();
 
-        Anomaly best = null;
+        // 카테고리별 best 이상치 (카테고리당 1개)
+        Map<Integer, Anomaly> bestPerCat = new HashMap<>();
 
         // 카테고리별 변동 거래를 날짜순으로 사전 그룹핑 (1회 순회)
         Map<Integer, List<Expense>> byCat = new HashMap<>();
@@ -471,19 +760,14 @@ public class AiFeedbackService {
                 LocalDate d = e.getDate();
                 if (d.isBefore(weekStart) || d.isAfter(weekEnd)) continue;
 
-                // 8주 기준선 내의 히스토리만 사용
-                double[] hist = catExpenses.stream()
-                        .filter(x -> x.getDate().isBefore(d)
-                                && ChronoUnit.DAYS.between(x.getDate(), d) <= p.getBaselineWeeks() * 7L)
-                        .mapToDouble(Expense::getAmount)
-                        .toArray();
+                double[] hist = baselineHistory(catExpenses, d, cat);
                 var z = detector.checkPoint(e.getAmount(), hist, budget);
                 if (z.isPresent()) {
                     double mag =
                             hist.length > 0 ? e.getAmount() / Math.max(RobustStats.median(hist), 1) : z.getAsDouble();
-                    if (best == null || mag > best.magnitude()) {
-                        best = new Anomaly(cat, e, mag, hist.length);
-                    }
+                    Anomaly candidate = new Anomaly(cat, e, mag, hist.length);
+                    bestPerCat.merge(cat, candidate,
+                            (existing, newOne) -> newOne.magnitude() > existing.magnitude() ? newOne : existing);
                 }
             }
         }
@@ -496,7 +780,6 @@ public class AiFeedbackService {
 
                 double[] weekly = weeklySeries(window, cat, weekEnd, weeks);
                 if (detector.trendConfirmed(weekly, weeks - 1, catBudget.getOrDefault(cat, 0L))) {
-                    // 4주 vs 4주 대칭: 최근 4주 평균 / 직전 4주 평균
                     double[] recent4 = Arrays.copyOfRange(weekly, weeks - 4, weeks);
                     double[] prior4 = Arrays.copyOfRange(weekly, weeks - 8, weeks - 4);
                     double rm = RobustStats.mean(recent4);
@@ -512,13 +795,35 @@ public class AiFeedbackService {
                             .filter(x -> !x.getDate().isBefore(weekStart) && !x.getDate().isAfter(weekEnd))
                             .max(Comparator.comparing(Expense::getExpenseDate))
                             .orElse(null);
-                    if (rep != null && (best == null || mag > best.magnitude())) {
-                        best = new Anomaly(cat, rep, mag, histLen);
+                    if (rep != null) {
+                        Anomaly candidate = new Anomaly(cat, rep, mag, histLen);
+                        bestPerCat.merge(cat, candidate,
+                                (existing, newOne) -> newOne.magnitude() > existing.magnitude() ? newOne : existing);
                     }
                 }
             }
         }
-        return best;
+
+        List<Anomaly> result = new ArrayList<>(bestPerCat.values());
+        result.sort(Comparator.comparingDouble(Anomaly::magnitude).reversed());
+        return result;
+    }
+
+    /**
+     * 카테고리 기준선 히스토리 추출. 세 탐지 경로(detectAllAnomalies, collectAnomalyCandidates,
+     * collectWeekHighlights)가 공유하는 단일 정의.
+     *
+     * <p>기준일(d) 이전 baselineWeeks 이내의 거래만 포함하며,
+     * bimodal 카테고리는 bimodalMin 미만 거래를 제외한다.
+     */
+    private double[] baselineHistory(List<Expense> catExpenses, LocalDate d, int cat) {
+        boolean bimodal = p.isBimodal(cat);
+        return catExpenses.stream()
+                .filter(x -> x.getDate().isBefore(d)
+                        && ChronoUnit.DAYS.between(x.getDate(), d) <= p.getBaselineWeeks() * 7L
+                        && (!bimodal || x.getAmount() >= p.getBimodalMin()))
+                .mapToDouble(Expense::getAmount)
+                .toArray();
     }
 
     /**
@@ -556,11 +861,7 @@ public class AiFeedbackService {
                     continue;
                 }
 
-                double[] hist = catExpenses.stream()
-                        .filter(x -> x.getDate().isBefore(d)
-                                && ChronoUnit.DAYS.between(x.getDate(), d) <= p.getBaselineWeeks() * 7L)
-                        .mapToDouble(Expense::getAmount)
-                        .toArray();
+                double[] hist = baselineHistory(catExpenses, d, cat);
                 // 히스토리 없으면 mag 산출 불가 — z-score와 단위가 다르므로 스킵
                 if (hist.length == 0) continue;
 
@@ -671,11 +972,16 @@ public class AiFeedbackService {
 
     /** 페이로드 JSON 조립 (버전 포함). */
     private String buildPayload(
-            FeedbackType feedbackType, PacingResult pacing, Map<Integer, Long> overspend, List<ActionPlan> actions) {
+            FeedbackType feedbackType,
+            PacingResult pacing,
+            Map<Integer, Long> overspend,
+            List<ActionPlan> actions,
+            long predictedMonthEnd) {
         try {
             Map<String, Object> payload = new LinkedHashMap<>();
             payload.put("version", Map.of("prompt", PROMPT_VERSION, "logic", LOGIC_VERSION));
             payload.put("feedbackType", feedbackType.name());
+            payload.put("predictedMonthEnd", predictedMonthEnd);
             if (pacing != null) {
                 payload.put(
                         "pacing",
@@ -822,6 +1128,58 @@ public class AiFeedbackService {
         }
 
         return weights;
+    }
+
+    /**
+     * [5.5] 이번 주 주목 거래 수집.
+     *
+     * <p>선택 기준 (OR): 이상치 감지됨 / REGRET·IMPULSE 감정 태그 / 메모 있음.
+     * 금액 내림차순 상위 5건으로 제한. spikeProne 카테고리는 이상치 판단에서 제외.
+     */
+    private List<TransactionHighlight> collectWeekHighlights(
+            List<Expense> window, LocalDate weekStart, LocalDate weekEnd, Map<Integer, Long> catBudget) {
+
+        // 카테고리별 히스토리 사전 구성 (변동 지출만)
+        Map<Integer, List<Expense>> byCat = new HashMap<>();
+        for (Expense e : window) {
+            if (!e.isVariable()) continue;
+            byCat.computeIfAbsent(e.getCategoryId(), k -> new ArrayList<>()).add(e);
+        }
+        byCat.values().forEach(list -> list.sort(Comparator.comparing(Expense::getDate)));
+
+        List<TransactionHighlight> result = new ArrayList<>();
+        for (Expense e : window) {
+            LocalDate d = e.getDate();
+            if (d.isBefore(weekStart) || d.isAfter(weekEnd) || !e.isVariable()) continue;
+
+            int cat = e.getCategoryId();
+            boolean isAnomaly = false;
+            if (!detector.isSpikeProne(cat)) {
+                long budget = catBudget.getOrDefault(cat, 0L);
+                double[] hist = baselineHistory(byCat.getOrDefault(cat, List.of()), d, cat);
+                isAnomaly = detector.checkPoint(e.getAmount(), hist, budget).isPresent();
+            }
+
+            if (isAnomaly || isHighlightEmotion(e.getEmotion())
+                    || (e.getMemo() != null && !e.getMemo().isBlank())) {
+                result.add(new TransactionHighlight(
+                        d,
+                        Categories.name(cat),
+                        e.getAmount(),
+                        e.getMemo(),
+                        e.getEmotion()));
+            }
+        }
+
+        return result.stream()
+                .sorted(Comparator.comparingLong(TransactionHighlight::amountWon).reversed())
+                .limit(5)
+                .toList();
+    }
+
+    private static boolean isHighlightEmotion(String emotion) {
+        return emotion != null
+                && (emotion.equalsIgnoreCase("REGRET") || emotion.equalsIgnoreCase("IMPULSE"));
     }
 
     private interface Pred {

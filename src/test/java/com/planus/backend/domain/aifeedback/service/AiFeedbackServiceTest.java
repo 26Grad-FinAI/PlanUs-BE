@@ -97,6 +97,7 @@ class AiFeedbackServiceTest {
                 budgetRepo,
                 budgetCatRepo,
                 feedbackRepo,
+                null, // monthEndVerifRepo
                 userProfileRepo,
                 reactionRepo,
                 memoQueueRepo,
@@ -267,7 +268,7 @@ class AiFeedbackServiceTest {
         when(feedbackTypeResolver.resolve(eq(false), eq(-300_000L), eq(false), anyBoolean()))
                 .thenReturn(FeedbackType.ALERT);
         when(causeAssembler.assemble(anyInt(), any(), any(), any(), any()))
-                .thenReturn(new CauseSignals(null, null, 0, 0, Map.of(), null, List.of(), false));
+                .thenReturn(new CauseSignals(null, null, 0, 0, Map.of(), Map.of(), null, List.of(), false));
         when(savingsCalculator.calculate(any(), anyLong(), anyInt(), anyInt(), any(), any(), any(), any(), any()))
                 .thenReturn(List.of(new ActionPlan(1, 50_000, "FREQUENCY", 0.8)));
         when(renderer.render(any())).thenReturn(new Rendered("절약이 필요해요.", Confidence.HIGH));

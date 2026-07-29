@@ -11,6 +11,7 @@ import java.util.Map;
  * @param freqContribution   빈도 기여율 (0~1). 증가 방향만 반영.
  * @param priceContribution  단가 기여율 (0~1). 증가 방향만 반영.
  * @param emotionCounts      이번 주 변동 지출의 감정태그별 건수
+ * @param emotionAmounts     이번 주 변동 지출의 감정태그별 금액 합계
  * @param repeatStreak       프로필 반복 패턴의 streak 값. null이면 패턴 미등록.
  * @param memos              이번 주 + 지난주 메모 원문 (최신순, LIMIT 10)
  * @param hasMemo            메모 존재 여부
@@ -21,6 +22,7 @@ public record CauseSignals(
         double freqContribution,
         double priceContribution,
         Map<String, Long> emotionCounts,
+        Map<String, Long> emotionAmounts,
         Integer repeatStreak,
         List<MemoEvidence> memos,
         boolean hasMemo) {}

@@ -16,9 +16,9 @@ reviews:
       - main
       - develop
 
-path_filters:
-  - "!build/**"
-  - "!.gradle/**"
-  - "!*.log"
-  - "!*.md"
-  - "!gradle-wrapper.jar"
+  path_filters:
+    - "!build/**"
+    - "!.gradle/**"
+    - "!*.log"
+    - "!*.md"
+    - "!gradle-wrapper.jar"
