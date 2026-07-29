@@ -18,9 +18,9 @@ import org.junit.jupiter.api.Tag;
 import org.junit.jupiter.api.Test;
 
 /**
- * detectTopAnomaly() 검증.
+ * detectAllAnomalies() 검증.
  *
- * ※ detectTopAnomaly는 AiFeedbackService의 private 메서드이므로 리플렉션으로 접근한다.
+ * ※ detectAllAnomalies는 AiFeedbackService의 private 메서드이므로 리플렉션으로 접근한다.
  *   향후 이상치 탐지 로직을 별도 클래스(예: AnomalyScanner)로 추출하면
  *   리플렉션 없이 직접 테스트 가능하다. (리팩터링 시 고려)
  */
@@ -69,7 +69,7 @@ class AnomalyDetectionPerfTest {
                 null); // tx
 
         detectMethod = AiFeedbackService.class.getDeclaredMethod(
-                "detectTopAnomaly", List.class, LocalDate.class, LocalDate.class, Map.class);
+                "detectAllAnomalies", List.class, LocalDate.class, LocalDate.class, Map.class);
         detectMethod.setAccessible(true);
     }
 
@@ -80,7 +80,7 @@ class AnomalyDetectionPerfTest {
 
         @Test
         @DisplayName("window 크기 3배 증가 시 시간 증가 비율이 6배 미만이어야 한다 (O(n²) 퇴행 방지)")
-        void detectTopAnomaly_scalingShouldBeSubQuadratic() throws Exception {
+        void detectAllAnomalies_scalingShouldBeSubQuadratic() throws Exception {
             int[] sizes = {100, 500, 1000, 3000};
             long[] avgNs = new long[sizes.length];
 
@@ -146,9 +146,10 @@ class AnomalyDetectionPerfTest {
                 shortWindow.add(expense(i, new int[] {1, 6, 8, 10}[rng.nextInt(4)], amount, daysAgo));
             }
 
-            Object result = detectMethod.invoke(service, shortWindow, WEEK_START, WEEK_END, CAT_BUDGET);
+            @SuppressWarnings("unchecked")
+            List<Object> result = (List<Object>) detectMethod.invoke(service, shortWindow, WEEK_START, WEEK_END, CAT_BUDGET);
 
-            assertThat(result).isNull();
+            assertThat(result).isEmpty();
         }
 
         @Test
@@ -157,11 +158,12 @@ class AnomalyDetectionPerfTest {
             // 8주치 거래, 10% 이상치 포함
             List<Expense> window = generateRealisticWindow(500);
 
-            Object result = detectMethod.invoke(service, window, WEEK_START, WEEK_END, CAT_BUDGET);
+            @SuppressWarnings("unchecked")
+            List<Object> result = (List<Object>) detectMethod.invoke(service, window, WEEK_START, WEEK_END, CAT_BUDGET);
 
             // 이 테스트의 목적: minWeeks 가드를 통과하고 탐지 로직이 실행되었는지 확인
             // 합성 데이터에 10% 이상치가 포함되어 있으므로 대부분 감지됨
-            assertThat(result).isNotNull();
+            assertThat(result).isNotEmpty();
         }
 
         @Test
@@ -177,12 +179,13 @@ class AnomalyDetectionPerfTest {
             // 이번 주 이상치: 카테고리1에 500,000원 (평소의 50배)
             window.add(expense(id++, 1, 500_000, 0));
 
-            Object fourWeekResult = detectMethod.invoke(service, window, WEEK_START, WEEK_END, CAT_BUDGET);
+            @SuppressWarnings("unchecked")
+            List<Object> fourWeekResult = (List<Object>) detectMethod.invoke(service, window, WEEK_START, WEEK_END, CAT_BUDGET);
 
             // 4주 = minWeeks 이므로 탐지 실행, 명확한 이상치가 있으므로 감지되어야 함
-            assertThat(fourWeekResult).as("4주(경계) 데이터 + 명확한 이상치 → 탐지됨").isNotNull();
+            assertThat(fourWeekResult).as("4주(경계) 데이터 + 명확한 이상치 → 탐지됨").isNotEmpty();
 
-            // 대조: 같은 데이터를 3주(21일)로 줄이면 minWeeks 미만 → null
+            // 대조: 같은 데이터를 3주(21일)로 줄이면 minWeeks 미만 → 빈 리스트
             List<Expense> threeWeekWindow = new ArrayList<>();
             id = 0;
             for (int d = 0; d < 21; d++) {
@@ -190,8 +193,9 @@ class AnomalyDetectionPerfTest {
             }
             threeWeekWindow.add(expense(id++, 1, 500_000, 0));
 
-            Object threeWeekResult = detectMethod.invoke(service, threeWeekWindow, WEEK_START, WEEK_END, CAT_BUDGET);
-            assertThat(threeWeekResult).as("3주 데이터는 minWeeks 미만이므로 null").isNull();
+            @SuppressWarnings("unchecked")
+            List<Object> threeWeekResult = (List<Object>) detectMethod.invoke(service, threeWeekWindow, WEEK_START, WEEK_END, CAT_BUDGET);
+            assertThat(threeWeekResult).as("3주 데이터는 minWeeks 미만이므로 빈 리스트").isEmpty();
         }
     }
 
@@ -219,14 +223,17 @@ class AnomalyDetectionPerfTest {
                     .planned(false)
                     .build());
 
-            Object result = detectMethod.invoke(service, window, WEEK_START, WEEK_END, CAT_BUDGET);
+            @SuppressWarnings("unchecked")
+            List<Object> result = (List<Object>) detectMethod.invoke(service, window, WEEK_START, WEEK_END, CAT_BUDGET);
 
             // INCOME이 이상치로 잡히면 안 됨 — 정상 EXPENSE만으로는 이상치 없을 수 있음
             // 핵심: 500만원 INCOME이 이상치 결과에 포함되지 않아야 함
-            if (result != null) {
+            if (!result.isEmpty()) {
                 // Anomaly record의 rep() 필드에 INCOME 거래가 들어있으면 안 됨
-                var repField = result.getClass().getDeclaredMethod("rep");
-                Expense rep = (Expense) repField.invoke(result);
+                Object topAnomaly = result.get(0);
+                var repField = topAnomaly.getClass().getDeclaredMethod("rep");
+                repField.setAccessible(true);
+                Expense rep = (Expense) repField.invoke(topAnomaly);
                 assertThat(rep.isExpense()).as("이상치 대표 거래는 EXPENSE여야 함").isTrue();
             }
         }
@@ -262,11 +269,14 @@ class AnomalyDetectionPerfTest {
                     .planned(true)
                     .build());
 
-            Object result = detectMethod.invoke(service, window, WEEK_START, WEEK_END, CAT_BUDGET);
+            @SuppressWarnings("unchecked")
+            List<Object> result = (List<Object>) detectMethod.invoke(service, window, WEEK_START, WEEK_END, CAT_BUDGET);
 
-            if (result != null) {
-                var repField = result.getClass().getDeclaredMethod("rep");
-                Expense rep = (Expense) repField.invoke(result);
+            if (!result.isEmpty()) {
+                Object topAnomaly = result.get(0);
+                var repField = topAnomaly.getClass().getDeclaredMethod("rep");
+                repField.setAccessible(true);
+                Expense rep = (Expense) repField.invoke(topAnomaly);
                 assertThat(rep.isVariable())
                         .as("이상치 대표 거래는 변동(non-recurring, non-planned)이어야 함")
                         .isTrue();

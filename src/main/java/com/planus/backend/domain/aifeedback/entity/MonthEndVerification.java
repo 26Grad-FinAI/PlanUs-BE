@@ -40,8 +40,8 @@ public class MonthEndVerification {
     @Column(name = "actual_total", nullable = false)
     private long actualTotal;
 
-    @Column(nullable = false)
-    private double mape;
+    @Column
+    private Double mape;
 
     @Column(name = "post_suggestion_change", columnDefinition = "JSONB")
     private String postSuggestionChange;

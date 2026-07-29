@@ -21,11 +21,15 @@ BAR=$(printf "%${FILLED}s" | tr ' ' '█')$(printf "%${EMPTY}s" | tr ' ' '░')
 MINS=$((DURATION_MS / 60000)); SECS=$(((DURATION_MS % 60000) / 1000))
 
 BRANCH=""
-git rev-parse --git-dir > /dev/null 2>&1 && BRANCH=" | 🌿 $(git branch --show-current 2>/dev/null)"
+if git rev-parse --git-dir > /dev/null 2>&1; then
+  if CURRENT_BRANCH=$(git symbolic-ref --short -q HEAD 2>/dev/null); then
+    BRANCH=" | 🌿 $CURRENT_BRANCH"
+  fi
+fi
 
 MODEL_LABEL="$MODEL"
 [ -n "$EFFORT" ] && MODEL_LABEL="$MODEL $EFFORT"
 
-echo -e "${CYAN}[$MODEL_LABEL]${RESET} 📁 ${DIR##*/}$BRANCH"
+printf '%s\n' "${CYAN}[$MODEL_LABEL]${RESET} 📁 ${DIR##*/}$BRANCH"
 COST_FMT=$(printf '$%.2f' "$COST")
-echo -e "${BAR_COLOR}${BAR}${RESET} ${PCT}% | ${YELLOW}${COST_FMT}${RESET} | ⏱️ ${MINS}m ${SECS}s"
+printf '%s\n' "${BAR_COLOR}${BAR}${RESET} ${PCT}% | ${YELLOW}${COST_FMT}${RESET} | ⏱️ ${MINS}m ${SECS}s"

@@ -15,6 +15,7 @@ import com.planus.backend.domain.aifeedback.llm.LlmClient;
 import org.junit.jupiter.api.Assumptions;
 import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.DisplayName;
+import org.junit.jupiter.api.Tag;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.ObjectProvider;
 
@@ -23,6 +24,7 @@ import java.io.InputStreamReader;
 import java.time.DayOfWeek;
 import java.time.LocalDate;
 import java.time.YearMonth;
+import java.time.temporal.ChronoUnit;
 import java.time.format.DateTimeFormatter;
 import java.time.temporal.TemporalAdjusters;
 import java.util.*;
@@ -440,6 +442,7 @@ class WalkForwardValidationTest {
 
     private static List<Expense> loadTransactions() throws Exception {
         List<Expense> result = new ArrayList<>();
+        int skipped = 0;
         try (BufferedReader br = new BufferedReader(new InputStreamReader(
                 Objects.requireNonNull(
                         WalkForwardValidationTest.class.getResourceAsStream("/testdata/transactions.csv"),
@@ -467,9 +470,14 @@ class WalkForwardValidationTest {
                             .memo(memo).emotion(emotion)
                             .recurring(isRecurring).planned(isPlanned)
                             .build());
-                } catch (Exception ignored) {}
+                } catch (Exception e) {
+                    skipped++;
+                }
             }
         }
+        if (skipped > 0) System.out.printf("[transactions.csv] 파싱 실패 %d행 스킵%n", skipped);
+        if (result.isEmpty()) throw new IllegalStateException(
+                "transactions.csv 파싱 결과가 비어 있습니다. CSV 포맷을 확인하세요.");
         return result;
     }
 
@@ -477,6 +485,7 @@ class WalkForwardValidationTest {
     // [검증 4] LLM 피드백 렌더링 — 모든 ALERT 주차 실거래 기반
     // ──────────────────────────────────────────────────────────────
     @Test
+    @Tag("llm")
     @DisplayName("[검증 4] FeedbackRenderer: 전체 ALERT 주차 LLM 피드백 생성")
     void llmFeedback_render() throws Exception {
         String apiKey = System.getenv("ANTHROPIC_API_KEY");
@@ -577,16 +586,12 @@ class WalkForwardValidationTest {
             final int finalAnomalyCatId = anomalyCatId;
             long anomalyWeeklyAmount = anomalyCatId >= 0
                     ? thisWeek.stream()
-                            .filter(e -> e.isExpense() && Objects.equals(e.getCategoryId(), finalAnomalyCatId))
+                            .filter(e -> e.isVariable() && Objects.equals(e.getCategoryId(), finalAnomalyCatId))
                             .mapToLong(Expense::getAmount).sum()
                     : 0L;
 
-            // ── 2차 이상치 (primary 카테고리 제외) ──
-            String secondaryAnomalyCategory = null;
-            int secondaryAnomalyCatId = -1;
-            double secondaryAnomalyMag = 0;
-            Confidence secondaryAnomalyConf = null;
-            String secondaryAnomalyEmotionVal = null;
+            // ── 추가 HIGH 이상치 (primary 카테고리 제외, HIGH confidence, 최대 2개) ──
+            List<FeedbackRenderer.AnomalyInfo> additionalHighAnomalies = new ArrayList<>();
             for (int catId : catBudget.keySet()) {
                 if (catId == anomalyCatId) continue; // primary 제외
                 if (anomalyDetector.isSpikeProne(catId)) continue;
@@ -595,31 +600,33 @@ class WalkForwardValidationTest {
                                 && e.getDate().isBefore(weekStart)
                                 && (!props.isBimodal(catId) || e.getAmount() >= props.getBimodalMin()))
                         .mapToDouble(Expense::getAmount).toArray();
+                double bestMag = 0;
+                String bestEmotion = null;
                 for (Expense e : thisWeek) {
                     if (!e.isExpense() || !Objects.equals(e.getCategoryId(), catId)) continue;
                     OptionalDouble z = anomalyDetector.checkPoint(e.getAmount(), catHist, catBudget.getOrDefault(catId, 100_000L));
                     if (z.isEmpty()) continue;
                     Confidence conf = Confidence.of(z.getAsDouble(), catHist.length,
                             props.getConfHighMinSamples(), props.getConfMediumMinSamples());
+                    if (conf != Confidence.HIGH) continue;
                     double mag = catHist.length > 0
                             ? e.getAmount() / Math.max(RobustStats.median(catHist), 1) : z.getAsDouble();
-                    if (secondaryAnomalyConf == null || conf.ordinal() < secondaryAnomalyConf.ordinal()
-                            || (conf == secondaryAnomalyConf && mag > secondaryAnomalyMag)) {
-                        secondaryAnomalyCatId = catId;
-                        secondaryAnomalyCategory = Categories.name(catId);
-                        secondaryAnomalyMag = mag;
-                        secondaryAnomalyConf = conf;
-                        secondaryAnomalyEmotionVal = e.getEmotion();
-                    }
+                    if (mag > bestMag) { bestMag = mag; bestEmotion = e.getEmotion(); }
+                }
+                if (bestMag > 0) {
+                    final int fCatId = catId;
+                    long catWeeklyAmt = thisWeek.stream()
+                            .filter(e -> e.isVariable() && Objects.equals(e.getCategoryId(), fCatId))
+                            .mapToLong(Expense::getAmount).sum();
+                    additionalHighAnomalies.add(new FeedbackRenderer.AnomalyInfo(
+                            Categories.name(catId), bestMag, catWeeklyAmt, bestEmotion));
                 }
             }
-            final int finalSecondaryAnomalyCatId = secondaryAnomalyCatId;
-            long secondaryAnomalyWeeklyAmount = secondaryAnomalyCatId >= 0
-                    ? thisWeek.stream()
-                            .filter(e -> e.isExpense() && Objects.equals(e.getCategoryId(), finalSecondaryAnomalyCatId))
-                            .mapToLong(Expense::getAmount).sum()
-                    : 0L;
-            Confidence secondaryConf = secondaryAnomalyConf != null ? secondaryAnomalyConf : Confidence.LOW;
+            additionalHighAnomalies.sort(
+                    Comparator.comparingDouble(FeedbackRenderer.AnomalyInfo::magnitude).reversed());
+            if (additionalHighAnomalies.size() > 2) {
+                additionalHighAnomalies = new ArrayList<>(additionalHighAnomalies.subList(0, 2));
+            }
 
             // ── BudgetProjector ──
             int elapsed = weekEnd.getDayOfMonth();
@@ -691,7 +698,7 @@ class WalkForwardValidationTest {
 
             List<FeedbackRenderer.TransactionHighlight> highlights = new ArrayList<>();
             for (Expense e : thisWeek) {
-                if (!e.isExpense()) continue;
+                if (!e.isVariable()) continue;
                 LocalDate d = e.getDate();
                 int catId = e.getCategoryId();
                 boolean isAnomaly = false;
@@ -699,6 +706,7 @@ class WalkForwardValidationTest {
                     long budget = catBudget.getOrDefault(catId, 100_000L);
                     double[] hist = byCatW.getOrDefault(catId, List.of()).stream()
                             .filter(x -> x.getDate().isBefore(d)
+                                    && ChronoUnit.DAYS.between(x.getDate(), d) <= props.getBaselineWeeks() * 7L
                                     && (!props.isBimodal(catId) || x.getAmount() >= props.getBimodalMin()))
                             .mapToDouble(Expense::getAmount).toArray();
                     isAnomaly = anomalyDetector.checkPoint(e.getAmount(), hist, budget).isPresent();
@@ -753,10 +761,10 @@ class WalkForwardValidationTest {
                     proj.predictedMonthEndWon(), AVAILABLE_BUDGET, savingsImpact,
                     (double) varMtd / AVAILABLE_BUDGET,
                     null,
-                    anomalyCategory != null, anomalyCategory, anomalyMag, anomalyWeeklyAmount, anomalyConf,
+                    anomalyCategory != null, anomalyCategory, anomalyMag, anomalyWeeklyAmount,
+                    anomalyConf != null ? anomalyConf : Confidence.LOW,
                     anomalyEmotion,
-                    secondaryAnomalyCategory != null, secondaryAnomalyCategory,
-                    secondaryAnomalyMag, secondaryAnomalyWeeklyAmount, secondaryConf, secondaryAnomalyEmotionVal,
+                    additionalHighAnomalies,
                     weekEmo,
                     weekTotalWon,
                     prevWeekTotalWon,
@@ -776,11 +784,10 @@ class WalkForwardValidationTest {
                             ? ctx.anomalyCategoryName() + " (" + String.format("%.1f", ctx.anomalyMagnitude())
                               + "배, " + ctx.anomalyConfidence() + ")"
                             : "없음");
-            if (ctx.hasSecondaryAnomaly() && ctx.secondaryAnomalyConfidence() != Confidence.LOW) {
-                System.out.printf("2차 이상 탐지   : %s (%.1f배, %s)%n",
-                        ctx.secondaryAnomalyCategoryName(),
-                        ctx.secondaryAnomalyMagnitude(),
-                        ctx.secondaryAnomalyConfidence());
+            if (!ctx.additionalHighAnomalies().isEmpty()) {
+                for (FeedbackRenderer.AnomalyInfo a : ctx.additionalHighAnomalies()) {
+                    System.out.printf("추가 HIGH 이상치: %s (%.1f배)%n", a.categoryName(), a.magnitude());
+                }
             }
             if (!overspend.isEmpty()) {
                 System.out.print("예산 초과 카테고리: ");
@@ -804,6 +811,7 @@ class WalkForwardValidationTest {
     // [검증 5] 월말 결산 LLM 피드백
     // ──────────────────────────────────────────────────────────────
     @Test
+    @Tag("llm")
     @DisplayName("[검증 5] FeedbackRenderer: 월별 월말 결산 피드백 생성")
     void monthEndFeedback_render() throws Exception {
         String apiKey = System.getenv("ANTHROPIC_API_KEY");
@@ -908,6 +916,7 @@ class WalkForwardValidationTest {
     /** budgets.csv 로드 → YearMonth → (categoryId → 예산) */
     private static Map<YearMonth, Map<Integer, Long>> loadBudgets() throws Exception {
         Map<YearMonth, Map<Integer, Long>> result = new LinkedHashMap<>();
+        int skipped = 0;
         try (BufferedReader br = new BufferedReader(new InputStreamReader(
                 Objects.requireNonNull(
                         WalkForwardValidationTest.class.getResourceAsStream("/testdata/budgets.csv"),
@@ -925,9 +934,14 @@ class WalkForwardValidationTest {
                         budget.put(catId, val.isEmpty() ? 0L : Long.parseLong(val));
                     }
                     result.put(ym, budget);
-                } catch (Exception ignored) {}
+                } catch (Exception e) {
+                    skipped++;
+                }
             }
         }
+        if (skipped > 0) System.out.printf("[budgets.csv] 파싱 실패 %d행 스킵%n", skipped);
+        if (result.isEmpty()) throw new IllegalStateException(
+                "budgets.csv 파싱 결과가 비어 있습니다. CSV 포맷을 확인하세요.");
         return result;
     }
 }

@@ -7,6 +7,7 @@ import java.time.DayOfWeek;
 import java.time.LocalDate;
 import java.time.temporal.TemporalAdjusters;
 import java.util.List;
+import net.javacrumbs.shedlock.spring.annotation.SchedulerLock;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.scheduling.annotation.Scheduled;
@@ -35,6 +36,7 @@ public class WeeklyFeedbackScheduler {
 
     /** 매주 월요일 09:00에 전체 사용자 대상 주간 피드백을 생성한다. 실패한 사용자는 로그 경고 후 건너뛴다. */
     @Scheduled(cron = "${planus.ai.weekly-cron:0 0 9 * * MON}")
+    @SchedulerLock(name = "weeklyFeedback", lockAtMostFor = "3h", lockAtLeastFor = "1h")
     public void runWeekly() {
         LocalDate weekEnd = LocalDate.now(clock).with(TemporalAdjusters.previous(DayOfWeek.SUNDAY));
         List<Long> userIds = userRepo.findAllIds();

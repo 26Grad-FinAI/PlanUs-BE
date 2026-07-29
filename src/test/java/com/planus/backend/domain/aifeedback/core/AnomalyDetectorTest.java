@@ -82,10 +82,9 @@ class AnomalyDetectorTest {
 
     @Test
     void isSpikeProne_matchesConfigured() {
-        // spikeProne 기본값: [5, 20]
-        assertThat(detector.isSpikeProne(5)).isTrue();
-        assertThat(detector.isSpikeProne(20)).isTrue();
-        assertThat(detector.isSpikeProne(1)).isFalse();
+        int configured = p.getCategory().getSpikeProne().get(0).intValue();
+        assertThat(detector.isSpikeProne(configured)).isTrue();
+        assertThat(detector.isSpikeProne(configured + 1)).isFalse(); // 설정에 없는 값
     }
 
     /** 중앙값≈base, MAD가 median*0.10 을 넘도록 분산을 둔 소액 이력(robust-z 분기 진입). */

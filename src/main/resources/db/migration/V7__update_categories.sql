@@ -1,6 +1,5 @@
--- 기존 카테고리 전체 삭제 후 재정의
-TRUNCATE TABLE category RESTART IDENTITY CASCADE;
-
+-- 카테고리 이름만 갱신한다.
+-- TRUNCATE CASCADE 대신 upsert를 사용해 expense·budget_category 등 FK 참조 데이터를 보존한다.
 INSERT INTO category (id, name) VALUES
     (1,  '식료품'),
     (2,  '외식'),
@@ -12,4 +11,5 @@ INSERT INTO category (id, name) VALUES
     (8,  '문화·여가'),
     (9,  '교육'),
     (10, '여행·숙박'),
-    (11, '기타');
+    (11, '기타')
+ON CONFLICT (id) DO UPDATE SET name = EXCLUDED.name;

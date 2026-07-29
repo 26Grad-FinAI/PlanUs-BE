@@ -60,6 +60,29 @@ class FeedbackRendererTest {
     }
 
     @Test
+    @DisplayName("처음 2회 숫자 불일치, 3회째 일치 → LLM 텍스트 채택 + complete() 3회 호출")
+    void render_retrySucceedsOnThirdAttempt() {
+        LlmClient client = mock(LlmClient.class);
+        when(llmProvider.getIfAvailable()).thenReturn(client);
+        // 불일치 금액(600,000): allowed values(800,000 / 1,000,000 / 200,000)와 모두 5% 이상 오차
+        // 일치 금액(800,000): predictedMonthEndWon과 정확히 일치
+        when(client.complete(anyString(), anyString()))
+                .thenReturn("이번 달 600,000원 쓸 것 같아요.")   // 불일치
+                .thenReturn("이번 달 600,000원 쓸 것 같아요.")   // 불일치
+                .thenReturn("이번 달 800,000원 쓸 것 같아요.");  // 일치
+
+        FeedbackContext ctx = contextBuilder()
+                .feedbackType(FeedbackType.ALERT)
+                .predictedMonthEndWon(800_000)
+                .build();
+
+        Rendered result = renderer.render(ctx);
+
+        assertThat(result.text()).isEqualTo("이번 달 800,000원 쓸 것 같아요.");
+        verify(client, times(3)).complete(anyString(), anyString());
+    }
+
+    @Test
     @DisplayName("LLM 예외 → 템플릿 폴백 (결정적 출력)")
     void render_llmFails_templateFallback() {
         LlmClient client = mock(LlmClient.class);
@@ -255,12 +278,7 @@ class FeedbackRendererTest {
         private long anomalyWeeklyAmountWon = 0;
         private Confidence anomalyConfidence = Confidence.LOW;
         private String anomalyEmotion = null;
-        private boolean hasSecondaryAnomaly = false;
-        private String secondaryAnomalyCategoryName = null;
-        private double secondaryAnomalyMagnitude = 0;
-        private long secondaryAnomalyWeeklyAmountWon = 0;
-        private Confidence secondaryAnomalyConfidence = Confidence.LOW;
-        private String secondaryAnomalyEmotion = null;
+        private List<FeedbackRenderer.AnomalyInfo> additionalHighAnomalies = List.of();
         private FeedbackRenderer.WeekEmotionSummary weekEmotion = null;
         private long weekTotalWon = 0L;
         private long prevWeekTotalWon = 0L;
@@ -297,6 +315,11 @@ class FeedbackRendererTest {
             return this;
         }
 
+        FeedbackContextBuilder additionalHighAnomalies(List<FeedbackRenderer.AnomalyInfo> v) {
+            this.additionalHighAnomalies = v;
+            return this;
+        }
+
         FeedbackContext build() {
             return new FeedbackContext(
                     predictedMonthEndWon,
@@ -310,12 +333,7 @@ class FeedbackRendererTest {
                     anomalyWeeklyAmountWon,
                     anomalyConfidence,
                     anomalyEmotion,
-                    hasSecondaryAnomaly,
-                    secondaryAnomalyCategoryName,
-                    secondaryAnomalyMagnitude,
-                    secondaryAnomalyWeeklyAmountWon,
-                    secondaryAnomalyConfidence,
-                    secondaryAnomalyEmotion,
+                    additionalHighAnomalies,
                     weekEmotion,
                     weekTotalWon,
                     prevWeekTotalWon,

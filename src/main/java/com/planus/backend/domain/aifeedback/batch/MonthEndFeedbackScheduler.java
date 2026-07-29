@@ -6,6 +6,7 @@ import java.time.Clock;
 import java.time.LocalDate;
 import java.time.YearMonth;
 import java.util.List;
+import net.javacrumbs.shedlock.spring.annotation.SchedulerLock;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.scheduling.annotation.Scheduled;
@@ -29,6 +30,7 @@ public class MonthEndFeedbackScheduler {
 
     /** 매월 1일 03:00에 전체 사용자 대상 월말 결산 피드백을 생성한다. 실패한 사용자는 로그 경고 후 건너뛴다. */
     @Scheduled(cron = "${planus.ai.month-end-cron:0 0 3 1 * *}")
+    @SchedulerLock(name = "monthEndFeedback", lockAtMostFor = "2h", lockAtLeastFor = "1h")
     public void runMonthEnd() {
         YearMonth prevMonth = YearMonth.from(LocalDate.now(clock)).minusMonths(1);
         List<Long> userIds = userRepo.findAllIds();

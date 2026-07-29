@@ -62,6 +62,9 @@ public class AiFeedbackService {
     /** 추세 magnitude 계산에 필요한 최소 주 수 (4주 recent + 4주 prior). */
     private static final int TREND_MIN_WEEKS = 8;
 
+    /** PRIMARY를 포함한 피드백에 사용할 HIGH 이상치 최대 개수. */
+    private static final int MAX_HIGH_ANOMALIES = 3;
+
     private final UserAccountRepository userRepo;
     private final ExpenseRepository expenseRepo;
     private final BudgetRepository budgetRepo;
@@ -199,6 +202,7 @@ public class AiFeedbackService {
         long savingsImpact = 0;
         double burnRate = 0;
         Confidence overallConfidence;
+        List<Anomaly> allAnomalies = List.of();
 
         if (isLowData) {
             feedbackType = FeedbackType.LOW_DATA;
@@ -208,8 +212,9 @@ public class AiFeedbackService {
             long varMtdSpend = sum(window, e -> inMonth(e, monthStart, weekEnd) && e.isVariable());
             pacing = buildPacing(userId, varMtdSpend, available, day, dim, monthStart);
 
-            // ── [3] 이상치 탐지 (spikeProne 필터 + histLength 추적 + 추세 4+4 대칭) ──
-            top = detectTopAnomaly(window, weekStart, weekEnd, catBudget);
+            // ── [3] 이상치 탐지 — 카테고리별 best 수집 후 magnitude 내림차순 정렬 ──
+            allAnomalies = detectAllAnomalies(window, weekStart, weekEnd, catBudget);
+            top = allAnomalies.isEmpty() ? null : allAnomalies.get(0);
 
             // ── [3.5] 메모 질문 큐 적재 (mag 기준, memoMinMagnitude 설정) ──
             List<AnomalyCandidate> memoCandidates = collectAnomalyCandidates(window, weekStart, weekEnd, catBudget);
@@ -318,22 +323,26 @@ public class AiFeedbackService {
         // 이상치 대표 거래의 감정 태그 (LLM 톤 결정용)
         String anomalyEmotion = top != null ? top.rep().getEmotion() : null;
 
-        // 2차 이상치: primary 카테고리 제외하고 탐지
-        Anomaly secondary = top != null
-                ? detectTopAnomaly(window, weekStart, weekEnd, catBudget, top.categoryId())
-                : null;
-        Confidence secondaryConfidence = secondary != null
-                ? Confidence.of(secondary.magnitude(), secondary.histLength(),
-                        p.getConfHighMinSamples(), p.getConfMediumMinSamples())
-                : Confidence.LOW;
-        final int secondaryCatId = secondary != null ? secondary.categoryId() : -1;
-        long secondaryWeeklyAmount = secondaryCatId >= 0
-                ? sum(window, e -> e.getCategoryId() == secondaryCatId
-                        && !e.getDate().isBefore(weekStart)
-                        && !e.getDate().isAfter(weekEnd)
-                        && e.isVariable())
-                : 0L;
-        String secondaryEmotion = secondary != null ? secondary.rep().getEmotion() : null;
+        // 추가 HIGH 이상치: primary 제외 나머지 중 HIGH confidence인 것 (최대 MAX_HIGH_ANOMALIES-1개)
+        final LocalDate finalWeekStart2 = weekStart;
+        final LocalDate finalWeekEnd2 = weekEnd;
+        List<FeedbackRenderer.AnomalyInfo> additionalHighAnomalies = allAnomalies.stream()
+                .skip(1)
+                .filter(a -> Confidence.of(a.magnitude(), a.histLength(),
+                        p.getConfHighMinSamples(), p.getConfMediumMinSamples()) == Confidence.HIGH)
+                .limit(MAX_HIGH_ANOMALIES - 1)
+                .map(a -> {
+                    long weeklyAmt = sum(window, e -> e.getCategoryId() == a.categoryId()
+                            && !e.getDate().isBefore(finalWeekStart2)
+                            && !e.getDate().isAfter(finalWeekEnd2)
+                            && e.isVariable());
+                    return new FeedbackRenderer.AnomalyInfo(
+                            Categories.name(a.categoryId()),
+                            a.magnitude(),
+                            weeklyAmt,
+                            a.rep().getEmotion());
+                })
+                .toList();
 
         // 이번 주 전체 변동지출 감정 분포 (POSITIVE 주차 포함 항상 계산)
         Map<String, Long> weekEmoCounts = new java.util.LinkedHashMap<>();
@@ -381,12 +390,7 @@ public class AiFeedbackService {
                 anomalyWeeklyAmount,
                 anomalyConfidence,
                 anomalyEmotion,
-                secondary != null,
-                secondary != null ? Categories.name(secondary.categoryId()) : null,
-                secondary != null ? secondary.magnitude() : 0,
-                secondaryWeeklyAmount,
-                secondaryConfidence,
-                secondaryEmotion,
+                additionalHighAnomalies,
                 weekEmotion,
                 weekTotalWon,
                 prevWeekTotalWon,
@@ -490,9 +494,11 @@ public class AiFeedbackService {
 
         // ── [4] MonthEndVerification 저장 ──
         long predictedTotal = loadPredictedTotal(userId, monthStart);
-        double mape = predictedTotal > 0
-                ? Math.abs((double) (actualTotal - predictedTotal) / predictedTotal)
-                : 0.0;
+        // 예측값이 없으면 null — 0.0은 "완벽 예측"으로 오독되어 집계 오염
+        // 분모는 actualTotal (표준 MAPE 정의)
+        Double mape = (predictedTotal > 0 && actualTotal > 0)
+                ? Math.abs((double) (actualTotal - predictedTotal) / actualTotal)
+                : null;
         saveMonthEndVerification(userId, monthStart, predictedTotal, actualTotal, mape, catActual, catBudget, now);
 
         // ── [5] AiFeedback(MONTHLY) 멱등 upsert ──
@@ -562,7 +568,7 @@ public class AiFeedbackService {
             LocalDate monthStart,
             long predictedTotal,
             long actualTotal,
-            double mape,
+            Double mape,
             Map<Integer, Long> catActual,
             Map<Integer, Long> catBudget,
             LocalDateTime now) {
@@ -594,7 +600,7 @@ public class AiFeedbackService {
             for (var entry : catBudget.entrySet()) {
                 int cat = entry.getKey();
                 long actual = catActual.getOrDefault(cat, 0L);
-                diff.put(Categories.name(cat), actual - entry.getValue());
+                diff.merge(Categories.name(cat), actual - entry.getValue(), Long::sum);
             }
             return objectMapper.writeValueAsString(diff);
         } catch (Exception e) {
@@ -716,14 +722,12 @@ public class AiFeedbackService {
      * spikeProne 필터, histLength(8주 기준선 내 거래 건수) 추적,
      * 추세 magnitude는 4주 vs 4주 대칭 평균 비율로 실계산.
      */
-    private Anomaly detectTopAnomaly(
+    /**
+     * [3] 이상치 탐지 — 카테고리별 best 이상치를 수집해 magnitude 내림차순으로 반환한다.
+     * 단일 스캔으로 모든 카테고리를 처리하므로 중복 순회 비용이 없다.
+     */
+    private List<Anomaly> detectAllAnomalies(
             List<Expense> window, LocalDate weekStart, LocalDate weekEnd, Map<Integer, Long> catBudget) {
-        return detectTopAnomaly(window, weekStart, weekEnd, catBudget, -1);
-    }
-
-    private Anomaly detectTopAnomaly(
-            List<Expense> window, LocalDate weekStart, LocalDate weekEnd,
-            Map<Integer, Long> catBudget, int excludeCatId) {
         long windowDays = ChronoUnit.DAYS.between(
                 window.stream()
                         .filter(Expense::isVariable)
@@ -731,9 +735,10 @@ public class AiFeedbackService {
                         .min(Comparator.naturalOrder())
                         .orElse(weekEnd),
                 weekEnd.plusDays(1));
-        if (windowDays / 7 < p.getMinWeeks()) return null;
+        if (windowDays / 7 < p.getMinWeeks()) return List.of();
 
-        Anomaly best = null;
+        // 카테고리별 best 이상치 (카테고리당 1개)
+        Map<Integer, Anomaly> bestPerCat = new HashMap<>();
 
         // 카테고리별 변동 거래를 날짜순으로 사전 그룹핑 (1회 순회)
         Map<Integer, List<Expense>> byCat = new HashMap<>();
@@ -746,7 +751,6 @@ public class AiFeedbackService {
         // 단발: 이번 주 변동 거래에 대해 같은 카테고리 리스트에서만 히스토리 추출
         for (var entry : byCat.entrySet()) {
             int cat = entry.getKey();
-            if (cat == excludeCatId) continue;
             if (detector.isSpikeProne(cat)) continue;
 
             List<Expense> catExpenses = entry.getValue();
@@ -756,21 +760,14 @@ public class AiFeedbackService {
                 LocalDate d = e.getDate();
                 if (d.isBefore(weekStart) || d.isAfter(weekEnd)) continue;
 
-                // 8주 기준선 내의 히스토리만 사용 (bimodal 카테고리는 pointMin 미만 제외)
-                boolean bimodal = p.isBimodal(cat);
-                double[] hist = catExpenses.stream()
-                        .filter(x -> x.getDate().isBefore(d)
-                                && ChronoUnit.DAYS.between(x.getDate(), d) <= p.getBaselineWeeks() * 7L
-                                && (!bimodal || x.getAmount() >= p.getBimodalMin()))
-                        .mapToDouble(Expense::getAmount)
-                        .toArray();
+                double[] hist = baselineHistory(catExpenses, d, cat);
                 var z = detector.checkPoint(e.getAmount(), hist, budget);
                 if (z.isPresent()) {
                     double mag =
                             hist.length > 0 ? e.getAmount() / Math.max(RobustStats.median(hist), 1) : z.getAsDouble();
-                    if (best == null || mag > best.magnitude()) {
-                        best = new Anomaly(cat, e, mag, hist.length);
-                    }
+                    Anomaly candidate = new Anomaly(cat, e, mag, hist.length);
+                    bestPerCat.merge(cat, candidate,
+                            (existing, newOne) -> newOne.magnitude() > existing.magnitude() ? newOne : existing);
                 }
             }
         }
@@ -779,12 +776,10 @@ public class AiFeedbackService {
         int weeks = p.getBaselineWeeks();
         if (weeks >= TREND_MIN_WEEKS) {
             for (int cat : catBudget.keySet().stream().filter(detector::isHighFreq).toList()) {
-                if (cat == excludeCatId) continue;
                 if (detector.isSpikeProne(cat)) continue;
 
                 double[] weekly = weeklySeries(window, cat, weekEnd, weeks);
                 if (detector.trendConfirmed(weekly, weeks - 1, catBudget.getOrDefault(cat, 0L))) {
-                    // 4주 vs 4주 대칭: 최근 4주 평균 / 직전 4주 평균
                     double[] recent4 = Arrays.copyOfRange(weekly, weeks - 4, weeks);
                     double[] prior4 = Arrays.copyOfRange(weekly, weeks - 8, weeks - 4);
                     double rm = RobustStats.mean(recent4);
@@ -800,13 +795,35 @@ public class AiFeedbackService {
                             .filter(x -> !x.getDate().isBefore(weekStart) && !x.getDate().isAfter(weekEnd))
                             .max(Comparator.comparing(Expense::getExpenseDate))
                             .orElse(null);
-                    if (rep != null && (best == null || mag > best.magnitude())) {
-                        best = new Anomaly(cat, rep, mag, histLen);
+                    if (rep != null) {
+                        Anomaly candidate = new Anomaly(cat, rep, mag, histLen);
+                        bestPerCat.merge(cat, candidate,
+                                (existing, newOne) -> newOne.magnitude() > existing.magnitude() ? newOne : existing);
                     }
                 }
             }
         }
-        return best;
+
+        List<Anomaly> result = new ArrayList<>(bestPerCat.values());
+        result.sort(Comparator.comparingDouble(Anomaly::magnitude).reversed());
+        return result;
+    }
+
+    /**
+     * 카테고리 기준선 히스토리 추출. 세 탐지 경로(detectAllAnomalies, collectAnomalyCandidates,
+     * collectWeekHighlights)가 공유하는 단일 정의.
+     *
+     * <p>기준일(d) 이전 baselineWeeks 이내의 거래만 포함하며,
+     * bimodal 카테고리는 bimodalMin 미만 거래를 제외한다.
+     */
+    private double[] baselineHistory(List<Expense> catExpenses, LocalDate d, int cat) {
+        boolean bimodal = p.isBimodal(cat);
+        return catExpenses.stream()
+                .filter(x -> x.getDate().isBefore(d)
+                        && ChronoUnit.DAYS.between(x.getDate(), d) <= p.getBaselineWeeks() * 7L
+                        && (!bimodal || x.getAmount() >= p.getBimodalMin()))
+                .mapToDouble(Expense::getAmount)
+                .toArray();
     }
 
     /**
@@ -844,13 +861,7 @@ public class AiFeedbackService {
                     continue;
                 }
 
-                boolean bimodalCand = p.isBimodal(cat);
-                double[] hist = catExpenses.stream()
-                        .filter(x -> x.getDate().isBefore(d)
-                                && ChronoUnit.DAYS.between(x.getDate(), d) <= p.getBaselineWeeks() * 7L
-                                && (!bimodalCand || x.getAmount() >= p.getBimodalMin()))
-                        .mapToDouble(Expense::getAmount)
-                        .toArray();
+                double[] hist = baselineHistory(catExpenses, d, cat);
                 // 히스토리 없으면 mag 산출 불가 — z-score와 단위가 다르므로 스킵
                 if (hist.length == 0) continue;
 
@@ -1145,12 +1156,7 @@ public class AiFeedbackService {
             boolean isAnomaly = false;
             if (!detector.isSpikeProne(cat)) {
                 long budget = catBudget.getOrDefault(cat, 0L);
-                double[] hist = byCat.getOrDefault(cat, List.of()).stream()
-                        .filter(x -> x.getDate().isBefore(d)
-                                && ChronoUnit.DAYS.between(x.getDate(), d) <= p.getBaselineWeeks() * 7L
-                                && (!p.isBimodal(cat) || x.getAmount() >= p.getBimodalMin()))
-                        .mapToDouble(Expense::getAmount)
-                        .toArray();
+                double[] hist = baselineHistory(byCat.getOrDefault(cat, List.of()), d, cat);
                 isAnomaly = detector.checkPoint(e.getAmount(), hist, budget).isPresent();
             }
 

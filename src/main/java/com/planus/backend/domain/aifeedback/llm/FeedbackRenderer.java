@@ -35,7 +35,7 @@ public class FeedbackRenderer {
      * 금액("N만원", "N만 원", "N,NNN원") 추출 정규식. 퍼센트·배율·건수·회 등은 매칭 안 함.
      * "만\\s*원" 으로 띄어쓰기 허용 — LLM이 "5만 원"처럼 쓰는 경우를 검증 대상으로 포함한다.
      */
-    private static final Pattern MONEY_PATTERN = Pattern.compile("(\\d[\\d,]*(?:\\.\\d+)?)만\\s*원|(\\d[\\d,]*)원");
+    private static final Pattern MONEY_PATTERN = Pattern.compile("(\\d[\\d,]*(?:\\.\\d+)?)만\\s*원|(\\d[\\d,]*)\\s*원");
 
     /** 숫자 후검증 허용 오차. LLM이 자연스럽게 반올림하는 것을 허용. */
     private static final double NUMBER_TOLERANCE = 0.05;
@@ -132,6 +132,25 @@ public class FeedbackRenderer {
         return template(c);
     }
 
+    private String callMonthEndWithRetry(LlmClient client, MonthEndContext c) {
+        String user = monthEndUserPrompt(c);
+        for (int attempt = 1; attempt <= MAX_LLM_ATTEMPTS; attempt++) {
+            String candidate = client.complete(MONTH_END_SYSTEM, user);
+            if (candidate == null || candidate.isBlank()) {
+                break;
+            }
+            if (verifyMonthEndNumbers(candidate, c)) {
+                return candidate;
+            }
+            if (attempt < MAX_LLM_ATTEMPTS) {
+                log.warn("월말 LLM 숫자 불일치 — 재시도 {}/{}", attempt, MAX_LLM_ATTEMPTS - 1);
+            } else {
+                log.warn("월말 LLM 숫자 불일치 — 템플릿 폴백 사용 ({}회 시도)", MAX_LLM_ATTEMPTS);
+            }
+        }
+        return monthEndTemplate(c);
+    }
+
     /** LOW_DATA: LLM 호출 없이 결정적 기록 리마인드. */
     private Rendered renderLowData() {
         return new Rendered(
@@ -147,7 +166,11 @@ public class FeedbackRenderer {
      * 불일치가 하나라도 있으면 false.
      */
     boolean verifyNumbers(String text, FeedbackContext c) {
-        Set<Long> allowed = collectAllowedValues(c);
+        return checkExtracted(text, collectAllowedValues(c));
+    }
+
+    /** 추출된 금액이 허용값 집합 안에 있는지 확인하는 공통 헬퍼. */
+    private boolean checkExtracted(String text, Set<Long> allowed) {
         List<Long> extracted = extractMoneyValues(text);
         if (extracted.isEmpty()) return true;
         return extracted.stream().allMatch(v -> allowed.stream().anyMatch(a -> isWithinTolerance(v, a)));
@@ -175,8 +198,11 @@ public class FeedbackRenderer {
 
         addWithRounded(values, c.weekTotalWon());
         addWithRounded(values, c.prevWeekTotalWon());
+        if (c.weekTotalWon() > 0 && c.prevWeekTotalWon() > 0) {
+            addWithRounded(values, Math.abs(c.weekTotalWon() - c.prevWeekTotalWon()));
+        }
         addWithRounded(values, c.anomalyWeeklyAmountWon());
-        addWithRounded(values, c.secondaryAnomalyWeeklyAmountWon());
+        c.additionalHighAnomalies().forEach(a -> addWithRounded(values, a.weeklyAmountWon()));
         if (c.weekEmotion() != null) {
             c.weekEmotion().amounts().values().forEach(v -> addWithRounded(values, v));
             addWithRounded(values, c.weekEmotion().untaggedWon());
@@ -413,21 +439,23 @@ public class FeedbackRenderer {
             }
         }
 
-        // ── 2차 이상치 (마지막 문장 필수 언급) ──
-        if (c.hasSecondaryAnomaly() && c.secondaryAnomalyConfidence() != Confidence.LOW) {
-            sb.append("\n[이상 신호 — 피드백 마지막 문장에 반드시 1문장 가볍게 언급]\n");
-            sb.append("- 카테고리: ")
-                    .append(c.secondaryAnomalyCategoryName())
-                    .append(", 평소 대비 약 ")
-                    .append(String.format("%.1f", c.secondaryAnomalyMagnitude()))
-                    .append("배");
-            if (c.secondaryAnomalyWeeklyAmountWon() > 0) {
-                sb.append(", 이번 주 지출: ").append(exactWon(c.secondaryAnomalyWeeklyAmountWon()));
+        // ── 추가 HIGH 이상치 (각각 1문장씩 언급) ──
+        if (!c.additionalHighAnomalies().isEmpty()) {
+            sb.append("\n[추가 HIGH 이상치 — 피드백에 각각 1문장씩 자연스럽게 언급]\n");
+            for (AnomalyInfo a : c.additionalHighAnomalies()) {
+                sb.append("- 카테고리: ")
+                        .append(a.categoryName())
+                        .append(", 평소 대비 약 ")
+                        .append(String.format("%.1f", a.magnitude()))
+                        .append("배");
+                if (a.weeklyAmountWon() > 0) {
+                    sb.append(", 이번 주 지출: ").append(exactWon(a.weeklyAmountWon()));
+                }
+                if (a.emotion() != null && !a.emotion().isBlank()) {
+                    sb.append(", 감정 태그: ").append(a.emotion());
+                }
+                sb.append("\n");
             }
-            if (c.secondaryAnomalyEmotion() != null && !c.secondaryAnomalyEmotion().isBlank()) {
-                sb.append(", 감정 태그: ").append(c.secondaryAnomalyEmotion());
-            }
-            sb.append("\n");
         }
 
         // ── 이번 주 주목 거래 ──
@@ -472,9 +500,9 @@ public class FeedbackRenderer {
             }
         }
 
-        // 2차 이상치 언급 강제 — 프롬프트 끝에 명시적 지시
-        if (c.hasSecondaryAnomaly() && c.secondaryAnomalyConfidence() != Confidence.LOW) {
-            sb.append("\n※ 위 [이상 신호 — 피드백 마지막 문장에 반드시 1문장 가볍게 언급] 항목을 마지막 문장에 포함할 것.\n");
+        // 추가 HIGH 이상치 언급 강제 — 프롬프트 끝에 명시적 지시
+        if (!c.additionalHighAnomalies().isEmpty()) {
+            sb.append("\n※ 위 [추가 HIGH 이상치] 항목들을 피드백에 자연스럽게 포함할 것.\n");
         }
 
         return sb.toString();
@@ -495,13 +523,7 @@ public class FeedbackRenderer {
             if (client == null) {
                 text = monthEndTemplate(c);
             } else {
-                text = client.complete(MONTH_END_SYSTEM, monthEndUserPrompt(c));
-                if (text == null || text.isBlank()) {
-                    text = monthEndTemplate(c);
-                } else if (!verifyMonthEndNumbers(text, c)) {
-                    log.warn("월말 LLM 숫자 불일치 — 템플릿 폴백 사용");
-                    text = monthEndTemplate(c);
-                }
+                text = callMonthEndWithRetry(client, c);
             }
         } catch (Exception e) {
             log.warn("월말 LLM 호출 실패 — 템플릿 폴백 사용: {}", e.getMessage());
@@ -523,9 +545,7 @@ public class FeedbackRenderer {
         for (CategoryResult r : c.savingCategories()) {
             addWithRounded(allowed, r.amountWon());
         }
-        List<Long> extracted = extractMoneyValues(text);
-        if (extracted.isEmpty()) return true;
-        return extracted.stream().allMatch(v -> allowed.stream().anyMatch(a -> isWithinTolerance(v, a)));
+        return checkExtracted(text, allowed);
     }
 
     private String monthEndUserPrompt(MonthEndContext c) {
@@ -605,6 +625,9 @@ public class FeedbackRenderer {
                     .append(c.anomalyCategoryName())
                     .append(" 지출이 평소보다 눈에 띄게 늘었어요.");
         }
+        for (AnomalyInfo a : c.additionalHighAnomalies()) {
+            sb.append(" ").append(a.categoryName()).append(" 지출도 평소보다 늘었어요.");
+        }
 
         return sb.toString();
     }
@@ -643,12 +666,7 @@ public class FeedbackRenderer {
             long anomalyWeeklyAmountWon,
             Confidence anomalyConfidence,
             String anomalyEmotion,
-            boolean hasSecondaryAnomaly,
-            String secondaryAnomalyCategoryName,
-            double secondaryAnomalyMagnitude,
-            long secondaryAnomalyWeeklyAmountWon,
-            Confidence secondaryAnomalyConfidence,
-            String secondaryAnomalyEmotion,
+            List<AnomalyInfo> additionalHighAnomalies,
             WeekEmotionSummary weekEmotion,
             long weekTotalWon,
             long prevWeekTotalWon,
@@ -659,6 +677,16 @@ public class FeedbackRenderer {
             FeedbackType feedbackType,
             BandWidth bandWidth,
             Confidence overallConfidence) {}
+
+    /**
+     * PRIMARY를 제외한 추가 HIGH 이상치 정보.
+     * confidence는 모두 HIGH로 필터링된 상태이므로 별도로 보관하지 않는다.
+     */
+    public record AnomalyInfo(
+            String categoryName,
+            double magnitude,
+            long weeklyAmountWon,
+            String emotion) {}
 
     /**
      * 카테고리별 초과 예상.
