@@ -67,8 +67,7 @@ class PacingComparatorTest {
     @Test
     @DisplayName("중간 시점(0.4 ≤ progress < 0.6) + 2개월이면 MEDIUM 밴드")
     void compare_midMonth_twoMonths_mediumBand() {
-        List<PastMonth> past =
-                List.of(new PastMonth(400_000, 15, 1_000_000), new PastMonth(450_000, 15, 1_000_000));
+        List<PastMonth> past = List.of(new PastMonth(400_000, 15, 1_000_000), new PastMonth(450_000, 15, 1_000_000));
 
         PacingResult result = comparator.compare(500_000, 1_000_000, 15, 30, past);
 
@@ -108,8 +107,7 @@ class PacingComparatorTest {
     @Test
     @DisplayName("과거 2개월이면 RANGE displayType + referenceMin/Max 제공")
     void compare_twoMonths_rangeDisplayType() {
-        List<PastMonth> past =
-                List.of(new PastMonth(200_000, 10, 1_000_000), new PastMonth(300_000, 10, 1_000_000));
+        List<PastMonth> past = List.of(new PastMonth(200_000, 10, 1_000_000), new PastMonth(300_000, 10, 1_000_000));
 
         PacingResult result = comparator.compare(250_000, 1_000_000, 10, 30, past);
 
@@ -155,8 +153,7 @@ class PacingComparatorTest {
     @Test
     @DisplayName("월말(progress ≥ 0.4) + 2개월이면 MEDIUM 밴드 (3개월 미만)")
     void compare_lateMonth_twoMonths_stillMedium() {
-        List<PastMonth> past =
-                List.of(new PastMonth(700_000, 25, 1_000_000), new PastMonth(750_000, 25, 1_000_000));
+        List<PastMonth> past = List.of(new PastMonth(700_000, 25, 1_000_000), new PastMonth(750_000, 25, 1_000_000));
 
         PacingResult result = comparator.compare(800_000, 1_000_000, 25, 30, past);
 

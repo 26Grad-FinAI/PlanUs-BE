@@ -29,7 +29,8 @@ class FeedbackRendererTest {
     @Test
     @DisplayName("LOW_DATA → LLM 호출 없이 결정적 메시지")
     void render_lowData_deterministicMessage() {
-        FeedbackContext ctx = contextBuilder().feedbackType(FeedbackType.LOW_DATA).build();
+        FeedbackContext ctx =
+                contextBuilder().feedbackType(FeedbackType.LOW_DATA).build();
 
         Rendered result = renderer.render(ctx);
 
@@ -67,9 +68,9 @@ class FeedbackRendererTest {
         // 불일치 금액(600,000): allowed values(800,000 / 1,000,000 / 200,000)와 모두 5% 이상 오차
         // 일치 금액(800,000): predictedMonthEndWon과 정확히 일치
         when(client.complete(anyString(), anyString()))
-                .thenReturn("이번 달 600,000원 쓸 것 같아요.")   // 불일치
-                .thenReturn("이번 달 600,000원 쓸 것 같아요.")   // 불일치
-                .thenReturn("이번 달 800,000원 쓸 것 같아요.");  // 일치
+                .thenReturn("이번 달 600,000원 쓸 것 같아요.") // 불일치
+                .thenReturn("이번 달 600,000원 쓸 것 같아요.") // 불일치
+                .thenReturn("이번 달 800,000원 쓸 것 같아요."); // 일치
 
         FeedbackContext ctx = contextBuilder()
                 .feedbackType(FeedbackType.ALERT)
@@ -172,9 +173,8 @@ class FeedbackRendererTest {
             when(llmProvider.getIfAvailable()).thenReturn(client);
             when(client.complete(anyString(), anyString())).thenReturn("보통 22% 쓰셨는데 지금은 35%예요. 평소의 2.3배입니다.");
 
-            FeedbackContext ctx = contextBuilder()
-                    .feedbackType(FeedbackType.POSITIVE)
-                    .build();
+            FeedbackContext ctx =
+                    contextBuilder().feedbackType(FeedbackType.POSITIVE).build();
 
             Rendered result = renderer.render(ctx);
 
@@ -202,8 +202,10 @@ class FeedbackRendererTest {
         when(llmProvider.getIfAvailable()).thenReturn(client);
         when(client.complete(anyString(), anyString())).thenReturn("기록을 잘 남기고 계세요.");
 
-        FeedbackContext ctx =
-                contextBuilder().feedbackType(FeedbackType.POSITIVE).bandWidth(BandWidth.WIDE).build();
+        FeedbackContext ctx = contextBuilder()
+                .feedbackType(FeedbackType.POSITIVE)
+                .bandWidth(BandWidth.WIDE)
+                .build();
 
         renderer.render(ctx);
 

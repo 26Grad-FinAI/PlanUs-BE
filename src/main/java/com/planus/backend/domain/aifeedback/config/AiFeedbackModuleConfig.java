@@ -32,10 +32,9 @@ public class AiFeedbackModuleConfig {
     /** ShedLock 락 저장소. 기존 PostgreSQL DataSource를 그대로 사용한다. */
     @Bean
     LockProvider lockProvider(DataSource dataSource) {
-        return new JdbcTemplateLockProvider(
-                JdbcTemplateLockProvider.Configuration.builder()
-                        .withJdbcTemplate(new JdbcTemplate(dataSource))
-                        .usingDbTime()
-                        .build());
+        return new JdbcTemplateLockProvider(JdbcTemplateLockProvider.Configuration.builder()
+                .withJdbcTemplate(new JdbcTemplate(dataSource))
+                .usingDbTime()
+                .build());
     }
 }

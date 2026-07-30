@@ -147,7 +147,8 @@ class AnomalyDetectionPerfTest {
             }
 
             @SuppressWarnings("unchecked")
-            List<Object> result = (List<Object>) detectMethod.invoke(service, shortWindow, WEEK_START, WEEK_END, CAT_BUDGET);
+            List<Object> result =
+                    (List<Object>) detectMethod.invoke(service, shortWindow, WEEK_START, WEEK_END, CAT_BUDGET);
 
             assertThat(result).isEmpty();
         }
@@ -180,7 +181,8 @@ class AnomalyDetectionPerfTest {
             window.add(expense(id++, 1, 500_000, 0));
 
             @SuppressWarnings("unchecked")
-            List<Object> fourWeekResult = (List<Object>) detectMethod.invoke(service, window, WEEK_START, WEEK_END, CAT_BUDGET);
+            List<Object> fourWeekResult =
+                    (List<Object>) detectMethod.invoke(service, window, WEEK_START, WEEK_END, CAT_BUDGET);
 
             // 4주 = minWeeks 이므로 탐지 실행, 명확한 이상치가 있으므로 감지되어야 함
             assertThat(fourWeekResult).as("4주(경계) 데이터 + 명확한 이상치 → 탐지됨").isNotEmpty();
@@ -194,7 +196,8 @@ class AnomalyDetectionPerfTest {
             threeWeekWindow.add(expense(id++, 1, 500_000, 0));
 
             @SuppressWarnings("unchecked")
-            List<Object> threeWeekResult = (List<Object>) detectMethod.invoke(service, threeWeekWindow, WEEK_START, WEEK_END, CAT_BUDGET);
+            List<Object> threeWeekResult =
+                    (List<Object>) detectMethod.invoke(service, threeWeekWindow, WEEK_START, WEEK_END, CAT_BUDGET);
             assertThat(threeWeekResult).as("3주 데이터는 minWeeks 미만이므로 빈 리스트").isEmpty();
         }
     }

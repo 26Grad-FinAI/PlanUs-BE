@@ -8,3 +8,9 @@ spring:
     properties:
       hibernate:
         auto_quote_keyword: true
+
+planus:
+  jwt:
+    secret: ${JWT_SECRET}
+    access-token-expiry: 3600000      # 1시간
+    refresh-token-expiry: 1209600000  # 14일

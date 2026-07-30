@@ -1,36 +1,35 @@
 package com.planus.backend.domain.aifeedback;
 
-import com.planus.backend.domain.aifeedback.config.AiFeedbackProperties;
-import com.planus.backend.domain.aifeedback.core.*;
-import com.planus.backend.domain.aifeedback.core.RobustStats;
-import com.planus.backend.domain.aifeedback.entity.Expense;
+import static org.assertj.core.api.Assertions.assertThat;
+
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.planus.backend.domain.aifeedback.action.ActionPlan;
 import com.planus.backend.domain.aifeedback.action.SavingsActionCalculator;
 import com.planus.backend.domain.aifeedback.cause.CauseSignalAssembler;
 import com.planus.backend.domain.aifeedback.cause.CauseSignals;
+import com.planus.backend.domain.aifeedback.config.AiFeedbackProperties;
+import com.planus.backend.domain.aifeedback.core.*;
+import com.planus.backend.domain.aifeedback.core.RobustStats;
+import com.planus.backend.domain.aifeedback.entity.Expense;
 import com.planus.backend.domain.aifeedback.llm.AnthropicLlmClient;
 import com.planus.backend.domain.aifeedback.llm.FeedbackRenderer;
 import com.planus.backend.domain.aifeedback.llm.LlmClient;
+import java.io.BufferedReader;
+import java.io.InputStreamReader;
+import java.time.DayOfWeek;
+import java.time.LocalDate;
+import java.time.YearMonth;
+import java.time.format.DateTimeFormatter;
+import java.time.temporal.ChronoUnit;
+import java.time.temporal.TemporalAdjusters;
+import java.util.*;
+import java.util.stream.Collectors;
 import org.junit.jupiter.api.Assumptions;
 import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Tag;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.ObjectProvider;
-
-import java.io.BufferedReader;
-import java.io.InputStreamReader;
-import java.time.DayOfWeek;
-import java.time.LocalDate;
-import java.time.YearMonth;
-import java.time.temporal.ChronoUnit;
-import java.time.format.DateTimeFormatter;
-import java.time.temporal.TemporalAdjusters;
-import java.util.*;
-import java.util.stream.Collectors;
-
-import static org.assertj.core.api.Assertions.assertThat;
 
 /**
  * Walk-forward 검증 — 실거래 데이터 기반 파이프라인 컴포넌트 검증.
@@ -51,14 +50,14 @@ import static org.assertj.core.api.Assertions.assertThat;
 @DisplayName("Walk-forward 검증 — 실거래 데이터 기반 파이프라인 검증")
 class WalkForwardValidationTest {
 
-    private static final DateTimeFormatter DATE_FMT   = DateTimeFormatter.ofPattern("yyyy.MM.dd");
-    private static final DateTimeFormatter MONTH_FMT  = DateTimeFormatter.ofPattern("yyyy-MM");
-    private static final long USER_ID       = 1L;
-    private static final int  WARMUP_WEEKS  = 16;
+    private static final DateTimeFormatter DATE_FMT = DateTimeFormatter.ofPattern("yyyy.MM.dd");
+    private static final DateTimeFormatter MONTH_FMT = DateTimeFormatter.ofPattern("yyyy-MM");
+    private static final long USER_ID = 1L;
+    private static final int WARMUP_WEEKS = 16;
     private static final LocalDate DATA_START = LocalDate.of(2026, 2, 1); // 1월 제외
 
-    private static final long MONTHLY_INCOME   = 1_200_000L; // 월 수입 120만원
-    private static final long SAVINGS_GOAL     =   200_000L; // 저축 목표 20만원
+    private static final long MONTHLY_INCOME = 1_200_000L; // 월 수입 120만원
+    private static final long SAVINGS_GOAL = 200_000L; // 저축 목표 20만원
     private static final long AVAILABLE_BUDGET = MONTHLY_INCOME - SAVINGS_GOAL; // 가용예산 100만원
 
     // YearMonth → (categoryId → 예산)
@@ -67,42 +66,47 @@ class WalkForwardValidationTest {
     private static List<Expense> ALL_EXPENSES;
     private static LocalDate FIRST_MONDAY;
 
-    private static AiFeedbackProperties   props;
-    private static AnomalyDetector        anomalyDetector;
-    private static BudgetProjector        budgetProjector;
-    private static PacingComparator       pacingComparator;
-    private static ActivityGuard          activityGuard;
-    private static FeedbackTypeResolver   feedbackTypeResolver;
-    private static CauseSignalAssembler   causeSignalAssembler;
+    private static AiFeedbackProperties props;
+    private static AnomalyDetector anomalyDetector;
+    private static BudgetProjector budgetProjector;
+    private static PacingComparator pacingComparator;
+    private static ActivityGuard activityGuard;
+    private static FeedbackTypeResolver feedbackTypeResolver;
+    private static CauseSignalAssembler causeSignalAssembler;
     private static SavingsActionCalculator savingsActionCalculator;
 
     @BeforeAll
     static void setup() throws Exception {
-        ALL_EXPENSES     = loadTransactions();
+        ALL_EXPENSES = loadTransactions();
         BUDGETS_BY_MONTH = loadBudgets();
 
         assertThat(ALL_EXPENSES).isNotEmpty();
         assertThat(BUDGETS_BY_MONTH).isNotEmpty();
 
-        LocalDate dataStart = ALL_EXPENSES.stream().map(Expense::getDate).min(Comparator.naturalOrder()).orElseThrow();
-        LocalDate dataEnd   = ALL_EXPENSES.stream().map(Expense::getDate).max(Comparator.naturalOrder()).orElseThrow();
+        LocalDate dataStart = ALL_EXPENSES.stream()
+                .map(Expense::getDate)
+                .min(Comparator.naturalOrder())
+                .orElseThrow();
+        LocalDate dataEnd = ALL_EXPENSES.stream()
+                .map(Expense::getDate)
+                .max(Comparator.naturalOrder())
+                .orElseThrow();
 
         FIRST_MONDAY = dataStart.with(TemporalAdjusters.nextOrSame(DayOfWeek.MONDAY));
 
-        props                = new AiFeedbackProperties();
-        anomalyDetector      = new AnomalyDetector(props);
-        budgetProjector      = new BudgetProjector();
-        pacingComparator     = new PacingComparator();
-        activityGuard        = new ActivityGuard(props);
+        props = new AiFeedbackProperties();
+        anomalyDetector = new AnomalyDetector(props);
+        budgetProjector = new BudgetProjector();
+        pacingComparator = new PacingComparator();
+        activityGuard = new ActivityGuard(props);
         feedbackTypeResolver = new FeedbackTypeResolver();
-        causeSignalAssembler    = new CauseSignalAssembler(new ObjectMapper());
+        causeSignalAssembler = new CauseSignalAssembler(new ObjectMapper());
         savingsActionCalculator = new SavingsActionCalculator(props);
 
         System.out.printf("%n=== 데이터 현황 ===%n");
         System.out.printf("총 거래 건수 : %d건%n", ALL_EXPENSES.size());
         System.out.printf("기간         : %s ~ %s%n", dataStart, dataEnd);
-        System.out.printf("월 수입      : %,d원  저축목표: %,d원  가용예산: %,d원%n",
-                MONTHLY_INCOME, SAVINGS_GOAL, AVAILABLE_BUDGET);
+        System.out.printf("월 수입      : %,d원  저축목표: %,d원  가용예산: %,d원%n", MONTHLY_INCOME, SAVINGS_GOAL, AVAILABLE_BUDGET);
         System.out.printf("워밍업       : 1~%d주차 (약 4개월)%n", WARMUP_WEEKS);
         System.out.printf("검증 시작    : %d주차~%n%n", WARMUP_WEEKS + 1);
     }
@@ -114,47 +118,50 @@ class WalkForwardValidationTest {
     @DisplayName("[검증 1] Walk-forward: 주차별 FeedbackType 분포")
     void walkForward_feedbackType() {
         System.out.println("=== [검증 1] FeedbackType Walk-forward 결과 ===");
-        System.out.printf("%-5s %-22s %-12s %-14s %-8s %-8s%n",
-                "주차", "기간", "FeedbackType", "savingsImpact", "이상탐지", "LOW_DATA");
+        System.out.printf(
+                "%-5s %-22s %-12s %-14s %-8s %-8s%n", "주차", "기간", "FeedbackType", "savingsImpact", "이상탐지", "LOW_DATA");
         System.out.println("-".repeat(75));
 
         int alertCount = 0, positiveCount = 0, lowDataCount = 0;
-        LocalDate dataEnd = ALL_EXPENSES.stream().map(Expense::getDate).max(Comparator.naturalOrder()).orElseThrow();
+        LocalDate dataEnd = ALL_EXPENSES.stream()
+                .map(Expense::getDate)
+                .max(Comparator.naturalOrder())
+                .orElseThrow();
 
         for (int week = WARMUP_WEEKS + 1; ; week++) {
-            LocalDate weekEnd   = FIRST_MONDAY.plusWeeks(week).minusDays(1);
+            LocalDate weekEnd = FIRST_MONDAY.plusWeeks(week).minusDays(1);
             LocalDate weekStart = weekEnd.minusDays(6);
             if (weekEnd.isAfter(dataEnd)) break;
 
             Map<Integer, Long> catBudget = budgetForMonth(weekEnd);
-            List<Expense> history        = expensesUpTo(weekEnd);
-            List<Expense> thisWeek       = expensesInRange(history, weekStart, weekEnd);
+            List<Expense> history = expensesUpTo(weekEnd);
+            List<Expense> thisWeek = expensesInRange(history, weekStart, weekEnd);
 
-            boolean isLowData      = checkLowData(week, thisWeek.size());
+            boolean isLowData = checkLowData(week, thisWeek.size());
             boolean hasHighAnomaly = !isLowData && detectHighAnomaly(history, thisWeek, weekStart, catBudget);
-            long savingsImpact     = calcSavingsImpact(history, weekEnd);
-            boolean hasOverBudget  = hasOverBudgetCategory(history, weekEnd, catBudget);
+            long savingsImpact = calcSavingsImpact(history, weekEnd);
+            boolean hasOverBudget = hasOverBudgetCategory(history, weekEnd, catBudget);
 
             FeedbackType type = feedbackTypeResolver.resolve(isLowData, savingsImpact, hasHighAnomaly, hasOverBudget);
 
             switch (type) {
-                case ALERT    -> alertCount++;
+                case ALERT -> alertCount++;
                 case POSITIVE -> positiveCount++;
                 case LOW_DATA -> lowDataCount++;
             }
 
-            System.out.printf("%-5d %-22s %-12s %-14s %-8s %-8s%n",
+            System.out.printf(
+                    "%-5d %-22s %-12s %-14s %-8s %-8s%n",
                     week,
                     weekStart + " ~ " + weekEnd,
                     type,
                     String.format("%,d원", savingsImpact),
                     hasHighAnomaly ? "YES" : "-",
-                    isLowData      ? "YES" : "-");
+                    isLowData ? "YES" : "-");
         }
 
         System.out.println("-".repeat(75));
-        System.out.printf("ALERT: %d건 / POSITIVE: %d건 / LOW_DATA: %d건%n%n",
-                alertCount, positiveCount, lowDataCount);
+        System.out.printf("ALERT: %d건 / POSITIVE: %d건 / LOW_DATA: %d건%n%n", alertCount, positiveCount, lowDataCount);
 
         assertThat(alertCount + positiveCount + lowDataCount).isGreaterThan(0);
     }
@@ -166,26 +173,31 @@ class WalkForwardValidationTest {
     @DisplayName("[검증 2] AnomalyDetector: 카테고리별 이상 탐지 현황")
     void anomalyDetector_categoryBreakdown() {
         Map<Integer, Integer> countByCategory = new TreeMap<>();
-        LocalDate dataEnd = ALL_EXPENSES.stream().map(Expense::getDate).max(Comparator.naturalOrder()).orElseThrow();
+        LocalDate dataEnd = ALL_EXPENSES.stream()
+                .map(Expense::getDate)
+                .max(Comparator.naturalOrder())
+                .orElseThrow();
 
         for (int week = WARMUP_WEEKS + 1; ; week++) {
-            LocalDate weekEnd   = FIRST_MONDAY.plusWeeks(week).minusDays(1);
+            LocalDate weekEnd = FIRST_MONDAY.plusWeeks(week).minusDays(1);
             LocalDate weekStart = weekEnd.minusDays(6);
             if (weekEnd.isAfter(dataEnd)) break;
 
             Map<Integer, Long> catBudget = budgetForMonth(weekEnd);
-            List<Expense> history        = expensesUpTo(weekEnd);
-            List<Expense> thisWeek       = expensesInRange(history, weekStart, weekEnd);
+            List<Expense> history = expensesUpTo(weekEnd);
+            List<Expense> thisWeek = expensesInRange(history, weekStart, weekEnd);
 
             for (int catId : catBudget.keySet()) {
                 if (anomalyDetector.isSpikeProne(catId)) continue;
                 long budget = catBudget.getOrDefault(catId, 100_000L);
 
                 double[] catHistory = history.stream()
-                        .filter(e -> e.isExpense() && Objects.equals(e.getCategoryId(), catId)
+                        .filter(e -> e.isExpense()
+                                && Objects.equals(e.getCategoryId(), catId)
                                 && e.getDate().isBefore(weekStart)
                                 && (!props.isBimodal(catId) || e.getAmount() >= props.getBimodalMin()))
-                        .mapToDouble(Expense::getAmount).toArray();
+                        .mapToDouble(Expense::getAmount)
+                        .toArray();
 
                 for (Expense e : thisWeek) {
                     if (!e.isExpense() || !Objects.equals(e.getCategoryId(), catId)) continue;
@@ -196,8 +208,8 @@ class WalkForwardValidationTest {
         }
 
         System.out.println("=== [검증 2] 카테고리별 이상 탐지 건수 ===");
-        countByCategory.forEach((catId, cnt) ->
-                System.out.printf("  [%2d] %-18s : %d건%n", catId, Categories.name(catId), cnt));
+        countByCategory.forEach(
+                (catId, cnt) -> System.out.printf("  [%2d] %-18s : %d건%n", catId, Categories.name(catId), cnt));
         System.out.println();
 
         assertThat(countByCategory).isNotNull();
@@ -209,31 +221,36 @@ class WalkForwardValidationTest {
     @Test
     @DisplayName("[검증 2-1] AnomalyDetector: 이상 탐지 항목 상세")
     void anomalyDetector_detail() {
-        LocalDate dataEnd = ALL_EXPENSES.stream().map(Expense::getDate).max(Comparator.naturalOrder()).orElseThrow();
+        LocalDate dataEnd = ALL_EXPENSES.stream()
+                .map(Expense::getDate)
+                .max(Comparator.naturalOrder())
+                .orElseThrow();
 
         System.out.println("=== [검증 2-1] 이상 탐지 항목 상세 ===");
-        System.out.printf("%-12s %-10s %-18s %-8s %-8s %-8s %-20s%n",
-                "날짜", "카테고리", "금액", "중앙값", "z-score", "신뢰도", "메모");
+        System.out.printf(
+                "%-12s %-10s %-18s %-8s %-8s %-8s %-20s%n", "날짜", "카테고리", "금액", "중앙값", "z-score", "신뢰도", "메모");
         System.out.println("-".repeat(100));
 
         for (int week = WARMUP_WEEKS + 1; ; week++) {
-            LocalDate weekEnd   = FIRST_MONDAY.plusWeeks(week).minusDays(1);
+            LocalDate weekEnd = FIRST_MONDAY.plusWeeks(week).minusDays(1);
             LocalDate weekStart = weekEnd.minusDays(6);
             if (weekEnd.isAfter(dataEnd)) break;
 
             Map<Integer, Long> catBudget = budgetForMonth(weekEnd);
-            List<Expense> history        = expensesUpTo(weekEnd);
-            List<Expense> thisWeek       = expensesInRange(history, weekStart, weekEnd);
+            List<Expense> history = expensesUpTo(weekEnd);
+            List<Expense> thisWeek = expensesInRange(history, weekStart, weekEnd);
 
             for (int catId : catBudget.keySet()) {
                 if (anomalyDetector.isSpikeProne(catId)) continue;
                 long budget = catBudget.getOrDefault(catId, 100_000L);
 
                 double[] catHistory = history.stream()
-                        .filter(e -> e.isExpense() && Objects.equals(e.getCategoryId(), catId)
+                        .filter(e -> e.isExpense()
+                                && Objects.equals(e.getCategoryId(), catId)
                                 && e.getDate().isBefore(weekStart)
                                 && (!props.isBimodal(catId) || e.getAmount() >= props.getBimodalMin()))
-                        .mapToDouble(Expense::getAmount).toArray();
+                        .mapToDouble(Expense::getAmount)
+                        .toArray();
 
                 double median = catHistory.length > 0 ? RobustStats.median(catHistory) : 0;
 
@@ -242,10 +259,14 @@ class WalkForwardValidationTest {
                     OptionalDouble z = anomalyDetector.checkPoint(e.getAmount(), catHistory, budget);
                     if (z.isEmpty()) continue;
 
-                    Confidence confidence = Confidence.of(z.getAsDouble(), catHistory.length,
-                            props.getConfHighMinSamples(), props.getConfMediumMinSamples());
+                    Confidence confidence = Confidence.of(
+                            z.getAsDouble(),
+                            catHistory.length,
+                            props.getConfHighMinSamples(),
+                            props.getConfMediumMinSamples());
 
-                    System.out.printf("%-12s %-10s %-18s %-8s %-8s %-8s %-20s%n",
+                    System.out.printf(
+                            "%-12s %-10s %-18s %-8s %-8s %-8s %-20s%n",
                             e.getDate(),
                             Categories.name(catId),
                             String.format("%,d원", e.getAmount()),
@@ -270,42 +291,51 @@ class WalkForwardValidationTest {
         System.out.println("-".repeat(70));
 
         LocalDate dataEnd = ALL_EXPENSES.stream()
-                .map(Expense::getDate).max(Comparator.naturalOrder()).orElseThrow();
+                .map(Expense::getDate)
+                .max(Comparator.naturalOrder())
+                .orElseThrow();
 
         double totalMape = 0;
         int count = 0;
 
         for (int week = WARMUP_WEEKS + 1; ; week++) {
-            LocalDate weekEnd   = FIRST_MONDAY.plusWeeks(week).minusDays(1);
+            LocalDate weekEnd = FIRST_MONDAY.plusWeeks(week).minusDays(1);
             LocalDate weekStart = weekEnd.minusDays(6);
             if (weekEnd.isAfter(dataEnd)) break;
 
             LocalDate monthStart = weekEnd.withDayOfMonth(1);
-            LocalDate monthEnd   = weekEnd.withDayOfMonth(weekEnd.lengthOfMonth());
+            LocalDate monthEnd = weekEnd.withDayOfMonth(weekEnd.lengthOfMonth());
             // 월말 실제값 확인 가능한 달만 검증
             if (monthEnd.isAfter(dataEnd)) continue;
 
-            int daysElapsed  = (int) java.time.temporal.ChronoUnit.DAYS.between(monthStart, weekEnd) + 1;
-            int daysInMonth  = weekEnd.lengthOfMonth();
+            int daysElapsed = (int) java.time.temporal.ChronoUnit.DAYS.between(monthStart, weekEnd) + 1;
+            int daysInMonth = weekEnd.lengthOfMonth();
 
             long variableMtd = ALL_EXPENSES.stream()
-                    .filter(e -> e.isExpense() && e.isVariable()
+                    .filter(e -> e.isExpense()
+                            && e.isVariable()
                             && !e.getDate().isBefore(monthStart)
                             && !e.getDate().isAfter(weekEnd))
-                    .mapToLong(Expense::getAmount).sum();
+                    .mapToLong(Expense::getAmount)
+                    .sum();
 
             long fixedMtd = ALL_EXPENSES.stream()
-                    .filter(e -> e.isExpense() && !e.isVariable()
+                    .filter(e -> e.isExpense()
+                            && !e.isVariable()
                             && !e.getDate().isBefore(monthStart)
                             && !e.getDate().isAfter(weekEnd))
-                    .mapToLong(Expense::getAmount).sum();
+                    .mapToLong(Expense::getAmount)
+                    .sum();
 
             LocalDate threeMonthsAgo = monthStart.minusMonths(3);
             double priorDailyRate = ALL_EXPENSES.stream()
-                    .filter(e -> e.isExpense() && e.isVariable()
+                    .filter(e -> e.isExpense()
+                            && e.isVariable()
                             && !e.getDate().isBefore(threeMonthsAgo)
                             && e.getDate().isBefore(monthStart))
-                    .mapToLong(Expense::getAmount).average().orElse(0.0);
+                    .mapToLong(Expense::getAmount)
+                    .average()
+                    .orElse(0.0);
 
             BudgetProjector.Projection proj = budgetProjector.project(
                     variableMtd, fixedMtd, 0, daysElapsed, daysInMonth, priorDailyRate, null, null);
@@ -314,14 +344,15 @@ class WalkForwardValidationTest {
                     .filter(e -> e.isExpense()
                             && !e.getDate().isBefore(monthStart)
                             && !e.getDate().isAfter(monthEnd))
-                    .mapToLong(Expense::getAmount).sum();
+                    .mapToLong(Expense::getAmount)
+                    .sum();
 
-            double error = actual > 0
-                    ? Math.abs(proj.predictedMonthEndWon() - actual) / (double) actual * 100 : 0.0;
+            double error = actual > 0 ? Math.abs(proj.predictedMonthEndWon() - actual) / (double) actual * 100 : 0.0;
             totalMape += error;
             count++;
 
-            System.out.printf("%-6d %-22s %-14s %-14s %-8.1f%n",
+            System.out.printf(
+                    "%-6d %-22s %-14s %-14s %-8.1f%n",
                     week,
                     weekStart + " ~ " + weekEnd,
                     String.format("%,d", proj.predictedMonthEndWon()),
@@ -340,9 +371,7 @@ class WalkForwardValidationTest {
 
     /** 해당 주의 월 예산을 반환. budgets.csv에 없는 달은 균등 배분으로 대체. */
     private Map<Integer, Long> budgetForMonth(LocalDate weekEnd) {
-        return BUDGETS_BY_MONTH.getOrDefault(
-                YearMonth.from(weekEnd),
-                defaultBudget());
+        return BUDGETS_BY_MONTH.getOrDefault(YearMonth.from(weekEnd), defaultBudget());
     }
 
     private Map<Integer, Long> defaultBudget() {
@@ -365,27 +394,30 @@ class WalkForwardValidationTest {
     private boolean checkLowData(int currentWeek, int thisWeekCount) {
         List<Long> pastCounts = new ArrayList<>();
         for (int w = 1; w < currentWeek; w++) {
-            LocalDate wEnd   = FIRST_MONDAY.plusWeeks(w).minusDays(1);
+            LocalDate wEnd = FIRST_MONDAY.plusWeeks(w).minusDays(1);
             LocalDate wStart = wEnd.minusDays(6);
             long cnt = ALL_EXPENSES.stream()
-                    .filter(e -> !e.getDate().isBefore(wStart) && !e.getDate().isAfter(wEnd)).count();
+                    .filter(e -> !e.getDate().isBefore(wStart) && !e.getDate().isAfter(wEnd))
+                    .count();
             pastCounts.add(cnt);
         }
         double normal = activityGuard.normalWeeklyCount(pastCounts);
         return activityGuard.isLowData(thisWeekCount, normal);
     }
 
-    private boolean detectHighAnomaly(List<Expense> history, List<Expense> thisWeek,
-                                      LocalDate weekStart, Map<Integer, Long> catBudget) {
+    private boolean detectHighAnomaly(
+            List<Expense> history, List<Expense> thisWeek, LocalDate weekStart, Map<Integer, Long> catBudget) {
         for (int catId : catBudget.keySet()) {
             if (anomalyDetector.isSpikeProne(catId)) continue;
             long budget = catBudget.getOrDefault(catId, 100_000L);
 
             double[] catHistory = history.stream()
-                    .filter(e -> e.isExpense() && Objects.equals(e.getCategoryId(), catId)
+                    .filter(e -> e.isExpense()
+                            && Objects.equals(e.getCategoryId(), catId)
                             && e.getDate().isBefore(weekStart)
                             && (!props.isBimodal(catId) || e.getAmount() >= props.getBimodalMin()))
-                    .mapToDouble(Expense::getAmount).toArray();
+                    .mapToDouble(Expense::getAmount)
+                    .toArray();
 
             for (Expense e : thisWeek) {
                 if (!e.isExpense() || !Objects.equals(e.getCategoryId(), catId)) continue;
@@ -397,40 +429,52 @@ class WalkForwardValidationTest {
     }
 
     private long calcSavingsImpact(List<Expense> history, LocalDate weekEnd) {
-        LocalDate monthStart   = weekEnd.withDayOfMonth(1);
-        int elapsedDays        = weekEnd.getDayOfMonth();
-        int daysInMonth        = weekEnd.lengthOfMonth();
+        LocalDate monthStart = weekEnd.withDayOfMonth(1);
+        int elapsedDays = weekEnd.getDayOfMonth();
+        int daysInMonth = weekEnd.lengthOfMonth();
 
         long variableMtd = history.stream()
-                .filter(e -> e.isExpense() && e.isVariable()
-                        && !e.getDate().isBefore(monthStart) && !e.getDate().isAfter(weekEnd))
-                .mapToLong(Expense::getAmount).sum();
+                .filter(e -> e.isExpense()
+                        && e.isVariable()
+                        && !e.getDate().isBefore(monthStart)
+                        && !e.getDate().isAfter(weekEnd))
+                .mapToLong(Expense::getAmount)
+                .sum();
 
         long fixedMtd = history.stream()
-                .filter(e -> e.isExpense() && !e.isVariable()
-                        && !e.getDate().isBefore(monthStart) && !e.getDate().isAfter(weekEnd))
-                .mapToLong(Expense::getAmount).sum();
+                .filter(e -> e.isExpense()
+                        && !e.isVariable()
+                        && !e.getDate().isBefore(monthStart)
+                        && !e.getDate().isAfter(weekEnd))
+                .mapToLong(Expense::getAmount)
+                .sum();
 
         LocalDate threeMonthsAgo = monthStart.minusMonths(3);
         double priorDailyRate = history.stream()
-                .filter(e -> e.isExpense() && e.isVariable()
-                        && !e.getDate().isBefore(threeMonthsAgo) && e.getDate().isBefore(monthStart))
-                .mapToLong(Expense::getAmount).average().orElse(0.0);
+                .filter(e -> e.isExpense()
+                        && e.isVariable()
+                        && !e.getDate().isBefore(threeMonthsAgo)
+                        && e.getDate().isBefore(monthStart))
+                .mapToLong(Expense::getAmount)
+                .average()
+                .orElse(0.0);
 
-        BudgetProjector.Projection proj = budgetProjector.project(
-                variableMtd, fixedMtd, 0, elapsedDays, daysInMonth, priorDailyRate, null, null);
+        BudgetProjector.Projection proj =
+                budgetProjector.project(variableMtd, fixedMtd, 0, elapsedDays, daysInMonth, priorDailyRate, null, null);
 
         return budgetProjector.savingsImpact(proj.predictedMonthEndWon(), AVAILABLE_BUDGET);
     }
 
-    private boolean hasOverBudgetCategory(List<Expense> history, LocalDate weekEnd,
-                                          Map<Integer, Long> catBudget) {
+    private boolean hasOverBudgetCategory(List<Expense> history, LocalDate weekEnd, Map<Integer, Long> catBudget) {
         LocalDate monthStart = weekEnd.withDayOfMonth(1);
         for (Map.Entry<Integer, Long> entry : catBudget.entrySet()) {
             long catSpend = history.stream()
-                    .filter(e -> e.isExpense() && Objects.equals(e.getCategoryId(), entry.getKey())
-                            && !e.getDate().isBefore(monthStart) && !e.getDate().isAfter(weekEnd))
-                    .mapToLong(Expense::getAmount).sum();
+                    .filter(e -> e.isExpense()
+                            && Objects.equals(e.getCategoryId(), entry.getKey())
+                            && !e.getDate().isBefore(monthStart)
+                            && !e.getDate().isAfter(weekEnd))
+                    .mapToLong(Expense::getAmount)
+                    .sum();
             if (catSpend > entry.getValue()) return true;
         }
         return false;
@@ -443,10 +487,9 @@ class WalkForwardValidationTest {
     private static List<Expense> loadTransactions() throws Exception {
         List<Expense> result = new ArrayList<>();
         int skipped = 0;
-        try (BufferedReader br = new BufferedReader(new InputStreamReader(
-                Objects.requireNonNull(
-                        WalkForwardValidationTest.class.getResourceAsStream("/testdata/transactions.csv"),
-                        "transactions.csv 파일을 찾을 수 없습니다.")))) {
+        try (BufferedReader br = new BufferedReader(new InputStreamReader(Objects.requireNonNull(
+                WalkForwardValidationTest.class.getResourceAsStream("/testdata/transactions.csv"),
+                "transactions.csv 파일을 찾을 수 없습니다.")))) {
             br.readLine();
             String line;
             long id = 1L;
@@ -454,21 +497,26 @@ class WalkForwardValidationTest {
                 String[] cols = line.split(",", -1);
                 if (cols.length < 2 || cols[1].isBlank()) continue;
                 try {
-                    LocalDate date      = LocalDate.parse(cols[0].trim(), DATE_FMT);
+                    LocalDate date = LocalDate.parse(cols[0].trim(), DATE_FMT);
                     if (date.isBefore(DATA_START)) continue;
-                    long amount         = Long.parseLong(cols[1].trim());
-                    int categoryId      = Integer.parseInt(cols[2].trim());
-                    String emotion      = cols[3].trim();
+                    long amount = Long.parseLong(cols[1].trim());
+                    int categoryId = Integer.parseInt(cols[2].trim());
+                    String emotion = cols[3].trim();
                     boolean isRecurring = "TRUE".equalsIgnoreCase(cols[4].trim());
-                    boolean isPlanned   = "TRUE".equalsIgnoreCase(cols[5].trim());
-                    String memo         = cols.length > 6 ? cols[6].trim() : "";
+                    boolean isPlanned = "TRUE".equalsIgnoreCase(cols[5].trim());
+                    String memo = cols.length > 6 ? cols[6].trim() : "";
 
                     result.add(Expense.builder()
-                            .id(id++).userId(USER_ID).categoryId(categoryId)
-                            .type("EXPENSE").amount(amount)
+                            .id(id++)
+                            .userId(USER_ID)
+                            .categoryId(categoryId)
+                            .type("EXPENSE")
+                            .amount(amount)
                             .expenseDate(date.atStartOfDay())
-                            .memo(memo).emotion(emotion)
-                            .recurring(isRecurring).planned(isPlanned)
+                            .memo(memo)
+                            .emotion(emotion)
+                            .recurring(isRecurring)
+                            .planned(isPlanned)
                             .build());
                 } catch (Exception e) {
                     skipped++;
@@ -476,8 +524,7 @@ class WalkForwardValidationTest {
             }
         }
         if (skipped > 0) System.out.printf("[transactions.csv] 파싱 실패 %d행 스킵%n", skipped);
-        if (result.isEmpty()) throw new IllegalStateException(
-                "transactions.csv 파싱 결과가 비어 있습니다. CSV 포맷을 확인하세요.");
+        if (result.isEmpty()) throw new IllegalStateException("transactions.csv 파싱 결과가 비어 있습니다. CSV 포맷을 확인하세요.");
         return result;
     }
 
@@ -499,29 +546,43 @@ class WalkForwardValidationTest {
 
         // ObjectProvider — getIfAvailable()만 구현
         ObjectProvider<LlmClient> provider = new ObjectProvider<>() {
-            public LlmClient getObject() { return llmClient; }
-            public LlmClient getObject(Object... args) { return llmClient; }
-            public LlmClient getIfAvailable() { return llmClient; }
-            public LlmClient getIfUnique() { return llmClient; }
+            public LlmClient getObject() {
+                return llmClient;
+            }
+
+            public LlmClient getObject(Object... args) {
+                return llmClient;
+            }
+
+            public LlmClient getIfAvailable() {
+                return llmClient;
+            }
+
+            public LlmClient getIfUnique() {
+                return llmClient;
+            }
         };
         FeedbackRenderer renderer = new FeedbackRenderer(provider);
 
-        LocalDate dataEnd = ALL_EXPENSES.stream().map(Expense::getDate).max(Comparator.naturalOrder()).orElseThrow();
+        LocalDate dataEnd = ALL_EXPENSES.stream()
+                .map(Expense::getDate)
+                .max(Comparator.naturalOrder())
+                .orElseThrow();
         int renderedCount = 0;
 
         for (int week = WARMUP_WEEKS + 1; ; week++) {
-            LocalDate weekEnd   = FIRST_MONDAY.plusWeeks(week).minusDays(1);
+            LocalDate weekEnd = FIRST_MONDAY.plusWeeks(week).minusDays(1);
             LocalDate weekStart = weekEnd.minusDays(6);
             if (weekEnd.isAfter(dataEnd)) break;
 
             Map<Integer, Long> catBudget = budgetForMonth(weekEnd);
-            List<Expense> history        = expensesUpTo(weekEnd);
-            List<Expense> thisWeek       = expensesInRange(history, weekStart, weekEnd);
+            List<Expense> history = expensesUpTo(weekEnd);
+            List<Expense> thisWeek = expensesInRange(history, weekStart, weekEnd);
 
-            boolean isLowData      = checkLowData(week, thisWeek.size());
+            boolean isLowData = checkLowData(week, thisWeek.size());
             boolean hasHighAnomaly = !isLowData && detectHighAnomaly(history, thisWeek, weekStart, catBudget);
-            long savingsImpact     = calcSavingsImpact(history, weekEnd);
-            boolean hasOverBudget  = hasOverBudgetCategory(history, weekEnd, catBudget);
+            long savingsImpact = calcSavingsImpact(history, weekEnd);
+            boolean hasOverBudget = hasOverBudgetCategory(history, weekEnd, catBudget);
 
             FeedbackType type = feedbackTypeResolver.resolve(isLowData, savingsImpact, hasHighAnomaly, hasOverBudget);
             if (type != FeedbackType.ALERT) continue;
@@ -535,19 +596,19 @@ class WalkForwardValidationTest {
                                 && Objects.equals(e.getCategoryId(), entry.getKey())
                                 && !e.getDate().isBefore(monthStart)
                                 && !e.getDate().isAfter(weekEnd))
-                        .mapToLong(Expense::getAmount).sum();
+                        .mapToLong(Expense::getAmount)
+                        .sum();
                 if (catSpend > entry.getValue()) {
-                    CauseSignals cs = causeSignalAssembler.assemble(
-                            entry.getKey(), history, weekStart, weekEnd, null);
+                    CauseSignals cs = causeSignalAssembler.assemble(entry.getKey(), history, weekStart, weekEnd, null);
                     long thisWeekAmt = history.stream()
                             .filter(e -> e.isExpense()
                                     && Objects.equals(e.getCategoryId(), entry.getKey())
                                     && !e.getDate().isBefore(weekStart)
                                     && !e.getDate().isAfter(weekEnd))
-                            .mapToLong(Expense::getAmount).sum();
+                            .mapToLong(Expense::getAmount)
+                            .sum();
                     overspend.add(new FeedbackRenderer.CategoryOverspend(
-                            Categories.name(entry.getKey()), catSpend - entry.getValue(),
-                            thisWeekAmt, cs));
+                            Categories.name(entry.getKey()), catSpend - entry.getValue(), thisWeekAmt, cs));
                 }
             }
 
@@ -561,19 +622,26 @@ class WalkForwardValidationTest {
                 if (anomalyDetector.isSpikeProne(catId)) continue;
                 long budget = catBudget.getOrDefault(catId, 100_000L);
                 double[] catHist = history.stream()
-                        .filter(e -> e.isExpense() && Objects.equals(e.getCategoryId(), catId)
+                        .filter(e -> e.isExpense()
+                                && Objects.equals(e.getCategoryId(), catId)
                                 && e.getDate().isBefore(weekStart)
                                 && (!props.isBimodal(catId) || e.getAmount() >= props.getBimodalMin()))
-                        .mapToDouble(Expense::getAmount).toArray();
+                        .mapToDouble(Expense::getAmount)
+                        .toArray();
                 for (Expense e : thisWeek) {
                     if (!e.isExpense() || !Objects.equals(e.getCategoryId(), catId)) continue;
                     OptionalDouble z = anomalyDetector.checkPoint(e.getAmount(), catHist, budget);
                     if (z.isEmpty()) continue;
-                    Confidence conf = Confidence.of(z.getAsDouble(), catHist.length,
-                            props.getConfHighMinSamples(), props.getConfMediumMinSamples());
+                    Confidence conf = Confidence.of(
+                            z.getAsDouble(),
+                            catHist.length,
+                            props.getConfHighMinSamples(),
+                            props.getConfMediumMinSamples());
                     double mag = catHist.length > 0
-                            ? e.getAmount() / Math.max(RobustStats.median(catHist), 1) : z.getAsDouble();
-                    if (anomalyConf == null || conf.ordinal() < anomalyConf.ordinal()
+                            ? e.getAmount() / Math.max(RobustStats.median(catHist), 1)
+                            : z.getAsDouble();
+                    if (anomalyConf == null
+                            || conf.ordinal() < anomalyConf.ordinal()
                             || (conf == anomalyConf && mag > anomalyMag)) {
                         anomalyCatId = catId;
                         anomalyCategory = Categories.name(catId);
@@ -587,7 +655,8 @@ class WalkForwardValidationTest {
             long anomalyWeeklyAmount = anomalyCatId >= 0
                     ? thisWeek.stream()
                             .filter(e -> e.isVariable() && Objects.equals(e.getCategoryId(), finalAnomalyCatId))
-                            .mapToLong(Expense::getAmount).sum()
+                            .mapToLong(Expense::getAmount)
+                            .sum()
                     : 0L;
 
             // ── 추가 HIGH 이상치 (primary 카테고리 제외, HIGH confidence, 최대 2개) ──
@@ -596,34 +665,45 @@ class WalkForwardValidationTest {
                 if (catId == anomalyCatId) continue; // primary 제외
                 if (anomalyDetector.isSpikeProne(catId)) continue;
                 double[] catHist = history.stream()
-                        .filter(e -> e.isExpense() && Objects.equals(e.getCategoryId(), catId)
+                        .filter(e -> e.isExpense()
+                                && Objects.equals(e.getCategoryId(), catId)
                                 && e.getDate().isBefore(weekStart)
                                 && (!props.isBimodal(catId) || e.getAmount() >= props.getBimodalMin()))
-                        .mapToDouble(Expense::getAmount).toArray();
+                        .mapToDouble(Expense::getAmount)
+                        .toArray();
                 double bestMag = 0;
                 String bestEmotion = null;
                 for (Expense e : thisWeek) {
                     if (!e.isExpense() || !Objects.equals(e.getCategoryId(), catId)) continue;
-                    OptionalDouble z = anomalyDetector.checkPoint(e.getAmount(), catHist, catBudget.getOrDefault(catId, 100_000L));
+                    OptionalDouble z =
+                            anomalyDetector.checkPoint(e.getAmount(), catHist, catBudget.getOrDefault(catId, 100_000L));
                     if (z.isEmpty()) continue;
-                    Confidence conf = Confidence.of(z.getAsDouble(), catHist.length,
-                            props.getConfHighMinSamples(), props.getConfMediumMinSamples());
+                    Confidence conf = Confidence.of(
+                            z.getAsDouble(),
+                            catHist.length,
+                            props.getConfHighMinSamples(),
+                            props.getConfMediumMinSamples());
                     if (conf != Confidence.HIGH) continue;
                     double mag = catHist.length > 0
-                            ? e.getAmount() / Math.max(RobustStats.median(catHist), 1) : z.getAsDouble();
-                    if (mag > bestMag) { bestMag = mag; bestEmotion = e.getEmotion(); }
+                            ? e.getAmount() / Math.max(RobustStats.median(catHist), 1)
+                            : z.getAsDouble();
+                    if (mag > bestMag) {
+                        bestMag = mag;
+                        bestEmotion = e.getEmotion();
+                    }
                 }
                 if (bestMag > 0) {
                     final int fCatId = catId;
                     long catWeeklyAmt = thisWeek.stream()
                             .filter(e -> e.isVariable() && Objects.equals(e.getCategoryId(), fCatId))
-                            .mapToLong(Expense::getAmount).sum();
+                            .mapToLong(Expense::getAmount)
+                            .sum();
                     additionalHighAnomalies.add(new FeedbackRenderer.AnomalyInfo(
                             Categories.name(catId), bestMag, catWeeklyAmt, bestEmotion));
                 }
             }
-            additionalHighAnomalies.sort(
-                    Comparator.comparingDouble(FeedbackRenderer.AnomalyInfo::magnitude).reversed());
+            additionalHighAnomalies.sort(Comparator.comparingDouble(FeedbackRenderer.AnomalyInfo::magnitude)
+                    .reversed());
             if (additionalHighAnomalies.size() > 2) {
                 additionalHighAnomalies = new ArrayList<>(additionalHighAnomalies.subList(0, 2));
             }
@@ -632,20 +712,29 @@ class WalkForwardValidationTest {
             int elapsed = weekEnd.getDayOfMonth();
             int daysInMonth = weekEnd.lengthOfMonth();
             long varMtd = history.stream()
-                    .filter(e -> e.isExpense() && e.isVariable()
-                            && !e.getDate().isBefore(monthStart) && !e.getDate().isAfter(weekEnd))
-                    .mapToLong(Expense::getAmount).sum();
+                    .filter(e -> e.isExpense()
+                            && e.isVariable()
+                            && !e.getDate().isBefore(monthStart)
+                            && !e.getDate().isAfter(weekEnd))
+                    .mapToLong(Expense::getAmount)
+                    .sum();
             long fixedMtd = history.stream()
-                    .filter(e -> e.isExpense() && !e.isVariable()
-                            && !e.getDate().isBefore(monthStart) && !e.getDate().isAfter(weekEnd))
-                    .mapToLong(Expense::getAmount).sum();
+                    .filter(e -> e.isExpense()
+                            && !e.isVariable()
+                            && !e.getDate().isBefore(monthStart)
+                            && !e.getDate().isAfter(weekEnd))
+                    .mapToLong(Expense::getAmount)
+                    .sum();
             double priorDailyRate = history.stream()
-                    .filter(e -> e.isExpense() && e.isVariable()
+                    .filter(e -> e.isExpense()
+                            && e.isVariable()
                             && !e.getDate().isBefore(monthStart.minusMonths(3))
                             && e.getDate().isBefore(monthStart))
-                    .mapToLong(Expense::getAmount).average().orElse(0.0);
-            BudgetProjector.Projection proj = budgetProjector.project(
-                    varMtd, fixedMtd, 0, elapsed, daysInMonth, priorDailyRate, null, null);
+                    .mapToLong(Expense::getAmount)
+                    .average()
+                    .orElse(0.0);
+            BudgetProjector.Projection proj =
+                    budgetProjector.project(varMtd, fixedMtd, 0, elapsed, daysInMonth, priorDailyRate, null, null);
 
             BandWidth bw = (weekStart.getMonth() != weekEnd.getMonth())
                     ? null
@@ -668,20 +757,30 @@ class WalkForwardValidationTest {
             Map<Integer, Long> categoryMtdSpend = new HashMap<>();
             for (int catId : catBudget.keySet()) {
                 long spent = history.stream()
-                        .filter(e -> e.isExpense() && Objects.equals(e.getCategoryId(), catId)
-                                && !e.getDate().isBefore(monthStart) && !e.getDate().isAfter(weekEnd))
-                        .mapToLong(Expense::getAmount).sum();
+                        .filter(e -> e.isExpense()
+                                && Objects.equals(e.getCategoryId(), catId)
+                                && !e.getDate().isBefore(monthStart)
+                                && !e.getDate().isAfter(weekEnd))
+                        .mapToLong(Expense::getAmount)
+                        .sum();
                 categoryMtdSpend.put(catId, spent);
             }
             List<Expense> thisMonthExpenses = history.stream()
                     .filter(e -> e.isExpense()
-                            && !e.getDate().isBefore(monthStart) && !e.getDate().isAfter(weekEnd))
+                            && !e.getDate().isBefore(monthStart)
+                            && !e.getDate().isAfter(weekEnd))
                     .toList();
             long savingsGap = Math.max(-savingsImpact, 0);
             List<ActionPlan> plans = savingsActionCalculator.calculate(
-                    overspendMap, savingsGap, elapsed, daysInMonth - elapsed,
-                    categoryMtdSpend, causeSignalsByCategory,
-                    thisMonthExpenses, List.of(), List.of());
+                    overspendMap,
+                    savingsGap,
+                    elapsed,
+                    daysInMonth - elapsed,
+                    categoryMtdSpend,
+                    causeSignalsByCategory,
+                    thisMonthExpenses,
+                    List.of(),
+                    List.of());
             List<FeedbackRenderer.ActionSummary> actions = plans.stream()
                     .map(p -> new FeedbackRenderer.ActionSummary(
                             Categories.name(p.categoryId()), p.reductionWon(),
@@ -692,7 +791,8 @@ class WalkForwardValidationTest {
             Map<Integer, List<Expense>> byCatW = new HashMap<>();
             for (Expense e : history) {
                 if (!e.isVariable()) continue;
-                byCatW.computeIfAbsent(e.getCategoryId(), k -> new ArrayList<>()).add(e);
+                byCatW.computeIfAbsent(e.getCategoryId(), k -> new ArrayList<>())
+                        .add(e);
             }
             byCatW.values().forEach(list -> list.sort(Comparator.comparing(Expense::getDate)));
 
@@ -708,8 +808,11 @@ class WalkForwardValidationTest {
                             .filter(x -> x.getDate().isBefore(d)
                                     && ChronoUnit.DAYS.between(x.getDate(), d) <= props.getBaselineWeeks() * 7L
                                     && (!props.isBimodal(catId) || x.getAmount() >= props.getBimodalMin()))
-                            .mapToDouble(Expense::getAmount).toArray();
-                    isAnomaly = anomalyDetector.checkPoint(e.getAmount(), hist, budget).isPresent();
+                            .mapToDouble(Expense::getAmount)
+                            .toArray();
+                    isAnomaly = anomalyDetector
+                            .checkPoint(e.getAmount(), hist, budget)
+                            .isPresent();
                 }
                 boolean highlightEmo = e.getEmotion() != null
                         && (e.getEmotion().equalsIgnoreCase("REGRET")
@@ -721,8 +824,10 @@ class WalkForwardValidationTest {
                 }
             }
             List<FeedbackRenderer.TransactionHighlight> topHighlights = highlights.stream()
-                    .sorted(Comparator.comparingLong(FeedbackRenderer.TransactionHighlight::amountWon).reversed())
-                    .limit(5).toList();
+                    .sorted(Comparator.comparingLong(FeedbackRenderer.TransactionHighlight::amountWon)
+                            .reversed())
+                    .limit(5)
+                    .toList();
 
             // 이번 주 전체 변동지출 감정 분포
             Map<String, Long> wkEmoCounts = new java.util.LinkedHashMap<>();
@@ -750,7 +855,7 @@ class WalkForwardValidationTest {
 
             // 전주 총 변동지출
             LocalDate prevWeekStart = weekStart.minusWeeks(1);
-            LocalDate prevWeekEnd   = weekEnd.minusWeeks(1);
+            LocalDate prevWeekEnd = weekEnd.minusWeeks(1);
             List<Expense> prevHistory = expensesUpTo(prevWeekEnd);
             long prevWeekTotalWon = expensesInRange(prevHistory, prevWeekStart, prevWeekEnd).stream()
                     .filter(e -> e.isExpense() && e.isVariable())
@@ -758,10 +863,15 @@ class WalkForwardValidationTest {
                     .sum();
 
             FeedbackRenderer.FeedbackContext ctx = new FeedbackRenderer.FeedbackContext(
-                    proj.predictedMonthEndWon(), AVAILABLE_BUDGET, savingsImpact,
+                    proj.predictedMonthEndWon(),
+                    AVAILABLE_BUDGET,
+                    savingsImpact,
                     (double) varMtd / AVAILABLE_BUDGET,
                     null,
-                    anomalyCategory != null, anomalyCategory, anomalyMag, anomalyWeeklyAmount,
+                    anomalyCategory != null,
+                    anomalyCategory,
+                    anomalyMag,
+                    anomalyWeeklyAmount,
                     anomalyConf != null ? anomalyConf : Confidence.LOW,
                     anomalyEmotion,
                     additionalHighAnomalies,
@@ -772,17 +882,18 @@ class WalkForwardValidationTest {
                     overspend,
                     actions,
                     topHighlights,
-                    type, bw, overall);
+                    type,
+                    bw,
+                    overall);
 
-            System.out.printf("%n=== [검증 4] 제%d주차 (%s ~ %s) ===%n",
-                    week, weekStart, weekEnd);
-            System.out.printf("예측 월말 지출  : %,d원 / 가용예산 %,d원%n",
-                    ctx.predictedMonthEndWon(), AVAILABLE_BUDGET);
+            System.out.printf("%n=== [검증 4] 제%d주차 (%s ~ %s) ===%n", week, weekStart, weekEnd);
+            System.out.printf("예측 월말 지출  : %,d원 / 가용예산 %,d원%n", ctx.predictedMonthEndWon(), AVAILABLE_BUDGET);
             System.out.printf("savingsImpact   : %,d원%n", ctx.savingsImpactWon());
-            System.out.printf("이상 탐지       : %s%n",
+            System.out.printf(
+                    "이상 탐지       : %s%n",
                     ctx.hasAnomaly()
-                            ? ctx.anomalyCategoryName() + " (" + String.format("%.1f", ctx.anomalyMagnitude())
-                              + "배, " + ctx.anomalyConfidence() + ")"
+                            ? ctx.anomalyCategoryName() + " (" + String.format("%.1f", ctx.anomalyMagnitude()) + "배, "
+                                    + ctx.anomalyConfidence() + ")"
                             : "없음");
             if (!ctx.additionalHighAnomalies().isEmpty()) {
                 for (FeedbackRenderer.AnomalyInfo a : ctx.additionalHighAnomalies()) {
@@ -823,32 +934,48 @@ class WalkForwardValidationTest {
         setField(llmClient, "maxTokens", 600);
 
         ObjectProvider<LlmClient> provider = new ObjectProvider<>() {
-            public LlmClient getObject() { return llmClient; }
-            public LlmClient getObject(Object... args) { return llmClient; }
-            public LlmClient getIfAvailable() { return llmClient; }
-            public LlmClient getIfUnique() { return llmClient; }
+            public LlmClient getObject() {
+                return llmClient;
+            }
+
+            public LlmClient getObject(Object... args) {
+                return llmClient;
+            }
+
+            public LlmClient getIfAvailable() {
+                return llmClient;
+            }
+
+            public LlmClient getIfUnique() {
+                return llmClient;
+            }
         };
         FeedbackRenderer renderer = new FeedbackRenderer(provider);
 
-        LocalDate dataEnd = ALL_EXPENSES.stream().map(Expense::getDate).max(Comparator.naturalOrder()).orElseThrow();
+        LocalDate dataEnd = ALL_EXPENSES.stream()
+                .map(Expense::getDate)
+                .max(Comparator.naturalOrder())
+                .orElseThrow();
         int renderedCount = 0;
 
         for (Map.Entry<YearMonth, Map<Integer, Long>> entry : BUDGETS_BY_MONTH.entrySet()) {
             YearMonth ym = entry.getKey();
             Map<Integer, Long> catBudget = entry.getValue();
             LocalDate monthStart = ym.atDay(1);
-            LocalDate monthEnd   = ym.atEndOfMonth();
+            LocalDate monthEnd = ym.atEndOfMonth();
 
             // 해당 월이 데이터에 완전히 포함되어 있어야 결산 가능
             if (monthEnd.isAfter(dataEnd)) continue;
 
             List<Expense> monthExpenses = ALL_EXPENSES.stream()
-                    .filter(e -> !e.getDate().isBefore(monthStart) && !e.getDate().isAfter(monthEnd))
+                    .filter(e ->
+                            !e.getDate().isBefore(monthStart) && !e.getDate().isAfter(monthEnd))
                     .toList();
 
             long actualTotal = monthExpenses.stream()
                     .filter(Expense::isExpense)
-                    .mapToLong(Expense::getAmount).sum();
+                    .mapToLong(Expense::getAmount)
+                    .sum();
             if (actualTotal == 0) continue;
 
             long budgetDiff = AVAILABLE_BUDGET - actualTotal; // 양수=절약, 음수=초과
@@ -861,28 +988,29 @@ class WalkForwardValidationTest {
             }
 
             List<FeedbackRenderer.CategoryResult> overspend = new ArrayList<>();
-            List<FeedbackRenderer.CategoryResult> savings   = new ArrayList<>();
+            List<FeedbackRenderer.CategoryResult> savings = new ArrayList<>();
             for (Map.Entry<Integer, Long> catEntry : catBudget.entrySet()) {
-                int catId  = catEntry.getKey();
+                int catId = catEntry.getKey();
                 long budget = catEntry.getValue();
                 long actual = catActual.getOrDefault(catId, 0L);
-                long diff   = actual - budget;
+                long diff = actual - budget;
                 if (diff > 0) {
                     overspend.add(new FeedbackRenderer.CategoryResult(Categories.name(catId), diff));
                 } else if (diff < 0 && actual > 0) {
                     savings.add(new FeedbackRenderer.CategoryResult(Categories.name(catId), -diff));
                 }
             }
-            overspend.sort(Comparator.comparingLong(FeedbackRenderer.CategoryResult::amountWon).reversed());
-            savings.sort(Comparator.comparingLong(FeedbackRenderer.CategoryResult::amountWon).reversed());
+            overspend.sort(Comparator.comparingLong(FeedbackRenderer.CategoryResult::amountWon)
+                    .reversed());
+            savings.sort(Comparator.comparingLong(FeedbackRenderer.CategoryResult::amountWon)
+                    .reversed());
 
             FeedbackRenderer.MonthEndContext ctx = new FeedbackRenderer.MonthEndContext(
                     ym, actualTotal, AVAILABLE_BUDGET, budgetDiff, overspend, savings);
 
             System.out.printf("%n=== [검증 5] %s 월말 결산 ===%n", ym);
             System.out.printf("실제 총지출  : %,d원 / 가용예산 %,d원%n", actualTotal, AVAILABLE_BUDGET);
-            System.out.printf("예산 대비    : %s %,d원%n",
-                    budgetDiff >= 0 ? "절약" : "초과", Math.abs(budgetDiff));
+            System.out.printf("예산 대비    : %s %,d원%n", budgetDiff >= 0 ? "절약" : "초과", Math.abs(budgetDiff));
             if (!overspend.isEmpty()) {
                 System.out.print("초과 카테고리: ");
                 overspend.forEach(o -> System.out.printf("%s +%,d원  ", o.categoryName(), o.amountWon()));
@@ -917,10 +1045,9 @@ class WalkForwardValidationTest {
     private static Map<YearMonth, Map<Integer, Long>> loadBudgets() throws Exception {
         Map<YearMonth, Map<Integer, Long>> result = new LinkedHashMap<>();
         int skipped = 0;
-        try (BufferedReader br = new BufferedReader(new InputStreamReader(
-                Objects.requireNonNull(
-                        WalkForwardValidationTest.class.getResourceAsStream("/testdata/budgets.csv"),
-                        "budgets.csv 파일을 찾을 수 없습니다.")))) {
+        try (BufferedReader br = new BufferedReader(new InputStreamReader(Objects.requireNonNull(
+                WalkForwardValidationTest.class.getResourceAsStream("/testdata/budgets.csv"),
+                "budgets.csv 파일을 찾을 수 없습니다.")))) {
             br.readLine(); // 헤더 스킵 (month,식료품,외식,...)
             String line;
             while ((line = br.readLine()) != null) {
@@ -940,8 +1067,7 @@ class WalkForwardValidationTest {
             }
         }
         if (skipped > 0) System.out.printf("[budgets.csv] 파싱 실패 %d행 스킵%n", skipped);
-        if (result.isEmpty()) throw new IllegalStateException(
-                "budgets.csv 파싱 결과가 비어 있습니다. CSV 포맷을 확인하세요.");
+        if (result.isEmpty()) throw new IllegalStateException("budgets.csv 파싱 결과가 비어 있습니다. CSV 포맷을 확인하세요.");
         return result;
     }
 }

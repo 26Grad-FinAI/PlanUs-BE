@@ -16,7 +16,14 @@ public enum GeneralErrorCode implements BaseErrorCode {
     VALIDATION_ERROR(HttpStatus.BAD_REQUEST, "COMMON_400_002", "요청 값 검증에 실패했습니다."),
 
     METHOD_NOT_ALLOWED(HttpStatus.METHOD_NOT_ALLOWED, "COMMON_405_001", "지원하지 않는 HTTP 메서드입니다."),
-    UNSUPPORTED_MEDIA_TYPE(HttpStatus.UNSUPPORTED_MEDIA_TYPE, "COMMON_415_001", "지원하지 않는 Content-Type입니다.");
+    UNSUPPORTED_MEDIA_TYPE(HttpStatus.UNSUPPORTED_MEDIA_TYPE, "COMMON_415_001", "지원하지 않는 Content-Type입니다."),
+
+    // Auth
+    INVALID_EMAIL_FORMAT(HttpStatus.BAD_REQUEST, "AUTH_400_001", "올바른 이메일 형식을 입력해 주세요."),
+    PASSWORD_MISMATCH(HttpStatus.BAD_REQUEST, "AUTH_400_002", "비밀번호가 일치하지 않습니다."),
+    PASSWORD_TOO_WEAK(HttpStatus.BAD_REQUEST, "AUTH_400_003", "비밀번호는 8자 이상, 영문과 숫자를 포함해야 합니다."),
+    TERMS_NOT_AGREED(HttpStatus.BAD_REQUEST, "AUTH_400_004", "이용 약관 및 개인정보 처리방침에 동의해 주세요."),
+    EMAIL_DUPLICATE(HttpStatus.CONFLICT, "AUTH_409_001", "이미 사용 중인 이메일입니다.");
 
     private final HttpStatus httpStatus;
     private final String code;

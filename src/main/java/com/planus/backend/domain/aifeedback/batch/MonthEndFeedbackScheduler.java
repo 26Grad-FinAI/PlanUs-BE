@@ -1,7 +1,7 @@
 package com.planus.backend.domain.aifeedback.batch;
 
-import com.planus.backend.domain.aifeedback.repository.UserAccountRepository;
 import com.planus.backend.domain.aifeedback.service.AiFeedbackService;
+import com.planus.backend.domain.user.repository.UserAccountRepository;
 import java.time.Clock;
 import java.time.LocalDate;
 import java.time.YearMonth;

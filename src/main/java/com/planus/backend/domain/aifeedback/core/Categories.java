@@ -7,15 +7,15 @@ public final class Categories {
     private Categories() {}
 
     private static final Map<Integer, String> NAMES = Map.ofEntries(
-            Map.entry(1,  "식료품"),
-            Map.entry(2,  "외식"),
-            Map.entry(3,  "주류·담배"),
-            Map.entry(4,  "의류·신발"),
-            Map.entry(5,  "보건·건강보조식품"),
-            Map.entry(6,  "교통"),
-            Map.entry(7,  "통신"),
-            Map.entry(8,  "문화·여가"),
-            Map.entry(9,  "교육"),
+            Map.entry(1, "식료품"),
+            Map.entry(2, "외식"),
+            Map.entry(3, "주류·담배"),
+            Map.entry(4, "의류·신발"),
+            Map.entry(5, "보건·건강보조식품"),
+            Map.entry(6, "교통"),
+            Map.entry(7, "통신"),
+            Map.entry(8, "문화·여가"),
+            Map.entry(9, "교육"),
             Map.entry(10, "여행·숙박"),
             Map.entry(11, "기타"));
     /**

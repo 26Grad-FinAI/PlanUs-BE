@@ -114,7 +114,7 @@ public class FeedbackRenderer {
 
     private String callWithRetry(LlmClient client, FeedbackContext c) {
         String system = systemPrompt(c);
-        String user   = userPrompt(c);
+        String user = userPrompt(c);
         for (int attempt = 1; attempt <= MAX_LLM_ATTEMPTS; attempt++) {
             String candidate = client.complete(system, user);
             if (candidate == null || candidate.isBlank()) {
@@ -153,10 +153,7 @@ public class FeedbackRenderer {
 
     /** LOW_DATA: LLM 호출 없이 결정적 기록 리마인드. */
     private Rendered renderLowData() {
-        return new Rendered(
-                "이번 주는 기록이 평소보다 적어서 분석이 어려워요. "
-                        + "지출을 꾸준히 기록하면 더 정확한 피드백을 드릴 수 있어요.",
-                Confidence.LOW);
+        return new Rendered("이번 주는 기록이 평소보다 적어서 분석이 어려워요. " + "지출을 꾸준히 기록하면 더 정확한 피드백을 드릴 수 있어요.", Confidence.LOW);
     }
 
     // ── 숫자 후검증 ──
@@ -295,8 +292,12 @@ public class FeedbackRenderer {
             sb.append("- 이번 주 총 변동지출: ").append(exactWon(c.weekTotalWon()));
             if (c.prevWeekTotalWon() > 0) {
                 long diff = c.weekTotalWon() - c.prevWeekTotalWon();
-                sb.append(" (전주 ").append(exactWon(c.prevWeekTotalWon())).append(" 대비 ")
-                        .append(diff >= 0 ? "+" : "").append(exactWon(diff)).append(")");
+                sb.append(" (전주 ")
+                        .append(exactWon(c.prevWeekTotalWon()))
+                        .append(" 대비 ")
+                        .append(diff >= 0 ? "+" : "")
+                        .append(exactWon(diff))
+                        .append(")");
             }
             sb.append("\n");
         }
@@ -348,7 +349,9 @@ public class FeedbackRenderer {
                 sb.append("\n");
             });
             if (c.weekEmotion().untaggedWon() > 0) {
-                sb.append("- 태그 없음 / ").append(exactWon(c.weekEmotion().untaggedWon())).append("\n");
+                sb.append("- 태그 없음 / ")
+                        .append(exactWon(c.weekEmotion().untaggedWon()))
+                        .append("\n");
             }
         }
 
@@ -392,7 +395,9 @@ public class FeedbackRenderer {
                     sb.append("  감정: ");
                     cs.emotionCounts().forEach((emo, cnt) -> {
                         sb.append(emo).append(" ").append(cnt).append("건");
-                        Long amt = cs.emotionAmounts() != null ? cs.emotionAmounts().get(emo) : null;
+                        Long amt = cs.emotionAmounts() != null
+                                ? cs.emotionAmounts().get(emo)
+                                : null;
                         if (amt != null) sb.append("/").append(exactWon(amt));
                         sb.append("  ");
                     });
@@ -402,7 +407,8 @@ public class FeedbackRenderer {
                 // 메모 — 날짜+금액+텍스트 (LLM이 시간 맥락 판단)
                 if (cs != null && cs.hasMemo()) {
                     sb.append("  메모:\n");
-                    for (MemoEvidence memo : cs.memos().subList(0, Math.min(3, cs.memos().size()))) {
+                    for (MemoEvidence memo :
+                            cs.memos().subList(0, Math.min(3, cs.memos().size()))) {
                         sb.append("    [")
                                 .append(memo.date())
                                 .append("] \"")
@@ -559,7 +565,9 @@ public class FeedbackRenderer {
         sb.append("- 실제 총지출: ").append(exactWon(c.actualTotalWon())).append("\n");
         sb.append("- 가용예산: ").append(exactWon(c.availableBudgetWon())).append("\n");
         if (c.budgetDiffWon() < 0) {
-            sb.append("- 예산 대비 초과: ").append(exactWon(Math.abs(c.budgetDiffWon()))).append("\n");
+            sb.append("- 예산 대비 초과: ")
+                    .append(exactWon(Math.abs(c.budgetDiffWon())))
+                    .append("\n");
         } else {
             sb.append("- 예산 대비 절약: ").append(exactWon(c.budgetDiffWon())).append("\n");
         }
@@ -567,14 +575,22 @@ public class FeedbackRenderer {
         if (!c.overspendCategories().isEmpty()) {
             sb.append("\n[초과 카테고리]\n");
             for (CategoryResult r : c.overspendCategories()) {
-                sb.append("- ").append(r.categoryName()).append(": +").append(exactWon(r.amountWon())).append("\n");
+                sb.append("- ")
+                        .append(r.categoryName())
+                        .append(": +")
+                        .append(exactWon(r.amountWon()))
+                        .append("\n");
             }
         }
 
         if (!c.savingCategories().isEmpty()) {
             sb.append("\n[잘 아낀 카테고리]\n");
             for (CategoryResult r : c.savingCategories()) {
-                sb.append("- ").append(r.categoryName()).append(": -").append(exactWon(r.amountWon())).append("\n");
+                sb.append("- ")
+                        .append(r.categoryName())
+                        .append(": -")
+                        .append(exactWon(r.amountWon()))
+                        .append("\n");
             }
         }
 
@@ -583,16 +599,17 @@ public class FeedbackRenderer {
 
     private String monthEndTemplate(MonthEndContext c) {
         StringBuilder sb = new StringBuilder();
-        sb.append(c.yearMonth().getMonthValue()).append("월 결산: 총 ").append(won(c.actualTotalWon())).append(" 지출.");
+        sb.append(c.yearMonth().getMonthValue())
+                .append("월 결산: 총 ")
+                .append(won(c.actualTotalWon()))
+                .append(" 지출.");
         if (c.budgetDiffWon() >= 0) {
             sb.append(" 예산보다 ").append(won(c.budgetDiffWon())).append(" 아꼈어요. 이번 달 수고하셨어요!");
         } else {
             sb.append(" 예산보다 ").append(won(Math.abs(c.budgetDiffWon()))).append(" 초과했어요.");
             if (!c.overspendCategories().isEmpty()) {
                 CategoryResult top = c.overspendCategories().get(0);
-                sb.append(" 다음 달에는 ")
-                        .append(top.categoryName())
-                        .append(" 지출을 줄여보세요.");
+                sb.append(" 다음 달에는 ").append(top.categoryName()).append(" 지출을 줄여보세요.");
             }
         }
         return sb.toString();
@@ -621,9 +638,7 @@ public class FeedbackRenderer {
         }
 
         if (c.hasAnomaly() && c.anomalyConfidence() == Confidence.HIGH) {
-            sb.append(" 참고로 ")
-                    .append(c.anomalyCategoryName())
-                    .append(" 지출이 평소보다 눈에 띄게 늘었어요.");
+            sb.append(" 참고로 ").append(c.anomalyCategoryName()).append(" 지출이 평소보다 눈에 띄게 늘었어요.");
         }
         for (AnomalyInfo a : c.additionalHighAnomalies()) {
             sb.append(" ").append(a.categoryName()).append(" 지출도 평소보다 늘었어요.");
@@ -682,11 +697,7 @@ public class FeedbackRenderer {
      * PRIMARY를 제외한 추가 HIGH 이상치 정보.
      * confidence는 모두 HIGH로 필터링된 상태이므로 별도로 보관하지 않는다.
      */
-    public record AnomalyInfo(
-            String categoryName,
-            double magnitude,
-            long weeklyAmountWon,
-            String emotion) {}
+    public record AnomalyInfo(String categoryName, double magnitude, long weeklyAmountWon, String emotion) {}
 
     /**
      * 카테고리별 초과 예상.
@@ -695,10 +706,7 @@ public class FeedbackRenderer {
      * @param thisWeekWon    이번 주에 새로 발생한 해당 카테고리 변동 지출
      */
     public record CategoryOverspend(
-            String categoryName,
-            long overAmountWon,
-            long thisWeekWon,
-            CauseSignals causeSignals) {}
+            String categoryName, long overAmountWon, long thisWeekWon, CauseSignals causeSignals) {}
 
     /**
      * 이번 주 전체 변동지출의 감정 태그 분포 요약.
@@ -708,10 +716,7 @@ public class FeedbackRenderer {
      * @param amounts    감정 태그별 금액 합계
      * @param untaggedWon 태그 없는 변동지출 합계
      */
-    public record WeekEmotionSummary(
-            Map<String, Long> counts,
-            Map<String, Long> amounts,
-            long untaggedWon) {}
+    public record WeekEmotionSummary(Map<String, Long> counts, Map<String, Long> amounts, long untaggedWon) {}
 
     public record ActionSummary(
             String categoryName, long reductionWon, String dominantFactor, double feasibilityScore) {}
@@ -735,9 +740,5 @@ public class FeedbackRenderer {
      * 금액 내림차순 상위 5건으로 제한.
      */
     public record TransactionHighlight(
-            LocalDate date,
-            String categoryName,
-            long amountWon,
-            String memo,
-            String emotion) {}
+            LocalDate date, String categoryName, long amountWon, String memo, String emotion) {}
 }
