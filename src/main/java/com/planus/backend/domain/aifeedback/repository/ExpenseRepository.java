@@ -62,10 +62,9 @@ public interface ExpenseRepository extends JpaRepository<Expense, Long> {
      * @param to     조회 종료 일시 (포함)
      * @return 기간 내 변동 지출 합계 (원), 거래 없으면 0
      */
-    @Query(
-            "SELECT COALESCE(SUM(e.amount), 0) FROM Expense e WHERE e.userId = :userId"
-                    + " AND e.type = 'EXPENSE' AND e.recurring = false AND e.planned = false"
-                    + " AND e.expenseDate BETWEEN :from AND :to")
+    @Query("SELECT COALESCE(SUM(e.amount), 0) FROM Expense e WHERE e.userId = :userId"
+            + " AND e.type = 'EXPENSE' AND e.recurring = false AND e.planned = false"
+            + " AND e.expenseDate BETWEEN :from AND :to")
     long sumVariableExpensesByPeriod(Long userId, LocalDateTime from, LocalDateTime to);
 
     /**

@@ -8,6 +8,7 @@ import jakarta.validation.ConstraintViolationException;
 import java.util.List;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.http.HttpHeaders;
 import org.springframework.http.ResponseEntity;
 import org.springframework.http.converter.HttpMessageNotReadableException;
@@ -39,6 +40,17 @@ public class GeneralExceptionAdvice {
         BaseErrorCode ec = ex.getErrorCode();
         log.warn("[GeneralException] code={}, message={}", ec.getCode(), ex.getMessage());
         return ResponseEntity.status(ec.getHttpStatus()).body(ApiResponse.onFailure(ec, List.of(ex.getMessage())));
+    }
+
+    /**
+     * DB UNIQUE 제약 위반 시 발생하는 {@link DataIntegrityViolationException}을 처리한다.
+     * <p>이메일 중복 등 동시 요청으로 인한 무결성 위반을 409로 응답한다.</p>
+     */
+    @ExceptionHandler(DataIntegrityViolationException.class)
+    public ResponseEntity<ApiResponse<?>> handleDataIntegrityViolation(DataIntegrityViolationException ex) {
+        BaseErrorCode ec = GeneralErrorCode.EMAIL_DUPLICATE;
+        log.warn("[DataIntegrityViolation] {}", ex.getMessage());
+        return ResponseEntity.status(ec.getHttpStatus()).body(ApiResponse.onFailure(ec, List.of()));
     }
 
     /**

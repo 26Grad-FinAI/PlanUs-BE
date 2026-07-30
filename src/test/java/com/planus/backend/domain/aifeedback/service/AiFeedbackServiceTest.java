@@ -11,8 +11,6 @@ import com.planus.backend.domain.aifeedback.cause.CauseSignalAssembler;
 import com.planus.backend.domain.aifeedback.cause.CauseSignals;
 import com.planus.backend.domain.aifeedback.config.AiFeedbackProperties;
 import com.planus.backend.domain.aifeedback.core.*;
-import com.planus.backend.domain.aifeedback.core.PacingComparator.PacingDisplay;
-import com.planus.backend.domain.aifeedback.core.PacingComparator.PacingResult;
 import com.planus.backend.domain.aifeedback.entity.*;
 import com.planus.backend.domain.aifeedback.llm.FeedbackRenderer;
 import com.planus.backend.domain.aifeedback.llm.FeedbackRenderer.Rendered;
@@ -130,13 +128,26 @@ class AiFeedbackServiceTest {
     }
 
     private Budget defaultBudget() {
-        return Budget.builder().id(1L).userId(USER_ID).yearMonth(MONTH_START).totalBudget(1_500_000).build();
+        return Budget.builder()
+                .id(1L)
+                .userId(USER_ID)
+                .yearMonth(MONTH_START)
+                .totalBudget(1_500_000)
+                .build();
     }
 
     private List<BudgetCategory> defaultBudgetCategories() {
         return List.of(
-                BudgetCategory.builder().budgetId(1L).categoryId(1).amount(300_000).build(),
-                BudgetCategory.builder().budgetId(1L).categoryId(6).amount(200_000).build());
+                BudgetCategory.builder()
+                        .budgetId(1L)
+                        .categoryId(1)
+                        .amount(300_000)
+                        .build(),
+                BudgetCategory.builder()
+                        .budgetId(1L)
+                        .categoryId(6)
+                        .amount(200_000)
+                        .build());
     }
 
     /** 8주 분 변동 지출 fixture. 주당 3건, 카테고리1·6 교대. */
@@ -164,17 +175,16 @@ class AiFeedbackServiceTest {
         when(userRepo.findById(USER_ID)).thenReturn(Optional.of(defaultUser()));
         when(budgetRepo.findByUserIdAndYearMonth(USER_ID, MONTH_START)).thenReturn(Optional.of(defaultBudget()));
         when(budgetCatRepo.findByBudgetId(1L)).thenReturn(defaultBudgetCategories());
-        when(expenseRepo.findByUserIdAndExpenseDateBetween(eq(USER_ID), any(), any())).thenReturn(defaultWindow());
+        when(expenseRepo.findByUserIdAndExpenseDateBetween(eq(USER_ID), any(), any()))
+                .thenReturn(defaultWindow());
         when(reactionRepo.findByUserId(USER_ID)).thenReturn(List.of());
         when(userProfileRepo.findByUserId(USER_ID)).thenReturn(Optional.empty());
         when(feedbackRepo.findByUserIdAndPeriodTypeAndPeriodStartAndPeriodEnd(eq(USER_ID), eq("WEEKLY"), any(), any()))
                 .thenReturn(Optional.empty());
         when(feedbackRepo.findByUserIdAndPeriodTypeOrderByPeriodStartDesc(USER_ID, "WEEKLY"))
                 .thenReturn(List.of());
-        when(feedbackRepo.save(any(AiFeedback.class)))
-                .thenAnswer(inv -> inv.getArgument(0));
-        when(userProfileRepo.save(any(UserProfile.class)))
-                .thenAnswer(inv -> inv.getArgument(0));
+        when(feedbackRepo.save(any(AiFeedback.class))).thenAnswer(inv -> inv.getArgument(0));
+        when(userProfileRepo.save(any(UserProfile.class))).thenAnswer(inv -> inv.getArgument(0));
         when(memoQueueRepo.countPendingForWeek(eq(USER_ID), any())).thenReturn(0L);
     }
 

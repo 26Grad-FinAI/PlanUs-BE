@@ -47,7 +47,8 @@ class AuthControllerTest {
         @Test
         @DisplayName("올바른 요청 시 201과 응답 데이터를 반환한다")
         void signUp_success_returns201() throws Exception {
-            SignUpResponse response = new SignUpResponse(1L, "user@example.com", "access-token", "refresh-token", false);
+            SignUpResponse response =
+                    new SignUpResponse(1L, "user@example.com", "access-token", "refresh-token", false);
             when(authService.signUp(any())).thenReturn(response);
 
             mockMvc.perform(post("/api/auth/signup")
@@ -115,6 +116,32 @@ class AuthControllerTest {
                     .andExpect(status().isBadRequest())
                     .andExpect(jsonPath("$.isSuccess").value(false))
                     .andExpect(jsonPath("$.code").value("AUTH_400_004"));
+        }
+
+        @Test
+        @DisplayName("비밀번호 강도 미달 시 400을 반환한다")
+        void signUp_passwordTooWeak_returns400() throws Exception {
+            when(authService.signUp(any())).thenThrow(new GeneralException(GeneralErrorCode.PASSWORD_TOO_WEAK));
+
+            mockMvc.perform(post("/api/auth/signup")
+                            .contentType(MediaType.APPLICATION_JSON)
+                            .content(objectMapper.writeValueAsString(validRequest())))
+                    .andExpect(status().isBadRequest())
+                    .andExpect(jsonPath("$.isSuccess").value(false))
+                    .andExpect(jsonPath("$.code").value("AUTH_400_003"));
+        }
+
+        @Test
+        @DisplayName("비밀번호 불일치 시 400을 반환한다")
+        void signUp_passwordMismatch_returns400() throws Exception {
+            when(authService.signUp(any())).thenThrow(new GeneralException(GeneralErrorCode.PASSWORD_MISMATCH));
+
+            mockMvc.perform(post("/api/auth/signup")
+                            .contentType(MediaType.APPLICATION_JSON)
+                            .content(objectMapper.writeValueAsString(validRequest())))
+                    .andExpect(status().isBadRequest())
+                    .andExpect(jsonPath("$.isSuccess").value(false))
+                    .andExpect(jsonPath("$.code").value("AUTH_400_002"));
         }
     }
 }

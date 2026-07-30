@@ -199,13 +199,13 @@ public class CauseSignalAssembler {
     }
 
     /** 감정태그별 금액 합계. 이번 주 변동 지출만 대상. */
-    private Map<String, Long> sumEmotionAmounts(List<Expense> categoryExpenses, LocalDate weekStart, LocalDate weekEnd) {
+    private Map<String, Long> sumEmotionAmounts(
+            List<Expense> categoryExpenses, LocalDate weekStart, LocalDate weekEnd) {
         return categoryExpenses.stream()
                 .filter(Expense::isVariable)
                 .filter(e -> !e.getDate().isBefore(weekStart) && !e.getDate().isAfter(weekEnd))
                 .filter(e -> e.getEmotion() != null && !e.getEmotion().isBlank())
-                .collect(Collectors.groupingBy(Expense::getEmotion,
-                        Collectors.summingLong(Expense::getAmount)));
+                .collect(Collectors.groupingBy(Expense::getEmotion, Collectors.summingLong(Expense::getAmount)));
     }
 
     /**

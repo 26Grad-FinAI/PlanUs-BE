@@ -54,6 +54,7 @@ public class UserAccount {
         return age != null && monthlyIncome > 0;
     }
 
+    /** 로그인·회원가입 시 발급된 리프레시 토큰을 저장한다. */
     public void updateRefreshToken(String refreshToken) {
         this.refreshToken = refreshToken;
     }

@@ -82,8 +82,8 @@ class BudgetProjectorTest {
     void project_nullWeights_fallsBackToUniform() {
         // null weights → 기존 균등 동작과 동일해야 함
         var withNull = projector.project(300_000, 100_000, 150_000, 10, 20, 20_000, null, null);
-        var withNullStart = projector.project(
-                300_000, 100_000, 150_000, 10, 20, 20_000, new double[] {1, 1, 1, 1, 1, 1, 1}, null);
+        var withNullStart =
+                projector.project(300_000, 100_000, 150_000, 10, 20, 20_000, new double[] {1, 1, 1, 1, 1, 1, 1}, null);
 
         assertThat(withNull.predictedMonthEndWon()).isEqualTo(800_000);
         // monthStart가 null이면 weights가 있어도 균등 처리

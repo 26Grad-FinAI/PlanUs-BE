@@ -6,6 +6,7 @@ import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyString;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.never;
+import static org.mockito.Mockito.spy;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
@@ -55,13 +56,15 @@ class AuthServiceTest {
     class Success {
 
         @Test
-        @DisplayName("올바른 요청 시 userId, email, 토큰이 담긴 응답을 반환한다")
+        @DisplayName("올바른 요청 시 userId, email, 토큰이 담긴 응답을 반환하고 리프레시 토큰 해시가 저장된다")
         void signUp_success() {
+            UserAccount spyUser = spy(savedUser());
             when(userAccountRepository.existsByEmail(anyString())).thenReturn(false);
             when(passwordEncoder.encode(anyString())).thenReturn("encoded");
-            when(userAccountRepository.save(any())).thenReturn(savedUser());
+            when(userAccountRepository.save(any())).thenReturn(spyUser);
             when(jwtProvider.generateAccessToken(1L)).thenReturn("access-token");
             when(jwtProvider.generateRefreshToken(1L)).thenReturn("refresh-token");
+            when(jwtProvider.hashToken("refresh-token")).thenReturn("hashed-token");
 
             SignUpResponse response = authService.signUp(validRequest());
 
@@ -70,6 +73,7 @@ class AuthServiceTest {
             assertThat(response.accessToken()).isEqualTo("access-token");
             assertThat(response.refreshToken()).isEqualTo("refresh-token");
             assertThat(response.profileCompleted()).isFalse();
+            verify(spyUser).updateRefreshToken("hashed-token");
         }
     }
 

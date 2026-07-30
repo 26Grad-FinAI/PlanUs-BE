@@ -83,7 +83,13 @@ public class PacingComparator {
         }
 
         return new PacingResult(
-                currentRate, historicalAvgRate, pacingRatio, bandWidth, monthsAvailable, displayType, referenceMin,
+                currentRate,
+                historicalAvgRate,
+                pacingRatio,
+                bandWidth,
+                monthsAvailable,
+                displayType,
+                referenceMin,
                 referenceMax);
     }
 
