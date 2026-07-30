@@ -10,6 +10,8 @@ import com.planus.backend.domain.aifeedback.core.*;
 import com.planus.backend.domain.aifeedback.core.PacingComparator.PacingResult;
 import com.planus.backend.domain.aifeedback.core.PacingComparator.PastMonth;
 import com.planus.backend.domain.aifeedback.entity.*;
+import com.planus.backend.domain.user.entity.UserAccount;
+import com.planus.backend.domain.user.repository.UserAccountRepository;
 import com.planus.backend.domain.aifeedback.llm.FeedbackRenderer;
 import com.planus.backend.domain.aifeedback.llm.FeedbackRenderer.ActionSummary;
 import com.planus.backend.domain.aifeedback.llm.FeedbackRenderer.CategoryOverspend;

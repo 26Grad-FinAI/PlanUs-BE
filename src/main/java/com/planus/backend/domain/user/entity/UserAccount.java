@@ -1,4 +1,4 @@
-package com.planus.backend.domain.aifeedback.entity;
+package com.planus.backend.domain.user.entity;
 
 import jakarta.persistence.*;
 import lombok.AllArgsConstructor;
@@ -17,6 +17,10 @@ public class UserAccount {
     @Id
     @GeneratedValue(strategy = GenerationType.IDENTITY)
     private Long id;
+
+    private String email;
+    private String password;
+    private String nickname;
 
     @Column(name = "monthly_income")
     private long monthlyIncome;
@@ -37,8 +41,20 @@ public class UserAccount {
     private String gender;
     private String residence;
 
+    @Column(name = "refresh_token")
+    private String refreshToken;
+
     /** 가용예산 = 소득 − 고정지출 − 저축목표. */
     public long availableBudget() {
         return monthlyIncome - monthlyFixedExpenses - monthlySavingsGoal;
+    }
+
+    /** 재무 프로필(소득, 나이) 입력 완료 여부. */
+    public boolean isProfileCompleted() {
+        return age != null && monthlyIncome > 0;
+    }
+
+    public void updateRefreshToken(String refreshToken) {
+        this.refreshToken = refreshToken;
     }
 }

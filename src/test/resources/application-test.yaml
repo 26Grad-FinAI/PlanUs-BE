@@ -3,3 +3,9 @@ spring:
     enabled: true
     locations: classpath:db/migration
     baseline-on-migrate: ${FLYWAY_BASELINE_ON_MIGRATE:false}
+
+planus:
+  jwt:
+    secret: test-secret-key-for-unit-testing-only-32chars
+    access-token-expiry: 3600000
+    refresh-token-expiry: 1209600000

@@ -18,6 +18,8 @@ import com.planus.backend.domain.aifeedback.llm.FeedbackRenderer;
 import com.planus.backend.domain.aifeedback.llm.FeedbackRenderer.Rendered;
 import com.planus.backend.domain.aifeedback.profile.ProfileUpdater;
 import com.planus.backend.domain.aifeedback.repository.*;
+import com.planus.backend.domain.user.entity.UserAccount;
+import com.planus.backend.domain.user.repository.UserAccountRepository;
 import java.time.*;
 import java.util.List;
 import java.util.Map;
