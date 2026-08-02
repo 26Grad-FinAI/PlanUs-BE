@@ -10,8 +10,11 @@ import static org.mockito.Mockito.spy;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
+import com.planus.backend.domain.auth.dto.LoginRequest;
+import com.planus.backend.domain.auth.dto.LoginResponse;
 import com.planus.backend.domain.auth.dto.SignUpRequest;
 import com.planus.backend.domain.auth.dto.SignUpResponse;
+import java.util.Optional;
 import com.planus.backend.domain.user.entity.UserAccount;
 import com.planus.backend.domain.user.repository.UserAccountRepository;
 import com.planus.backend.global.apiPayload.code.GeneralErrorCode;
@@ -146,6 +149,59 @@ class AuthServiceTest {
                             .isEqualTo(GeneralErrorCode.PASSWORD_MISMATCH));
 
             verify(userAccountRepository, never()).save(any());
+        }
+    }
+
+    @Nested
+    @DisplayName("로그인 성공")
+    class LoginSuccess {
+
+        @Test
+        @DisplayName("올바른 이메일/비밀번호로 userId, email, 토큰이 담긴 응답을 반환하고 리프레시 토큰 해시가 저장된다")
+        void login_success() {
+            UserAccount spyUser = spy(savedUser());
+            when(userAccountRepository.findByEmail("user@example.com")).thenReturn(Optional.of(spyUser));
+            when(passwordEncoder.matches("pass1234", "encoded")).thenReturn(true);
+            when(jwtProvider.generateAccessToken(1L)).thenReturn("access-token");
+            when(jwtProvider.generateRefreshToken(1L)).thenReturn("refresh-token");
+            when(jwtProvider.hashToken("refresh-token")).thenReturn("hashed-token");
+
+            LoginResponse response = authService.login(new LoginRequest("user@example.com", "pass1234"));
+
+            assertThat(response.userId()).isEqualTo(1L);
+            assertThat(response.email()).isEqualTo("user@example.com");
+            assertThat(response.accessToken()).isEqualTo("access-token");
+            assertThat(response.refreshToken()).isEqualTo("refresh-token");
+            verify(spyUser).updateRefreshToken("hashed-token");
+        }
+    }
+
+    @Nested
+    @DisplayName("로그인 실패")
+    class LoginFailure {
+
+        @Test
+        @DisplayName("존재하지 않는 이메일이면 INVALID_CREDENTIALS 예외가 발생한다")
+        void login_emailNotFound() {
+            when(userAccountRepository.findByEmail("user@example.com")).thenReturn(Optional.empty());
+
+            assertThatThrownBy(() -> authService.login(new LoginRequest("user@example.com", "pass1234")))
+                    .isInstanceOf(GeneralException.class)
+                    .satisfies(ex -> assertThat(((GeneralException) ex).getErrorCode())
+                            .isEqualTo(GeneralErrorCode.INVALID_CREDENTIALS));
+        }
+
+        @Test
+        @DisplayName("비밀번호가 일치하지 않으면 INVALID_CREDENTIALS 예외가 발생한다")
+        void login_wrongPassword() {
+            UserAccount user = savedUser();
+            when(userAccountRepository.findByEmail("user@example.com")).thenReturn(Optional.of(user));
+            when(passwordEncoder.matches("wrongpass", "encoded")).thenReturn(false);
+
+            assertThatThrownBy(() -> authService.login(new LoginRequest("user@example.com", "wrongpass")))
+                    .isInstanceOf(GeneralException.class)
+                    .satisfies(ex -> assertThat(((GeneralException) ex).getErrorCode())
+                            .isEqualTo(GeneralErrorCode.INVALID_CREDENTIALS));
         }
     }
 }

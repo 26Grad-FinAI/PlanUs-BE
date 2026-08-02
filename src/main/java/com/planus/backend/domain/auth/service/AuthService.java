@@ -1,6 +1,8 @@
 package com.planus.backend.domain.auth.service;
 
 import com.planus.backend.domain.auth.converter.AuthConverter;
+import com.planus.backend.domain.auth.dto.LoginRequest;
+import com.planus.backend.domain.auth.dto.LoginResponse;
 import com.planus.backend.domain.auth.dto.SignUpRequest;
 import com.planus.backend.domain.auth.dto.SignUpResponse;
 import com.planus.backend.domain.user.entity.UserAccount;
@@ -51,6 +53,31 @@ public class AuthService {
         savedUser.updateRefreshToken(jwtProvider.hashToken(refreshToken));
 
         return AuthConverter.toSignUpResponse(savedUser, accessToken, refreshToken);
+    }
+
+    /**
+     * 이메일/비밀번호로 로그인을 처리한다.
+     *
+     * <p>이메일로 사용자를 조회하고 BCrypt 비밀번호를 검증한 뒤 JWT 토큰을 발급한다.
+     * 이메일 미존재와 비밀번호 불일치는 동일한 에러코드로 처리해 계정 열거 공격을 방지한다.</p>
+     *
+     * @param request 이메일, 비밀번호
+     * @return 사용자 정보 및 JWT 토큰
+     */
+    @Transactional
+    public LoginResponse login(LoginRequest request) {
+        UserAccount user = userAccountRepository.findByEmail(request.email())
+                .orElseThrow(() -> new GeneralException(GeneralErrorCode.INVALID_CREDENTIALS));
+
+        if (!passwordEncoder.matches(request.password(), user.getPassword())) {
+            throw new GeneralException(GeneralErrorCode.INVALID_CREDENTIALS);
+        }
+
+        String accessToken = jwtProvider.generateAccessToken(user.getId());
+        String refreshToken = jwtProvider.generateRefreshToken(user.getId());
+        user.updateRefreshToken(jwtProvider.hashToken(refreshToken));
+
+        return AuthConverter.toLoginResponse(user, accessToken, refreshToken);
     }
 
     private void validateTerms(boolean agreeToTerms) {

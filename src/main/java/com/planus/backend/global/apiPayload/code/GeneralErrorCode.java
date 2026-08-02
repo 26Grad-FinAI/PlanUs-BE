@@ -23,7 +23,8 @@ public enum GeneralErrorCode implements BaseErrorCode {
     PASSWORD_MISMATCH(HttpStatus.BAD_REQUEST, "AUTH_400_002", "비밀번호가 일치하지 않습니다."),
     PASSWORD_TOO_WEAK(HttpStatus.BAD_REQUEST, "AUTH_400_003", "비밀번호는 8자 이상, 영문과 숫자를 포함해야 합니다."),
     TERMS_NOT_AGREED(HttpStatus.BAD_REQUEST, "AUTH_400_004", "이용 약관 및 개인정보 처리방침에 동의해 주세요."),
-    EMAIL_DUPLICATE(HttpStatus.CONFLICT, "AUTH_409_001", "이미 사용 중인 이메일입니다.");
+    EMAIL_DUPLICATE(HttpStatus.CONFLICT, "AUTH_409_001", "이미 사용 중인 이메일입니다."),
+    INVALID_CREDENTIALS(HttpStatus.UNAUTHORIZED, "AUTH_401_002", "이메일 또는 비밀번호가 올바르지 않습니다.");
 
     private final HttpStatus httpStatus;
     private final String code;
