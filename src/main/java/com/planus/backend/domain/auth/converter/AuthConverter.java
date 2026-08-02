@@ -3,6 +3,7 @@ package com.planus.backend.domain.auth.converter;
 import com.planus.backend.domain.auth.dto.LoginResponse;
 import com.planus.backend.domain.auth.dto.SignUpRequest;
 import com.planus.backend.domain.auth.dto.SignUpResponse;
+import com.planus.backend.domain.user.entity.AuthProvider;
 import com.planus.backend.domain.user.entity.UserAccount;
 import lombok.AccessLevel;
 import lombok.NoArgsConstructor;
@@ -23,6 +24,7 @@ public class AuthConverter {
                 .email(request.email())
                 .nickname(request.nickname())
                 .password(encodedPassword)
+                .provider(AuthProvider.LOCAL)
                 .build();
     }
 

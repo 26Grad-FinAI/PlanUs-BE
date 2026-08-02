@@ -48,7 +48,7 @@ class GeneralExceptionTest {
      */
     @Test
     void constructor_withNullDetailMessage_fallsBackToErrorCodeMessage() {
-        GeneralException ex = new GeneralException(GeneralErrorCode.NOT_FOUND, null);
+        GeneralException ex = new GeneralException(GeneralErrorCode.NOT_FOUND, (String) null);
 
         assertThat(ex.getMessage()).isEqualTo(GeneralErrorCode.NOT_FOUND.getMessage());
     }

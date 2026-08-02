@@ -26,7 +26,8 @@ public enum GeneralErrorCode implements BaseErrorCode {
     EMAIL_DUPLICATE(HttpStatus.CONFLICT, "AUTH_409_001", "이미 사용 중인 이메일입니다."),
     INVALID_CREDENTIALS(HttpStatus.UNAUTHORIZED, "AUTH_401_002", "이메일 또는 비밀번호가 올바르지 않습니다."),
     INVALID_TOKEN(HttpStatus.UNAUTHORIZED, "AUTH_401_003", "유효하지 않은 토큰입니다."),
-    EXPIRED_TOKEN(HttpStatus.UNAUTHORIZED, "AUTH_401_004", "만료된 토큰입니다.");
+    EXPIRED_TOKEN(HttpStatus.UNAUTHORIZED, "AUTH_401_004", "만료된 토큰입니다."),
+    SOCIAL_LOGIN_EMAIL_CONFLICT(HttpStatus.CONFLICT, "AUTH_409_002", "이미 다른 방식으로 가입된 이메일입니다.");
 
     private final HttpStatus httpStatus;
     private final String code;

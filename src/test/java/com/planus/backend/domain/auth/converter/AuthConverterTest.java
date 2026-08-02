@@ -4,6 +4,7 @@ import static org.assertj.core.api.Assertions.assertThat;
 
 import com.planus.backend.domain.auth.dto.SignUpRequest;
 import com.planus.backend.domain.auth.dto.SignUpResponse;
+import com.planus.backend.domain.user.entity.AuthProvider;
 import com.planus.backend.domain.user.entity.UserAccount;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Nested;
@@ -26,6 +27,16 @@ class AuthConverterTest {
             assertThat(user.getEmail()).isEqualTo("user@example.com");
             assertThat(user.getNickname()).isEqualTo("닉네임");
             assertThat(user.getPassword()).isEqualTo("encoded_pass1234");
+        }
+
+        @Test
+        @DisplayName("provider가 LOCAL로 설정된다")
+        void setsProviderAsLocal() {
+            SignUpRequest request = new SignUpRequest("user@example.com", "pass1234", "pass1234", "닉네임", true);
+
+            UserAccount user = AuthConverter.toUserAccount(request, "encoded");
+
+            assertThat(user.getProvider()).isEqualTo(AuthProvider.LOCAL);
         }
     }
 

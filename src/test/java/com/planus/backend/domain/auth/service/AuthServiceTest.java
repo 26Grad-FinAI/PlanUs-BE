@@ -4,6 +4,7 @@ import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyString;
+import static org.mockito.ArgumentMatchers.argThat;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.never;
@@ -16,6 +17,7 @@ import com.planus.backend.domain.auth.dto.LoginResponse;
 import com.planus.backend.domain.auth.dto.SignUpRequest;
 import com.planus.backend.domain.auth.dto.SignUpResponse;
 import java.util.Optional;
+import com.planus.backend.domain.user.entity.AuthProvider;
 import com.planus.backend.domain.user.entity.UserAccount;
 import com.planus.backend.domain.user.repository.UserAccountRepository;
 import com.planus.backend.global.apiPayload.code.GeneralErrorCode;
@@ -78,6 +80,23 @@ class AuthServiceTest {
             assertThat(response.refreshToken()).isEqualTo("refresh-token");
             assertThat(response.profileCompleted()).isFalse();
             verify(spyUser).updateRefreshToken("hashed-token");
+        }
+
+        @Test
+        @DisplayName("회원가입 시 provider가 LOCAL인 유저가 저장된다")
+        void signUp_savesUserWithLocalProvider() {
+            UserAccount spyUser = spy(savedUser());
+            when(userAccountRepository.existsByEmail(anyString())).thenReturn(false);
+            when(passwordEncoder.encode(anyString())).thenReturn("encoded");
+            when(userAccountRepository.save(any())).thenReturn(spyUser);
+            when(jwtProvider.generateAccessToken(any())).thenReturn("access-token");
+            when(jwtProvider.generateRefreshToken(any())).thenReturn("refresh-token");
+            when(jwtProvider.hashToken(any())).thenReturn("hashed-token");
+
+            authService.signUp(validRequest());
+
+            verify(userAccountRepository).save(argThat(user ->
+                    user.getProvider() == AuthProvider.LOCAL));
         }
     }
 
