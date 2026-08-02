@@ -1,5 +1,6 @@
 package com.planus.backend.domain.auth.converter;
 
+import com.planus.backend.domain.auth.dto.LoginResponse;
 import com.planus.backend.domain.auth.dto.SignUpRequest;
 import com.planus.backend.domain.auth.dto.SignUpResponse;
 import com.planus.backend.domain.user.entity.UserAccount;
@@ -35,5 +36,17 @@ public class AuthConverter {
      */
     public static SignUpResponse toSignUpResponse(UserAccount user, String accessToken, String refreshToken) {
         return new SignUpResponse(user.getId(), user.getEmail(), accessToken, refreshToken, user.isProfileCompleted());
+    }
+
+    /**
+     * {@link UserAccount}와 JWT 토큰을 로그인 응답 DTO로 변환한다.
+     *
+     * @param user         인증된 사용자 엔티티
+     * @param accessToken  발급된 액세스 토큰
+     * @param refreshToken 발급된 리프레시 토큰
+     * @return 로그인 응답 DTO
+     */
+    public static LoginResponse toLoginResponse(UserAccount user, String accessToken, String refreshToken) {
+        return new LoginResponse(user.getId(), user.getEmail(), accessToken, refreshToken, user.isProfileCompleted());
     }
 }

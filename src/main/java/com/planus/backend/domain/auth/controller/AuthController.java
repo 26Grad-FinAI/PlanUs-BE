@@ -1,5 +1,7 @@
 package com.planus.backend.domain.auth.controller;
 
+import com.planus.backend.domain.auth.dto.LoginRequest;
+import com.planus.backend.domain.auth.dto.LoginResponse;
 import com.planus.backend.domain.auth.dto.SignUpRequest;
 import com.planus.backend.domain.auth.dto.SignUpResponse;
 import com.planus.backend.domain.auth.service.AuthService;
@@ -33,5 +35,16 @@ public class AuthController {
     public ApiResponse<SignUpResponse> signUp(@Valid @RequestBody SignUpRequest request) {
         SignUpResponse response = authService.signUp(request);
         return ApiResponse.onSuccess(GeneralSuccessCode.CREATED, response);
+    }
+
+    /**
+     * 이메일/비밀번호로 로그인하고 JWT 액세스/리프레시 토큰을 발급한다.
+     *
+     * @param request 이메일, 비밀번호
+     * @return 200 OK, userId·email·토큰·프로필 완료 여부
+     */
+    @PostMapping("/login")
+    public ApiResponse<LoginResponse> login(@Valid @RequestBody LoginRequest request) {
+        return ApiResponse.onSuccess(GeneralSuccessCode.OK, authService.login(request));
     }
 }
