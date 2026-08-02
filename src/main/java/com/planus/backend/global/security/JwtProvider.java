@@ -1,5 +1,10 @@
 package com.planus.backend.global.security;
 
+import com.planus.backend.global.apiPayload.code.GeneralErrorCode;
+import com.planus.backend.global.apiPayload.exception.GeneralException;
+import io.jsonwebtoken.Claims;
+import io.jsonwebtoken.ExpiredJwtException;
+import io.jsonwebtoken.JwtException;
 import io.jsonwebtoken.Jwts;
 import io.jsonwebtoken.security.Keys;
 import java.nio.charset.StandardCharsets;
@@ -70,6 +75,34 @@ public class JwtProvider {
         } catch (NoSuchAlgorithmException e) {
             throw new IllegalStateException("SHA-256 알고리즘을 사용할 수 없습니다.", e);
         }
+    }
+
+    /**
+     * 토큰을 한 번만 파싱해 서명·만료를 검증하고 userId를 추출한다.
+     *
+     * <p>subject가 숫자가 아닌 경우({@link NumberFormatException})도 {@link IllegalArgumentException}의
+     * 하위 클래스이므로 INVALID_TOKEN으로 매핑된다.</p>
+     *
+     * @param token 검증할 JWT 토큰
+     * @return 토큰에 담긴 userId
+     * @throws GeneralException 만료된 토큰이면 EXPIRED_TOKEN, 그 외 오류면 INVALID_TOKEN
+     */
+    public Long parseUserId(String token) {
+        try {
+            return Long.parseLong(parseClaims(token).getSubject());
+        } catch (ExpiredJwtException e) {
+            throw new GeneralException(GeneralErrorCode.EXPIRED_TOKEN, e);
+        } catch (JwtException | IllegalArgumentException e) {
+            throw new GeneralException(GeneralErrorCode.INVALID_TOKEN, e);
+        }
+    }
+
+    private Claims parseClaims(String token) {
+        return Jwts.parser()
+                .verifyWith(secretKey)
+                .build()
+                .parseSignedClaims(token)
+                .getPayload();
     }
 
     private String buildToken(Long userId, long expiryMs) {
