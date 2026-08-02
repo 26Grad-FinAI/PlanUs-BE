@@ -47,8 +47,7 @@ class JwtAuthenticationFilterTest {
             MockHttpServletResponse response = new MockHttpServletResponse();
             FilterChain filterChain = mock(FilterChain.class);
 
-            when(jwtProvider.validateToken("valid-token")).thenReturn(true);
-            when(jwtProvider.getUserId("valid-token")).thenReturn(1L);
+            when(jwtProvider.parseUserId("valid-token")).thenReturn(1L);
 
             filter.doFilterInternal(request, response, filterChain);
 
@@ -70,7 +69,7 @@ class JwtAuthenticationFilterTest {
             MockHttpServletResponse response = new MockHttpServletResponse();
             FilterChain filterChain = mock(FilterChain.class);
 
-            when(jwtProvider.validateToken("expired-token"))
+            when(jwtProvider.parseUserId("expired-token"))
                     .thenThrow(new GeneralException(GeneralErrorCode.EXPIRED_TOKEN));
 
             filter.doFilterInternal(request, response, filterChain);
@@ -87,7 +86,7 @@ class JwtAuthenticationFilterTest {
             MockHttpServletResponse response = new MockHttpServletResponse();
             FilterChain filterChain = mock(FilterChain.class);
 
-            when(jwtProvider.validateToken("invalid-token"))
+            when(jwtProvider.parseUserId("invalid-token"))
                     .thenThrow(new GeneralException(GeneralErrorCode.INVALID_TOKEN));
 
             filter.doFilterInternal(request, response, filterChain);

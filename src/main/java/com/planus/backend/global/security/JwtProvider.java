@@ -78,31 +78,23 @@ public class JwtProvider {
     }
 
     /**
-     * 토큰의 서명과 만료 여부를 검증한다.
+     * 토큰을 한 번만 파싱해 서명·만료를 검증하고 userId를 추출한다.
+     *
+     * <p>subject가 숫자가 아닌 경우({@link NumberFormatException})도 {@link IllegalArgumentException}의
+     * 하위 클래스이므로 INVALID_TOKEN으로 매핑된다.</p>
      *
      * @param token 검증할 JWT 토큰
-     * @return 유효하면 true
-     * @throws GeneralException 만료된 토큰이면 EXPIRED_TOKEN, 서명 오류 등 기타 오류면 INVALID_TOKEN
-     */
-    public boolean validateToken(String token) {
-        try {
-            parseClaims(token);
-            return true;
-        } catch (ExpiredJwtException e) {
-            throw new GeneralException(GeneralErrorCode.EXPIRED_TOKEN);
-        } catch (JwtException | IllegalArgumentException e) {
-            throw new GeneralException(GeneralErrorCode.INVALID_TOKEN);
-        }
-    }
-
-    /**
-     * 토큰의 subject에서 userId를 추출한다.
-     *
-     * @param token 파싱할 JWT 토큰
      * @return 토큰에 담긴 userId
+     * @throws GeneralException 만료된 토큰이면 EXPIRED_TOKEN, 그 외 오류면 INVALID_TOKEN
      */
-    public Long getUserId(String token) {
-        return Long.parseLong(parseClaims(token).getSubject());
+    public Long parseUserId(String token) {
+        try {
+            return Long.parseLong(parseClaims(token).getSubject());
+        } catch (ExpiredJwtException e) {
+            throw new GeneralException(GeneralErrorCode.EXPIRED_TOKEN, e);
+        } catch (JwtException | IllegalArgumentException e) {
+            throw new GeneralException(GeneralErrorCode.INVALID_TOKEN, e);
+        }
     }
 
     private Claims parseClaims(String token) {
