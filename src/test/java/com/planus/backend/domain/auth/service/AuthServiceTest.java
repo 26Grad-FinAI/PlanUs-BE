@@ -4,6 +4,7 @@ import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyString;
+import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.spy;
@@ -181,14 +182,17 @@ class AuthServiceTest {
     class LoginFailure {
 
         @Test
-        @DisplayName("존재하지 않는 이메일이면 INVALID_CREDENTIALS 예외가 발생한다")
+        @DisplayName("존재하지 않는 이메일이면 더미 해시로 BCrypt 비교 후 INVALID_CREDENTIALS 예외가 발생한다")
         void login_emailNotFound() {
             when(userAccountRepository.findByEmail("user@example.com")).thenReturn(Optional.empty());
+            when(passwordEncoder.matches(anyString(), anyString())).thenReturn(false);
 
             assertThatThrownBy(() -> authService.login(new LoginRequest("user@example.com", "pass1234")))
                     .isInstanceOf(GeneralException.class)
                     .satisfies(ex -> assertThat(((GeneralException) ex).getErrorCode())
                             .isEqualTo(GeneralErrorCode.INVALID_CREDENTIALS));
+
+            verify(passwordEncoder).matches(eq("pass1234"), anyString());
         }
 
         @Test
