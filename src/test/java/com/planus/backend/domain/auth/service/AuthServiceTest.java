@@ -16,6 +16,7 @@ import com.planus.backend.domain.auth.dto.LoginResponse;
 import com.planus.backend.domain.auth.dto.SignUpRequest;
 import com.planus.backend.domain.auth.dto.SignUpResponse;
 import java.util.Optional;
+import com.planus.backend.domain.user.entity.AuthProvider;
 import com.planus.backend.domain.user.entity.UserAccount;
 import com.planus.backend.domain.user.repository.UserAccountRepository;
 import com.planus.backend.global.apiPayload.code.GeneralErrorCode;
@@ -207,6 +208,22 @@ class AuthServiceTest {
                     .isInstanceOf(GeneralException.class)
                     .satisfies(ex -> assertThat(((GeneralException) ex).getErrorCode())
                             .isEqualTo(GeneralErrorCode.INVALID_CREDENTIALS));
+        }
+
+        @Test
+        @DisplayName("소셜 로그인 사용자가 이메일/비밀번호 로그인 시도 시 SOCIAL_LOGIN_EMAIL_CONFLICT 예외가 발생한다")
+        void login_socialUser_throwsSocialLoginEmailConflict() {
+            UserAccount socialUser = UserAccount.builder()
+                    .id(1L)
+                    .email("user@example.com")
+                    .provider(AuthProvider.GOOGLE)
+                    .build();
+            when(userAccountRepository.findByEmail("user@example.com")).thenReturn(Optional.of(socialUser));
+
+            assertThatThrownBy(() -> authService.login(new LoginRequest("user@example.com", "pass1234")))
+                    .isInstanceOf(GeneralException.class)
+                    .satisfies(ex -> assertThat(((GeneralException) ex).getErrorCode())
+                            .isEqualTo(GeneralErrorCode.SOCIAL_LOGIN_EMAIL_CONFLICT));
         }
     }
 }
