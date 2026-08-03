@@ -5,6 +5,7 @@ import com.planus.backend.domain.auth.dto.LoginRequest;
 import com.planus.backend.domain.auth.dto.LoginResponse;
 import com.planus.backend.domain.auth.dto.SignUpRequest;
 import com.planus.backend.domain.auth.dto.SignUpResponse;
+import com.planus.backend.domain.user.entity.AuthProvider;
 import com.planus.backend.domain.user.entity.UserAccount;
 import com.planus.backend.domain.user.repository.UserAccountRepository;
 import com.planus.backend.global.apiPayload.code.GeneralErrorCode;
@@ -64,6 +65,7 @@ public class AuthService {
      * 이메일/비밀번호로 로그인을 처리한다.
      *
      * <p>이메일로 사용자를 조회하고 BCrypt 비밀번호를 검증한 뒤 JWT 토큰을 발급한다.
+     * 소셜 로그인 사용자가 이메일/비밀번호로 로그인 시도 시 SOCIAL_LOGIN_EMAIL_CONFLICT를 반환한다.
      * 이메일 미존재 시에도 더미 해시로 BCrypt 비교를 수행해 응답 시간을 균일하게 유지하며,
      * 이메일 미존재와 비밀번호 불일치를 동일한 에러코드로 처리해 타이밍 공격과 계정 열거 공격을 방지한다.</p>
      *
@@ -73,6 +75,11 @@ public class AuthService {
     @Transactional
     public LoginResponse login(LoginRequest request) {
         Optional<UserAccount> foundUser = userAccountRepository.findByEmail(request.email());
+
+        if (foundUser.isPresent() && foundUser.get().getProvider() != AuthProvider.LOCAL) {
+            throw new GeneralException(GeneralErrorCode.SOCIAL_LOGIN_EMAIL_CONFLICT);
+        }
+
         String encodedPassword = foundUser.map(UserAccount::getPassword).orElse(DUMMY_PASSWORD_HASH);
         boolean passwordMatches = passwordEncoder.matches(request.password(), encodedPassword);
 
