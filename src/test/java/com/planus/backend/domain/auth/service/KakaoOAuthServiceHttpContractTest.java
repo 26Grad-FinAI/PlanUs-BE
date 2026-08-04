@@ -28,20 +28,20 @@ import org.springframework.test.web.client.MockRestServiceServer;
 import org.springframework.web.client.RestClient;
 import org.springframework.web.client.RestTemplate;
 
-class GoogleOAuthServiceHttpContractTest {
+class KakaoOAuthServiceHttpContractTest {
 
-    private static final String TOKEN_URI = "https://oauth2.googleapis.com/token";
-    private static final String USERINFO_URI = "https://www.googleapis.com/oauth2/v3/userinfo";
+    private static final String TOKEN_URI = "https://kauth.kakao.com/oauth/token";
+    private static final String USERINFO_URI = "https://kapi.kakao.com/v2/user/me";
 
     private MockRestServiceServer mockServer;
-    private GoogleOAuthService googleOAuthService;
+    private KakaoOAuthService kakaoOAuthService;
 
     @BeforeEach
     void setUp() {
         RestTemplate restTemplate = new RestTemplate();
         mockServer = MockRestServiceServer.createServer(restTemplate);
         RestClient restClient = RestClient.create(restTemplate);
-        googleOAuthService = new GoogleOAuthService(
+        kakaoOAuthService = new KakaoOAuthService(
                 mock(UserAccountRepository.class),
                 mock(JwtProvider.class),
                 restClient,
@@ -53,7 +53,7 @@ class GoogleOAuthServiceHttpContractTest {
     }
 
     @Test
-    @DisplayName("fetchAccessToken은 올바른 form 파라미터를 Google token endpoint로 전송한다")
+    @DisplayName("fetchAccessToken은 올바른 form 파라미터를 Kakao token endpoint로 전송한다")
     void fetchAccessToken_sendsCorrectFormParams() {
         mockServer.expect(requestTo(TOKEN_URI))
                 .andExpect(method(HttpMethod.POST))
@@ -65,40 +65,46 @@ class GoogleOAuthServiceHttpContractTest {
                         containsString("redirect_uri=http%3A%2F%2Flocalhost%2Fcallback"),
                         containsString("grant_type=authorization_code"))))
                 .andRespond(withSuccess(
-                        "{\"access_token\":\"google-access-token\"}",
+                        "{\"access_token\":\"kakao-access-token\"}",
                         MediaType.APPLICATION_JSON));
 
-        String token = googleOAuthService.fetchAccessToken("auth-code", "http://localhost/callback");
+        String token = kakaoOAuthService.fetchAccessToken("auth-code", "http://localhost/callback");
 
-        assertThat(token).isEqualTo("google-access-token");
+        assertThat(token).isEqualTo("kakao-access-token");
         mockServer.verify();
     }
 
     @Test
-    @DisplayName("fetchUserInfo는 Authorization 헤더를 포함해 userinfo endpoint를 호출하고 email_verified를 매핑한다")
-    void fetchUserInfo_sendsAuthorizationHeaderAndMapsEmailVerified() {
+    @DisplayName("fetchUserInfo는 Authorization 헤더를 포함해 userinfo endpoint를 호출하고 중첩 JSON을 매핑한다")
+    void fetchUserInfo_sendsAuthorizationHeaderAndMapsNestedJson() {
         mockServer.expect(requestTo(USERINFO_URI))
                 .andExpect(method(HttpMethod.GET))
                 .andExpect(header("Authorization", "Bearer test-token"))
                 .andRespond(withSuccess(
-                        "{\"sub\":\"sub123\",\"email\":\"user@example.com\",\"name\":\"홍길동\",\"email_verified\":true}",
+                        "{\"id\":123456789,"
+                                + "\"kakao_account\":{"
+                                + "\"email\":\"user@kakao.com\","
+                                + "\"is_email_verified\":true,"
+                                + "\"is_email_valid\":true,"
+                                + "\"profile\":{\"nickname\":\"홍길동\"}}}",
                         MediaType.APPLICATION_JSON));
 
-        GoogleOAuthService.GoogleUserInfo userInfo = googleOAuthService.fetchUserInfo("test-token");
+        KakaoOAuthService.KakaoUserInfo userInfo = kakaoOAuthService.fetchUserInfo("test-token");
 
-        assertThat(userInfo.sub()).isEqualTo("sub123");
-        assertThat(userInfo.email()).isEqualTo("user@example.com");
-        assertThat(userInfo.emailVerified()).isTrue();
+        assertThat(userInfo.id()).isEqualTo(123456789L);
+        assertThat(userInfo.kakaoAccount().email()).isEqualTo("user@kakao.com");
+        assertThat(userInfo.kakaoAccount().emailVerified()).isTrue();
+        assertThat(userInfo.kakaoAccount().profile().nickname()).isEqualTo("홍길동");
         mockServer.verify();
     }
 
     @Test
-    @DisplayName("Google token endpoint가 4xx를 반환하면 INVALID_CREDENTIALS 예외가 발생한다")
-    void fetchAccessToken_googleReturns4xx_throwsInvalidCredentials() {
+    @DisplayName("Kakao token endpoint가 4xx를 반환하면 INVALID_CREDENTIALS 예외가 발생한다")
+    void fetchAccessToken_kakaoReturns4xx_throwsInvalidCredentials() {
         mockServer.expect(requestTo(TOKEN_URI))
                 .andRespond(withStatus(HttpStatus.BAD_REQUEST));
 
-        assertThatThrownBy(() -> googleOAuthService.fetchAccessToken("bad-code", "http://localhost/callback"))
+        assertThatThrownBy(() -> kakaoOAuthService.fetchAccessToken("bad-code", "http://localhost/callback"))
                 .isInstanceOf(GeneralException.class)
                 .satisfies(ex -> assertThat(((GeneralException) ex).getErrorCode())
                         .isEqualTo(GeneralErrorCode.INVALID_CREDENTIALS));
@@ -106,12 +112,12 @@ class GoogleOAuthServiceHttpContractTest {
     }
 
     @Test
-    @DisplayName("Google token endpoint가 5xx를 반환하면 SOCIAL_LOGIN_UNAVAILABLE 예외가 발생한다")
-    void fetchAccessToken_googleReturns5xx_throwsSocialLoginUnavailable() {
+    @DisplayName("Kakao token endpoint가 5xx를 반환하면 SOCIAL_LOGIN_UNAVAILABLE 예외가 발생한다")
+    void fetchAccessToken_kakaoReturns5xx_throwsSocialLoginUnavailable() {
         mockServer.expect(requestTo(TOKEN_URI))
                 .andRespond(withServerError());
 
-        assertThatThrownBy(() -> googleOAuthService.fetchAccessToken("code", "http://localhost/callback"))
+        assertThatThrownBy(() -> kakaoOAuthService.fetchAccessToken("code", "http://localhost/callback"))
                 .isInstanceOf(GeneralException.class)
                 .satisfies(ex -> assertThat(((GeneralException) ex).getErrorCode())
                         .isEqualTo(GeneralErrorCode.SOCIAL_LOGIN_UNAVAILABLE));

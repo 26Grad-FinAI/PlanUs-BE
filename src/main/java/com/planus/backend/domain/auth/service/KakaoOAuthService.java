@@ -11,6 +11,7 @@ import com.planus.backend.global.apiPayload.code.GeneralErrorCode;
 import com.planus.backend.global.apiPayload.exception.GeneralException;
 import com.planus.backend.global.security.JwtProvider;
 import java.util.List;
+import java.util.Optional;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.dao.DataIntegrityViolationException;
@@ -24,10 +25,10 @@ import org.springframework.web.client.HttpServerErrorException;
 import org.springframework.web.client.ResourceAccessException;
 import org.springframework.web.client.RestClient;
 
-/** Google OAuth2 인가코드 방식 소셜 로그인 서비스. */
+/** Kakao OAuth2 인가코드 방식 소셜 로그인 서비스. */
 @Slf4j
 @Service
-public class GoogleOAuthService {
+public class KakaoOAuthService {
 
     private final UserAccountRepository userAccountRepository;
     private final JwtProvider jwtProvider;
@@ -38,15 +39,15 @@ public class GoogleOAuthService {
     private final String userinfoUri;
     private final List<String> allowedRedirectUris;
 
-    public GoogleOAuthService(
+    public KakaoOAuthService(
             UserAccountRepository userAccountRepository,
             JwtProvider jwtProvider,
             RestClient restClient,
-            @Value("${planus.oauth2.google.client-id}") String clientId,
-            @Value("${planus.oauth2.google.client-secret}") String clientSecret,
-            @Value("${planus.oauth2.google.token-uri}") String tokenUri,
-            @Value("${planus.oauth2.google.userinfo-uri}") String userinfoUri,
-            @Value("${planus.oauth2.google.allowed-redirect-uris}") List<String> allowedRedirectUris) {
+            @Value("${planus.oauth2.kakao.client-id}") String clientId,
+            @Value("${planus.oauth2.kakao.client-secret}") String clientSecret,
+            @Value("${planus.oauth2.kakao.token-uri}") String tokenUri,
+            @Value("${planus.oauth2.kakao.userinfo-uri}") String userinfoUri,
+            @Value("${planus.oauth2.kakao.allowed-redirect-uris}") List<String> allowedRedirectUris) {
         this.userAccountRepository = userAccountRepository;
         this.jwtProvider = jwtProvider;
         this.restClient = restClient;
@@ -58,9 +59,9 @@ public class GoogleOAuthService {
     }
 
     /**
-     * Google 인가코드로 로그인을 처리한다.
+     * Kakao 인가코드로 로그인을 처리한다.
      *
-     * <p>인가코드로 Google access_token을 교환하고 userinfo를 조회한 뒤,
+     * <p>인가코드로 Kakao access_token을 교환하고 사용자 정보를 조회한 뒤,
      * 신규 사용자면 가입 처리하고 기존 사용자면 로그인 처리하여 JWT를 발급한다.</p>
      *
      * @param request 인가코드, 리다이렉트 URI
@@ -72,8 +73,9 @@ public class GoogleOAuthService {
             throw new GeneralException(GeneralErrorCode.INVALID_REDIRECT_URI);
         }
         String accessToken = fetchAccessToken(request.code(), request.redirectUri());
-        GoogleUserInfo userInfo = fetchUserInfo(accessToken);
-        if (!Boolean.TRUE.equals(userInfo.emailVerified())) {
+        KakaoUserInfo userInfo = fetchUserInfo(accessToken);
+        if (!Boolean.TRUE.equals(userInfo.kakaoAccount().emailVerified())
+                || !Boolean.TRUE.equals(userInfo.kakaoAccount().emailValid())) {
             throw new GeneralException(GeneralErrorCode.UNVERIFIED_SOCIAL_EMAIL);
         }
         UserAccount user = findOrCreateUser(userInfo);
@@ -86,7 +88,7 @@ public class GoogleOAuthService {
     }
 
     /**
-     * Google token endpoint에 인가코드를 전송해 access_token을 교환한다.
+     * Kakao token endpoint에 인가코드를 전송해 access_token을 교환한다.
      *
      * @throws GeneralException 4xx 응답이면 INVALID_CREDENTIALS, 5xx·타임아웃이면 SOCIAL_LOGIN_UNAVAILABLE
      */
@@ -99,88 +101,103 @@ public class GoogleOAuthService {
         params.add("grant_type", "authorization_code");
 
         try {
-            GoogleTokenResponse response = restClient.post()
+            KakaoTokenResponse response = restClient.post()
                     .uri(tokenUri)
                     .contentType(MediaType.APPLICATION_FORM_URLENCODED)
                     .body(params)
                     .retrieve()
-                    .body(GoogleTokenResponse.class);
+                    .body(KakaoTokenResponse.class);
 
             if (response == null || response.accessToken() == null) {
                 throw new GeneralException(GeneralErrorCode.INVALID_CREDENTIALS);
             }
             return response.accessToken();
         } catch (HttpClientErrorException e) {
-            log.warn("[GoogleOAuth] fetchAccessToken failed. status={}, body={}",
+            log.warn("[KakaoOAuth] fetchAccessToken failed. status={}, body={}",
                     e.getStatusCode(), e.getResponseBodyAsString());
             throw new GeneralException(GeneralErrorCode.INVALID_CREDENTIALS, e);
         } catch (HttpServerErrorException | ResourceAccessException e) {
-            log.warn("[GoogleOAuth] fetchAccessToken failed. cause={}", e.getMessage());
+            log.warn("[KakaoOAuth] fetchAccessToken failed. cause={}", e.getMessage());
             throw new GeneralException(GeneralErrorCode.SOCIAL_LOGIN_UNAVAILABLE, e);
         }
     }
 
     /**
-     * Google userinfo endpoint를 호출해 사용자 정보를 조회한다.
+     * Kakao userinfo endpoint를 호출해 사용자 정보를 조회한다.
      *
      * @throws GeneralException 4xx 응답이면 INVALID_CREDENTIALS, 5xx·타임아웃이면 SOCIAL_LOGIN_UNAVAILABLE
      */
-    protected GoogleUserInfo fetchUserInfo(String accessToken) {
+    protected KakaoUserInfo fetchUserInfo(String accessToken) {
         try {
-            GoogleUserInfo userInfo = restClient.get()
+            KakaoUserInfo userInfo = restClient.get()
                     .uri(userinfoUri)
                     .header("Authorization", "Bearer " + accessToken)
                     .retrieve()
-                    .body(GoogleUserInfo.class);
+                    .body(KakaoUserInfo.class);
 
-            if (userInfo == null || userInfo.sub() == null || userInfo.email() == null) {
+            if (userInfo == null || userInfo.id() == null || userInfo.kakaoAccount() == null
+                    || userInfo.kakaoAccount().email() == null) {
                 throw new GeneralException(GeneralErrorCode.INVALID_CREDENTIALS);
             }
             return userInfo;
         } catch (HttpClientErrorException e) {
-            log.warn("[GoogleOAuth] fetchUserInfo failed. status={}, body={}",
+            log.warn("[KakaoOAuth] fetchUserInfo failed. status={}, body={}",
                     e.getStatusCode(), e.getResponseBodyAsString());
             throw new GeneralException(GeneralErrorCode.INVALID_CREDENTIALS, e);
         } catch (HttpServerErrorException | ResourceAccessException e) {
-            log.warn("[GoogleOAuth] fetchUserInfo failed. cause={}", e.getMessage());
+            log.warn("[KakaoOAuth] fetchUserInfo failed. cause={}", e.getMessage());
             throw new GeneralException(GeneralErrorCode.SOCIAL_LOGIN_UNAVAILABLE, e);
         }
     }
 
-    /** 기존 Google 사용자를 조회하고, 없으면 신규 가입 처리한다. */
-    private UserAccount findOrCreateUser(GoogleUserInfo userInfo) {
+    /** 기존 Kakao 사용자를 조회하고, 없으면 신규 가입 처리한다. */
+    private UserAccount findOrCreateUser(KakaoUserInfo userInfo) {
+        String providerId = String.valueOf(userInfo.id());
         return userAccountRepository
-                .findByProviderAndProviderId(AuthProvider.GOOGLE, userInfo.sub())
-                .orElseGet(() -> createUser(userInfo));
+                .findByProviderAndProviderId(AuthProvider.KAKAO, providerId)
+                .orElseGet(() -> createUser(userInfo, providerId));
     }
 
     /**
-     * 신규 Google 사용자를 저장한다.
+     * 신규 Kakao 사용자를 저장한다.
      *
      * <p>동시 요청으로 중복 삽입이 발생하면 이미 저장된 사용자를 반환한다.</p>
      *
      * @throws GeneralException 동일 이메일로 다른 provider 계정이 존재하면 SOCIAL_LOGIN_EMAIL_CONFLICT
      */
-    private UserAccount createUser(GoogleUserInfo userInfo) {
-        userAccountRepository.findByEmail(userInfo.email()).ifPresent(existing -> {
+    private UserAccount createUser(KakaoUserInfo userInfo, String providerId) {
+        String email = userInfo.kakaoAccount().email();
+        userAccountRepository.findByEmail(email).ifPresent(existing -> {
             throw new GeneralException(GeneralErrorCode.SOCIAL_LOGIN_EMAIL_CONFLICT);
         });
 
+        String nickname = Optional.ofNullable(userInfo.kakaoAccount().profile())
+                .map(KakaoProfile::nickname)
+                .orElse("카카오 사용자");
+
         try {
             return userAccountRepository.save(UserAccount.builder()
-                    .email(userInfo.email())
-                    .nickname(userInfo.name())
-                    .provider(AuthProvider.GOOGLE)
-                    .providerId(userInfo.sub())
+                    .email(email)
+                    .nickname(nickname)
+                    .provider(AuthProvider.KAKAO)
+                    .providerId(providerId)
                     .build());
         } catch (DataIntegrityViolationException e) {
             return userAccountRepository
-                    .findByProviderAndProviderId(AuthProvider.GOOGLE, userInfo.sub())
+                    .findByProviderAndProviderId(AuthProvider.KAKAO, providerId)
                     .orElseThrow(() -> new GeneralException(GeneralErrorCode.INTERNAL_SERVER_ERROR, e));
         }
     }
 
-    record GoogleTokenResponse(@JsonProperty("access_token") String accessToken) {}
+    record KakaoTokenResponse(@JsonProperty("access_token") String accessToken) {}
 
-    record GoogleUserInfo(String sub, String email, String name, @JsonProperty("email_verified") Boolean emailVerified) {}
+    record KakaoUserInfo(Long id, @JsonProperty("kakao_account") KakaoAccount kakaoAccount) {}
+
+    record KakaoAccount(
+            String email,
+            @JsonProperty("is_email_verified") Boolean emailVerified,
+            @JsonProperty("is_email_valid") Boolean emailValid,
+            KakaoProfile profile) {}
+
+    record KakaoProfile(String nickname) {}
 }

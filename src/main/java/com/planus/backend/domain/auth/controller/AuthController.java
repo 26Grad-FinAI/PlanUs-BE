@@ -7,6 +7,7 @@ import com.planus.backend.domain.auth.dto.SignUpResponse;
 import com.planus.backend.domain.auth.dto.SocialLoginRequest;
 import com.planus.backend.domain.auth.service.AuthService;
 import com.planus.backend.domain.auth.service.GoogleOAuthService;
+import com.planus.backend.domain.auth.service.KakaoOAuthService;
 import com.planus.backend.global.apiPayload.ApiResponse;
 import com.planus.backend.global.apiPayload.code.GeneralSuccessCode;
 import jakarta.validation.Valid;
@@ -26,6 +27,7 @@ public class AuthController {
 
     private final AuthService authService;
     private final GoogleOAuthService googleOAuthService;
+    private final KakaoOAuthService kakaoOAuthService;
 
     /**
      * 신규 회원을 등록하고 JWT 액세스/리프레시 토큰을 발급한다.
@@ -60,5 +62,16 @@ public class AuthController {
     @PostMapping("/oauth2/google")
     public ApiResponse<LoginResponse> googleLogin(@Valid @RequestBody SocialLoginRequest request) {
         return ApiResponse.onSuccess(GeneralSuccessCode.OK, googleOAuthService.login(request));
+    }
+
+    /**
+     * Kakao 인가코드로 소셜 로그인하고 JWT 액세스/리프레시 토큰을 발급한다.
+     *
+     * @param request 인가코드, 리다이렉트 URI
+     * @return 200 OK, userId·email·토큰·프로필 완료 여부
+     */
+    @PostMapping("/oauth2/kakao")
+    public ApiResponse<LoginResponse> kakaoLogin(@Valid @RequestBody SocialLoginRequest request) {
+        return ApiResponse.onSuccess(GeneralSuccessCode.OK, kakaoOAuthService.login(request));
     }
 }
