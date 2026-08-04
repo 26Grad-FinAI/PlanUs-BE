@@ -15,6 +15,7 @@ import com.planus.backend.domain.auth.dto.SignUpResponse;
 import com.planus.backend.domain.auth.dto.SocialLoginRequest;
 import com.planus.backend.domain.auth.service.AuthService;
 import com.planus.backend.domain.auth.service.GoogleOAuthService;
+import com.planus.backend.domain.auth.service.KakaoOAuthService;
 import com.planus.backend.global.apiPayload.code.GeneralErrorCode;
 import com.planus.backend.global.apiPayload.exception.GeneralException;
 import com.planus.backend.global.apiPayload.handler.GeneralExceptionAdvice;
@@ -31,13 +32,15 @@ class AuthControllerTest {
     private MockMvc mockMvc;
     private AuthService authService;
     private GoogleOAuthService googleOAuthService;
+    private KakaoOAuthService kakaoOAuthService;
     private final ObjectMapper objectMapper = new ObjectMapper();
 
     @BeforeEach
     void setUp() {
         authService = mock(AuthService.class);
         googleOAuthService = mock(GoogleOAuthService.class);
-        mockMvc = MockMvcBuilders.standaloneSetup(new AuthController(authService, googleOAuthService))
+        kakaoOAuthService = mock(KakaoOAuthService.class);
+        mockMvc = MockMvcBuilders.standaloneSetup(new AuthController(authService, googleOAuthService, kakaoOAuthService))
                 .setControllerAdvice(new GeneralExceptionAdvice())
                 .build();
     }
@@ -245,6 +248,59 @@ class AuthControllerTest {
                     .thenThrow(new GeneralException(GeneralErrorCode.INVALID_CREDENTIALS));
 
             mockMvc.perform(post("/api/auth/oauth2/google")
+                            .contentType(MediaType.APPLICATION_JSON)
+                            .content(objectMapper.writeValueAsString(
+                                    new SocialLoginRequest("bad-code", "http://localhost/callback"))))
+                    .andExpect(status().isUnauthorized())
+                    .andExpect(jsonPath("$.isSuccess").value(false))
+                    .andExpect(jsonPath("$.code").value("AUTH_401_002"));
+        }
+    }
+
+    @Nested
+    @DisplayName("POST /api/auth/oauth2/kakao 성공")
+    class KakaoLoginSuccess {
+
+        @Test
+        @DisplayName("올바른 인가코드로 200과 토큰을 반환한다")
+        void kakaoLogin_success_returns200() throws Exception {
+            LoginResponse response =
+                    new LoginResponse(1L, "user@kakao.com", "access-token", "refresh-token", false);
+            when(kakaoOAuthService.login(any())).thenReturn(response);
+
+            mockMvc.perform(post("/api/auth/oauth2/kakao")
+                            .contentType(MediaType.APPLICATION_JSON)
+                            .content(objectMapper.writeValueAsString(
+                                    new SocialLoginRequest("auth-code", "http://localhost/callback"))))
+                    .andExpect(status().isOk())
+                    .andExpect(jsonPath("$.isSuccess").value(true))
+                    .andExpect(jsonPath("$.result.userId").value(1L))
+                    .andExpect(jsonPath("$.result.accessToken").value("access-token"))
+                    .andExpect(jsonPath("$.result.refreshToken").value("refresh-token"));
+        }
+    }
+
+    @Nested
+    @DisplayName("POST /api/auth/oauth2/kakao 실패")
+    class KakaoLoginFailure {
+
+        @Test
+        @DisplayName("필수 필드 누락 시 400을 반환한다")
+        void kakaoLogin_missingField_returns400() throws Exception {
+            mockMvc.perform(post("/api/auth/oauth2/kakao")
+                            .contentType(MediaType.APPLICATION_JSON)
+                            .content("{}"))
+                    .andExpect(status().isBadRequest())
+                    .andExpect(jsonPath("$.code").value("COMMON_400_002"));
+        }
+
+        @Test
+        @DisplayName("유효하지 않은 인가코드면 401을 반환한다")
+        void kakaoLogin_invalidCode_returns401() throws Exception {
+            when(kakaoOAuthService.login(any()))
+                    .thenThrow(new GeneralException(GeneralErrorCode.INVALID_CREDENTIALS));
+
+            mockMvc.perform(post("/api/auth/oauth2/kakao")
                             .contentType(MediaType.APPLICATION_JSON)
                             .content(objectMapper.writeValueAsString(
                                     new SocialLoginRequest("bad-code", "http://localhost/callback"))))
