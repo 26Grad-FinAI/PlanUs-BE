@@ -20,3 +20,4 @@ planus:
       client-secret: ${GOOGLE_CLIENT_SECRET}
       token-uri: https://oauth2.googleapis.com/token
       userinfo-uri: https://www.googleapis.com/oauth2/v3/userinfo
+      allowed-redirect-uris: ${GOOGLE_ALLOWED_REDIRECT_URIS}
