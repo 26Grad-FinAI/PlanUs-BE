@@ -11,6 +11,8 @@ import com.planus.backend.global.apiPayload.code.GeneralErrorCode;
 import com.planus.backend.global.apiPayload.exception.GeneralException;
 import com.planus.backend.global.security.JwtProvider;
 import java.util.List;
+import java.util.Optional;
+import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.http.MediaType;
@@ -24,6 +26,7 @@ import org.springframework.web.client.ResourceAccessException;
 import org.springframework.web.client.RestClient;
 
 /** Kakao OAuth2 인가코드 방식 소셜 로그인 서비스. */
+@Slf4j
 @Service
 public class KakaoOAuthService {
 
@@ -71,7 +74,8 @@ public class KakaoOAuthService {
         }
         String accessToken = fetchAccessToken(request.code(), request.redirectUri());
         KakaoUserInfo userInfo = fetchUserInfo(accessToken);
-        if (!Boolean.TRUE.equals(userInfo.kakaoAccount().emailVerified())) {
+        if (!Boolean.TRUE.equals(userInfo.kakaoAccount().emailVerified())
+                || !Boolean.TRUE.equals(userInfo.kakaoAccount().emailValid())) {
             throw new GeneralException(GeneralErrorCode.UNVERIFIED_SOCIAL_EMAIL);
         }
         UserAccount user = findOrCreateUser(userInfo);
@@ -109,8 +113,11 @@ public class KakaoOAuthService {
             }
             return response.accessToken();
         } catch (HttpClientErrorException e) {
+            log.warn("[KakaoOAuth] fetchAccessToken failed. status={}, body={}",
+                    e.getStatusCode(), e.getResponseBodyAsString());
             throw new GeneralException(GeneralErrorCode.INVALID_CREDENTIALS, e);
         } catch (HttpServerErrorException | ResourceAccessException e) {
+            log.warn("[KakaoOAuth] fetchAccessToken failed. cause={}", e.getMessage());
             throw new GeneralException(GeneralErrorCode.SOCIAL_LOGIN_UNAVAILABLE, e);
         }
     }
@@ -134,8 +141,11 @@ public class KakaoOAuthService {
             }
             return userInfo;
         } catch (HttpClientErrorException e) {
+            log.warn("[KakaoOAuth] fetchUserInfo failed. status={}, body={}",
+                    e.getStatusCode(), e.getResponseBodyAsString());
             throw new GeneralException(GeneralErrorCode.INVALID_CREDENTIALS, e);
         } catch (HttpServerErrorException | ResourceAccessException e) {
+            log.warn("[KakaoOAuth] fetchUserInfo failed. cause={}", e.getMessage());
             throw new GeneralException(GeneralErrorCode.SOCIAL_LOGIN_UNAVAILABLE, e);
         }
     }
@@ -161,10 +171,14 @@ public class KakaoOAuthService {
             throw new GeneralException(GeneralErrorCode.SOCIAL_LOGIN_EMAIL_CONFLICT);
         });
 
+        String nickname = Optional.ofNullable(userInfo.kakaoAccount().profile())
+                .map(KakaoProfile::nickname)
+                .orElse("카카오 사용자");
+
         try {
             return userAccountRepository.save(UserAccount.builder()
                     .email(email)
-                    .nickname(userInfo.kakaoAccount().profile().nickname())
+                    .nickname(nickname)
                     .provider(AuthProvider.KAKAO)
                     .providerId(providerId)
                     .build());
@@ -182,6 +196,7 @@ public class KakaoOAuthService {
     record KakaoAccount(
             String email,
             @JsonProperty("is_email_verified") Boolean emailVerified,
+            @JsonProperty("is_email_valid") Boolean emailValid,
             KakaoProfile profile) {}
 
     record KakaoProfile(String nickname) {}

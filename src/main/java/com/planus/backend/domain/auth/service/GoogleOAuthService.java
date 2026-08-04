@@ -11,6 +11,7 @@ import com.planus.backend.global.apiPayload.code.GeneralErrorCode;
 import com.planus.backend.global.apiPayload.exception.GeneralException;
 import com.planus.backend.global.security.JwtProvider;
 import java.util.List;
+import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.http.MediaType;
@@ -24,6 +25,7 @@ import org.springframework.web.client.ResourceAccessException;
 import org.springframework.web.client.RestClient;
 
 /** Google OAuth2 인가코드 방식 소셜 로그인 서비스. */
+@Slf4j
 @Service
 public class GoogleOAuthService {
 
@@ -109,8 +111,11 @@ public class GoogleOAuthService {
             }
             return response.accessToken();
         } catch (HttpClientErrorException e) {
+            log.warn("[GoogleOAuth] fetchAccessToken failed. status={}, body={}",
+                    e.getStatusCode(), e.getResponseBodyAsString());
             throw new GeneralException(GeneralErrorCode.INVALID_CREDENTIALS, e);
         } catch (HttpServerErrorException | ResourceAccessException e) {
+            log.warn("[GoogleOAuth] fetchAccessToken failed. cause={}", e.getMessage());
             throw new GeneralException(GeneralErrorCode.SOCIAL_LOGIN_UNAVAILABLE, e);
         }
     }
@@ -133,8 +138,11 @@ public class GoogleOAuthService {
             }
             return userInfo;
         } catch (HttpClientErrorException e) {
+            log.warn("[GoogleOAuth] fetchUserInfo failed. status={}, body={}",
+                    e.getStatusCode(), e.getResponseBodyAsString());
             throw new GeneralException(GeneralErrorCode.INVALID_CREDENTIALS, e);
         } catch (HttpServerErrorException | ResourceAccessException e) {
+            log.warn("[GoogleOAuth] fetchUserInfo failed. cause={}", e.getMessage());
             throw new GeneralException(GeneralErrorCode.SOCIAL_LOGIN_UNAVAILABLE, e);
         }
     }

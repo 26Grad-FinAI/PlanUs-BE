@@ -62,6 +62,7 @@ class KakaoOAuthServiceHttpContractTest {
                         containsString("code=auth-code"),
                         containsString("client_id=test-client-id"),
                         containsString("client_secret=test-client-secret"),
+                        containsString("redirect_uri=http%3A%2F%2Flocalhost%2Fcallback"),
                         containsString("grant_type=authorization_code"))))
                 .andRespond(withSuccess(
                         "{\"access_token\":\"kakao-access-token\"}",
@@ -84,6 +85,7 @@ class KakaoOAuthServiceHttpContractTest {
                                 + "\"kakao_account\":{"
                                 + "\"email\":\"user@kakao.com\","
                                 + "\"is_email_verified\":true,"
+                                + "\"is_email_valid\":true,"
                                 + "\"profile\":{\"nickname\":\"홍길동\"}}}",
                         MediaType.APPLICATION_JSON));
 
@@ -106,6 +108,7 @@ class KakaoOAuthServiceHttpContractTest {
                 .isInstanceOf(GeneralException.class)
                 .satisfies(ex -> assertThat(((GeneralException) ex).getErrorCode())
                         .isEqualTo(GeneralErrorCode.INVALID_CREDENTIALS));
+        mockServer.verify();
     }
 
     @Test
@@ -118,5 +121,6 @@ class KakaoOAuthServiceHttpContractTest {
                 .isInstanceOf(GeneralException.class)
                 .satisfies(ex -> assertThat(((GeneralException) ex).getErrorCode())
                         .isEqualTo(GeneralErrorCode.SOCIAL_LOGIN_UNAVAILABLE));
+        mockServer.verify();
     }
 }
