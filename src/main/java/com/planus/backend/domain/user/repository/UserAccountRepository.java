@@ -1,5 +1,6 @@
 package com.planus.backend.domain.user.repository;
 
+import com.planus.backend.domain.user.entity.AuthProvider;
 import com.planus.backend.domain.user.entity.UserAccount;
 import java.util.List;
 import java.util.Optional;
@@ -15,4 +16,6 @@ public interface UserAccountRepository extends JpaRepository<UserAccount, Long> 
     Optional<UserAccount> findByEmail(String email);
 
     boolean existsByEmail(String email);
+
+    Optional<UserAccount> findByProviderAndProviderId(AuthProvider provider, String providerId);
 }

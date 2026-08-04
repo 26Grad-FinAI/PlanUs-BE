@@ -56,6 +56,7 @@ tasks.named('test') {
 	testLogging {
 		showStandardStreams = project.hasProperty('showTestOutput')
 	}
+	jvmArgs '-XX:+EnableDynamicAgentLoading', '-Xshare:off'
 }
 
 // 실제 LLM API를 호출하는 테스트 — ANTHROPIC_API_KEY 환경변수 필요
