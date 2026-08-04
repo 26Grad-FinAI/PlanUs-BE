@@ -4,6 +4,7 @@ import com.fasterxml.jackson.annotation.JsonProperty;
 import com.planus.backend.domain.auth.converter.AuthConverter;
 import com.planus.backend.domain.auth.dto.LoginResponse;
 import com.planus.backend.domain.auth.dto.SocialLoginRequest;
+import com.planus.backend.domain.user.UserAccountPersister;
 import com.planus.backend.domain.user.entity.AuthProvider;
 import com.planus.backend.domain.user.entity.UserAccount;
 import com.planus.backend.domain.user.repository.UserAccountRepository;
@@ -30,6 +31,7 @@ import org.springframework.web.client.RestClient;
 public class GoogleOAuthService {
 
     private final UserAccountRepository userAccountRepository;
+    private final UserAccountPersister userAccountPersister;
     private final JwtProvider jwtProvider;
     private final RestClient restClient;
     private final String clientId;
@@ -40,6 +42,7 @@ public class GoogleOAuthService {
 
     public GoogleOAuthService(
             UserAccountRepository userAccountRepository,
+            UserAccountPersister userAccountPersister,
             JwtProvider jwtProvider,
             RestClient restClient,
             @Value("${planus.oauth2.google.client-id}") String clientId,
@@ -48,6 +51,7 @@ public class GoogleOAuthService {
             @Value("${planus.oauth2.google.userinfo-uri}") String userinfoUri,
             @Value("${planus.oauth2.google.allowed-redirect-uris}") List<String> allowedRedirectUris) {
         this.userAccountRepository = userAccountRepository;
+        this.userAccountPersister = userAccountPersister;
         this.jwtProvider = jwtProvider;
         this.restClient = restClient;
         this.clientId = clientId;
@@ -167,7 +171,7 @@ public class GoogleOAuthService {
         });
 
         try {
-            return userAccountRepository.save(UserAccount.builder()
+            return userAccountPersister.saveAndFlush(UserAccount.builder()
                     .email(userInfo.email())
                     .nickname(userInfo.name())
                     .provider(AuthProvider.GOOGLE)

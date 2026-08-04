@@ -14,6 +14,7 @@ import static org.mockito.Mockito.when;
 
 import com.planus.backend.domain.auth.dto.LoginResponse;
 import com.planus.backend.domain.auth.dto.SocialLoginRequest;
+import com.planus.backend.domain.user.UserAccountPersister;
 import com.planus.backend.domain.user.entity.AuthProvider;
 import com.planus.backend.domain.user.entity.UserAccount;
 import com.planus.backend.domain.user.repository.UserAccountRepository;
@@ -35,15 +36,18 @@ import org.springframework.web.client.RestClient;
 class KakaoOAuthServiceTest {
 
     private UserAccountRepository userAccountRepository;
+    private UserAccountPersister userAccountPersister;
     private JwtProvider jwtProvider;
     private KakaoOAuthService kakaoOAuthService;
 
     @BeforeEach
     void setUp() {
         userAccountRepository = mock(UserAccountRepository.class);
+        userAccountPersister = mock(UserAccountPersister.class);
         jwtProvider = mock(JwtProvider.class);
         kakaoOAuthService = spy(new KakaoOAuthService(
                 userAccountRepository,
+                userAccountPersister,
                 jwtProvider,
                 mock(RestClient.class),
                 "client-id",
@@ -91,7 +95,7 @@ class KakaoOAuthServiceTest {
                     .provider(AuthProvider.KAKAO)
                     .providerId("123456789")
                     .build());
-            when(userAccountRepository.save(any())).thenReturn(spyUser);
+            when(userAccountPersister.saveAndFlush(any())).thenReturn(spyUser);
             when(jwtProvider.generateAccessToken(1L)).thenReturn("access-token");
             when(jwtProvider.generateRefreshToken(1L)).thenReturn("refresh-token");
             when(jwtProvider.hashToken("refresh-token")).thenReturn("hashed-token");
@@ -126,7 +130,7 @@ class KakaoOAuthServiceTest {
             assertThat(response.userId()).isEqualTo(2L);
             assertThat(response.accessToken()).isEqualTo("access-token");
             verify(spyUser).updateRefreshToken("hashed-token");
-            verify(userAccountRepository, never()).save(any());
+            verify(userAccountPersister, never()).saveAndFlush(any());
         }
 
         @Test
@@ -148,7 +152,7 @@ class KakaoOAuthServiceTest {
                     .provider(AuthProvider.KAKAO)
                     .providerId("123456789")
                     .build());
-            when(userAccountRepository.save(any())).thenReturn(spyUser);
+            when(userAccountPersister.saveAndFlush(any())).thenReturn(spyUser);
             when(jwtProvider.generateAccessToken(1L)).thenReturn("access-token");
             when(jwtProvider.generateRefreshToken(1L)).thenReturn("refresh-token");
             when(jwtProvider.hashToken("refresh-token")).thenReturn("hashed-token");
@@ -173,7 +177,7 @@ class KakaoOAuthServiceTest {
                     .thenReturn(Optional.empty())
                     .thenReturn(Optional.of(existingUser));
             when(userAccountRepository.findByEmail("user@kakao.com")).thenReturn(Optional.empty());
-            when(userAccountRepository.save(any())).thenThrow(new DataIntegrityViolationException("duplicate"));
+            when(userAccountPersister.saveAndFlush(any())).thenThrow(new DataIntegrityViolationException("duplicate"));
             when(jwtProvider.generateAccessToken(3L)).thenReturn("access-token");
             when(jwtProvider.generateRefreshToken(3L)).thenReturn("refresh-token");
             when(jwtProvider.hashToken("refresh-token")).thenReturn("hashed-token");

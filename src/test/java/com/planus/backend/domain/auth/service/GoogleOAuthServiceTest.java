@@ -14,6 +14,7 @@ import static org.mockito.Mockito.when;
 
 import com.planus.backend.domain.auth.dto.LoginResponse;
 import com.planus.backend.domain.auth.dto.SocialLoginRequest;
+import com.planus.backend.domain.user.UserAccountPersister;
 import com.planus.backend.domain.user.entity.AuthProvider;
 import com.planus.backend.domain.user.entity.UserAccount;
 import com.planus.backend.domain.user.repository.UserAccountRepository;
@@ -35,15 +36,18 @@ import org.springframework.web.client.RestClient;
 class GoogleOAuthServiceTest {
 
     private UserAccountRepository userAccountRepository;
+    private UserAccountPersister userAccountPersister;
     private JwtProvider jwtProvider;
     private GoogleOAuthService googleOAuthService;
 
     @BeforeEach
     void setUp() {
         userAccountRepository = mock(UserAccountRepository.class);
+        userAccountPersister = mock(UserAccountPersister.class);
         jwtProvider = mock(JwtProvider.class);
         googleOAuthService = spy(new GoogleOAuthService(
                 userAccountRepository,
+                userAccountPersister,
                 jwtProvider,
                 mock(RestClient.class),
                 "client-id",
@@ -85,7 +89,7 @@ class GoogleOAuthServiceTest {
                     .provider(AuthProvider.GOOGLE)
                     .providerId("sub123")
                     .build());
-            when(userAccountRepository.save(any())).thenReturn(spyUser);
+            when(userAccountPersister.saveAndFlush(any())).thenReturn(spyUser);
             when(jwtProvider.generateAccessToken(1L)).thenReturn("access-token");
             when(jwtProvider.generateRefreshToken(1L)).thenReturn("refresh-token");
             when(jwtProvider.hashToken("refresh-token")).thenReturn("hashed-token");
@@ -120,7 +124,7 @@ class GoogleOAuthServiceTest {
             assertThat(response.userId()).isEqualTo(2L);
             assertThat(response.accessToken()).isEqualTo("access-token");
             verify(spyUser).updateRefreshToken("hashed-token");
-            verify(userAccountRepository, never()).save(any());
+            verify(userAccountPersister, never()).saveAndFlush(any());
         }
 
         @Test
@@ -137,7 +141,7 @@ class GoogleOAuthServiceTest {
                     .thenReturn(Optional.empty())          // 첫 조회: 없음
                     .thenReturn(Optional.of(existingUser)); // 중복 키 후 재조회: 있음
             when(userAccountRepository.findByEmail("user@example.com")).thenReturn(Optional.empty());
-            when(userAccountRepository.save(any())).thenThrow(new DataIntegrityViolationException("duplicate"));
+            when(userAccountPersister.saveAndFlush(any())).thenThrow(new DataIntegrityViolationException("duplicate"));
             when(jwtProvider.generateAccessToken(3L)).thenReturn("access-token");
             when(jwtProvider.generateRefreshToken(3L)).thenReturn("refresh-token");
             when(jwtProvider.hashToken("refresh-token")).thenReturn("hashed-token");

@@ -13,6 +13,7 @@ import static org.springframework.test.web.client.response.MockRestResponseCreat
 import static org.springframework.test.web.client.response.MockRestResponseCreators.withStatus;
 import static org.springframework.test.web.client.response.MockRestResponseCreators.withSuccess;
 
+import com.planus.backend.domain.user.UserAccountPersister;
 import com.planus.backend.domain.user.repository.UserAccountRepository;
 import com.planus.backend.global.apiPayload.code.GeneralErrorCode;
 import com.planus.backend.global.apiPayload.exception.GeneralException;
@@ -43,6 +44,7 @@ class GoogleOAuthServiceHttpContractTest {
         RestClient restClient = RestClient.create(restTemplate);
         googleOAuthService = new GoogleOAuthService(
                 mock(UserAccountRepository.class),
+                mock(UserAccountPersister.class),
                 mock(JwtProvider.class),
                 restClient,
                 "test-client-id",
