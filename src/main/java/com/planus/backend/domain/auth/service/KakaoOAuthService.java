@@ -180,17 +180,18 @@ public class KakaoOAuthService {
                 .orElse("카카오 사용자");
 
         try {
-            return userAccountPersister.saveAndFlush(UserAccount.builder()
+            userAccountPersister.saveAndFlush(UserAccount.builder()
                     .email(email)
                     .nickname(nickname)
                     .provider(AuthProvider.KAKAO)
                     .providerId(providerId)
                     .build());
         } catch (DataIntegrityViolationException e) {
-            return userAccountRepository
-                    .findByProviderAndProviderId(AuthProvider.KAKAO, providerId)
-                    .orElseThrow(() -> new GeneralException(GeneralErrorCode.INTERNAL_SERVER_ERROR, e));
+            // 동시 요청으로 중복 삽입 발생 시 이미 저장된 사용자를 반환한다.
         }
+        return userAccountRepository
+                .findByProviderAndProviderId(AuthProvider.KAKAO, providerId)
+                .orElseThrow(() -> new GeneralException(GeneralErrorCode.INTERNAL_SERVER_ERROR));
     }
 
     record KakaoTokenResponse(@JsonProperty("access_token") String accessToken) {}

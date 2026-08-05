@@ -171,17 +171,18 @@ public class GoogleOAuthService {
         });
 
         try {
-            return userAccountPersister.saveAndFlush(UserAccount.builder()
+            userAccountPersister.saveAndFlush(UserAccount.builder()
                     .email(userInfo.email())
                     .nickname(userInfo.name())
                     .provider(AuthProvider.GOOGLE)
                     .providerId(userInfo.sub())
                     .build());
         } catch (DataIntegrityViolationException e) {
-            return userAccountRepository
-                    .findByProviderAndProviderId(AuthProvider.GOOGLE, userInfo.sub())
-                    .orElseThrow(() -> new GeneralException(GeneralErrorCode.INTERNAL_SERVER_ERROR, e));
+            // 동시 요청으로 중복 삽입 발생 시 이미 저장된 사용자를 반환한다.
         }
+        return userAccountRepository
+                .findByProviderAndProviderId(AuthProvider.GOOGLE, userInfo.sub())
+                .orElseThrow(() -> new GeneralException(GeneralErrorCode.INTERNAL_SERVER_ERROR));
     }
 
     record GoogleTokenResponse(@JsonProperty("access_token") String accessToken) {}

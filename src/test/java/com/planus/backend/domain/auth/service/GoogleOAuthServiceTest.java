@@ -78,10 +78,6 @@ class GoogleOAuthServiceTest {
         @DisplayName("신규 Google 사용자는 DB에 저장되고 JWT가 발급된다")
         void login_newUser_savesAndReturnsTokens() {
             stubOAuthCalls();
-            when(userAccountRepository.findByProviderAndProviderId(AuthProvider.GOOGLE, "sub123"))
-                    .thenReturn(Optional.empty());
-            when(userAccountRepository.findByEmail("user@example.com")).thenReturn(Optional.empty());
-
             UserAccount spyUser = spy(UserAccount.builder()
                     .id(1L)
                     .email("user@example.com")
@@ -89,7 +85,10 @@ class GoogleOAuthServiceTest {
                     .provider(AuthProvider.GOOGLE)
                     .providerId("sub123")
                     .build());
-            when(userAccountPersister.saveAndFlush(any())).thenReturn(spyUser);
+            when(userAccountRepository.findByProviderAndProviderId(AuthProvider.GOOGLE, "sub123"))
+                    .thenReturn(Optional.empty())           // findOrCreateUser 최초 조회
+                    .thenReturn(Optional.of(spyUser));      // saveAndFlush 후 T1 재조회
+            when(userAccountRepository.findByEmail("user@example.com")).thenReturn(Optional.empty());
             when(jwtProvider.generateAccessToken(1L)).thenReturn("access-token");
             when(jwtProvider.generateRefreshToken(1L)).thenReturn("refresh-token");
             when(jwtProvider.hashToken("refresh-token")).thenReturn("hashed-token");

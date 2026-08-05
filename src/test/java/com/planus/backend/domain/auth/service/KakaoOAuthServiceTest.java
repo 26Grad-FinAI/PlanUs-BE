@@ -84,10 +84,6 @@ class KakaoOAuthServiceTest {
         @DisplayName("신규 Kakao 사용자는 DB에 저장되고 JWT가 발급된다")
         void login_newUser_savesAndReturnsTokens() {
             stubOAuthCalls();
-            when(userAccountRepository.findByProviderAndProviderId(AuthProvider.KAKAO, "123456789"))
-                    .thenReturn(Optional.empty());
-            when(userAccountRepository.findByEmail("user@kakao.com")).thenReturn(Optional.empty());
-
             UserAccount spyUser = spy(UserAccount.builder()
                     .id(1L)
                     .email("user@kakao.com")
@@ -95,7 +91,10 @@ class KakaoOAuthServiceTest {
                     .provider(AuthProvider.KAKAO)
                     .providerId("123456789")
                     .build());
-            when(userAccountPersister.saveAndFlush(any())).thenReturn(spyUser);
+            when(userAccountRepository.findByProviderAndProviderId(AuthProvider.KAKAO, "123456789"))
+                    .thenReturn(Optional.empty())           // findOrCreateUser 최초 조회
+                    .thenReturn(Optional.of(spyUser));      // saveAndFlush 후 T1 재조회
+            when(userAccountRepository.findByEmail("user@kakao.com")).thenReturn(Optional.empty());
             when(jwtProvider.generateAccessToken(1L)).thenReturn("access-token");
             when(jwtProvider.generateRefreshToken(1L)).thenReturn("refresh-token");
             when(jwtProvider.hashToken("refresh-token")).thenReturn("hashed-token");
@@ -141,10 +140,6 @@ class KakaoOAuthServiceTest {
                     new KakaoOAuthService.KakaoAccount("user@kakao.com", true, true, null));
             doReturn("kakao-access-token").when(kakaoOAuthService).fetchAccessToken(anyString(), anyString());
             doReturn(noProfileUserInfo).when(kakaoOAuthService).fetchUserInfo("kakao-access-token");
-            when(userAccountRepository.findByProviderAndProviderId(AuthProvider.KAKAO, "123456789"))
-                    .thenReturn(Optional.empty());
-            when(userAccountRepository.findByEmail("user@kakao.com")).thenReturn(Optional.empty());
-
             UserAccount spyUser = spy(UserAccount.builder()
                     .id(1L)
                     .email("user@kakao.com")
@@ -152,7 +147,10 @@ class KakaoOAuthServiceTest {
                     .provider(AuthProvider.KAKAO)
                     .providerId("123456789")
                     .build());
-            when(userAccountPersister.saveAndFlush(any())).thenReturn(spyUser);
+            when(userAccountRepository.findByProviderAndProviderId(AuthProvider.KAKAO, "123456789"))
+                    .thenReturn(Optional.empty())           // findOrCreateUser 최초 조회
+                    .thenReturn(Optional.of(spyUser));      // saveAndFlush 후 T1 재조회
+            when(userAccountRepository.findByEmail("user@kakao.com")).thenReturn(Optional.empty());
             when(jwtProvider.generateAccessToken(1L)).thenReturn("access-token");
             when(jwtProvider.generateRefreshToken(1L)).thenReturn("refresh-token");
             when(jwtProvider.hashToken("refresh-token")).thenReturn("hashed-token");
