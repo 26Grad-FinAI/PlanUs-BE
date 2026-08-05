@@ -3,6 +3,7 @@ package com.planus.backend.domain.auth.service;
 import com.planus.backend.domain.auth.converter.AuthConverter;
 import com.planus.backend.domain.auth.dto.LoginRequest;
 import com.planus.backend.domain.auth.dto.LoginResponse;
+import com.planus.backend.domain.auth.dto.ReissueRequest;
 import com.planus.backend.domain.auth.dto.SignUpRequest;
 import com.planus.backend.domain.auth.dto.SignUpResponse;
 import com.planus.backend.domain.user.entity.AuthProvider;
@@ -93,6 +94,37 @@ public class AuthService {
         user.updateRefreshToken(jwtProvider.hashToken(refreshToken));
 
         return AuthConverter.toLoginResponse(user, accessToken, refreshToken);
+    }
+
+    /**
+     * 리프레시 토큰을 검증하고 새 액세스/리프레시 토큰을 발급한다(Refresh Token Rotation).
+     *
+     * <p>제출된 토큰의 서명·만료를 검증한 뒤, SHA-256 해시를 DB 저장값과 비교한다.
+     * 검증 통과 시 새 토큰을 발급하고 DB의 해시를 갱신하여 이전 토큰을 무효화한다.</p>
+     *
+     * @param request 리프레시 토큰
+     * @return 새 액세스/리프레시 토큰 및 사용자 정보
+     * @throws GeneralException 만료된 토큰이면 EXPIRED_TOKEN, 불일치·변조면 INVALID_TOKEN
+     */
+    @Transactional
+    public LoginResponse reissue(ReissueRequest request) {
+        Long userId = jwtProvider.parseUserId(request.refreshToken());
+
+        UserAccount user =
+                userAccountRepository
+                        .findById(userId)
+                        .orElseThrow(() -> new GeneralException(GeneralErrorCode.INVALID_TOKEN));
+
+        String incomingHash = jwtProvider.hashToken(request.refreshToken());
+        if (!incomingHash.equals(user.getRefreshToken())) {
+            throw new GeneralException(GeneralErrorCode.INVALID_TOKEN);
+        }
+
+        String newAccessToken = jwtProvider.generateAccessToken(userId);
+        String newRefreshToken = jwtProvider.generateRefreshToken(userId);
+        user.updateRefreshToken(jwtProvider.hashToken(newRefreshToken));
+
+        return AuthConverter.toLoginResponse(user, newAccessToken, newRefreshToken);
     }
 
     private void validateTerms(boolean agreeToTerms) {

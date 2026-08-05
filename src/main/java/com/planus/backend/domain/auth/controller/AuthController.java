@@ -2,6 +2,7 @@ package com.planus.backend.domain.auth.controller;
 
 import com.planus.backend.domain.auth.dto.LoginRequest;
 import com.planus.backend.domain.auth.dto.LoginResponse;
+import com.planus.backend.domain.auth.dto.ReissueRequest;
 import com.planus.backend.domain.auth.dto.SignUpRequest;
 import com.planus.backend.domain.auth.dto.SignUpResponse;
 import com.planus.backend.domain.auth.dto.SocialLoginRequest;
@@ -73,5 +74,16 @@ public class AuthController {
     @PostMapping("/oauth2/kakao")
     public ApiResponse<LoginResponse> kakaoLogin(@Valid @RequestBody SocialLoginRequest request) {
         return ApiResponse.onSuccess(GeneralSuccessCode.OK, kakaoOAuthService.login(request));
+    }
+
+    /**
+     * 리프레시 토큰을 검증하고 새 액세스/리프레시 토큰을 발급한다.
+     *
+     * @param request 리프레시 토큰
+     * @return 200 OK, userId·email·새 토큰·프로필 완료 여부
+     */
+    @PostMapping("/reissue")
+    public ApiResponse<LoginResponse> reissue(@Valid @RequestBody ReissueRequest request) {
+        return ApiResponse.onSuccess(GeneralSuccessCode.OK, authService.reissue(request));
     }
 }

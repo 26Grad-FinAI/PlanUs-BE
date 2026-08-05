@@ -10,6 +10,7 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.planus.backend.domain.auth.dto.LoginRequest;
 import com.planus.backend.domain.auth.dto.LoginResponse;
+import com.planus.backend.domain.auth.dto.ReissueRequest;
 import com.planus.backend.domain.auth.dto.SignUpRequest;
 import com.planus.backend.domain.auth.dto.SignUpResponse;
 import com.planus.backend.domain.auth.dto.SocialLoginRequest;
@@ -307,6 +308,68 @@ class AuthControllerTest {
                     .andExpect(status().isUnauthorized())
                     .andExpect(jsonPath("$.isSuccess").value(false))
                     .andExpect(jsonPath("$.code").value("AUTH_401_002"));
+        }
+    }
+
+    @Nested
+    @DisplayName("POST /api/auth/reissue 성공")
+    class ReissueSuccess {
+
+        @Test
+        @DisplayName("유효한 리프레시 토큰으로 200과 새 토큰을 반환한다")
+        void reissue_success_returns200() throws Exception {
+            LoginResponse response =
+                    new LoginResponse(1L, "user@example.com", "new-access-token", "new-refresh-token", false);
+            when(authService.reissue(any())).thenReturn(response);
+
+            mockMvc.perform(post("/api/auth/reissue")
+                            .contentType(MediaType.APPLICATION_JSON)
+                            .content(objectMapper.writeValueAsString(new ReissueRequest("valid-refresh-token"))))
+                    .andExpect(status().isOk())
+                    .andExpect(jsonPath("$.isSuccess").value(true))
+                    .andExpect(jsonPath("$.result.accessToken").value("new-access-token"))
+                    .andExpect(jsonPath("$.result.refreshToken").value("new-refresh-token"));
+        }
+    }
+
+    @Nested
+    @DisplayName("POST /api/auth/reissue 실패")
+    class ReissueFailure {
+
+        @Test
+        @DisplayName("필수 필드 누락 시 400을 반환한다")
+        void reissue_missingField_returns400() throws Exception {
+            mockMvc.perform(post("/api/auth/reissue")
+                            .contentType(MediaType.APPLICATION_JSON)
+                            .content("{}"))
+                    .andExpect(status().isBadRequest())
+                    .andExpect(jsonPath("$.code").value("COMMON_400_002"));
+        }
+
+        @Test
+        @DisplayName("만료된 리프레시 토큰이면 401을 반환한다")
+        void reissue_expiredToken_returns401() throws Exception {
+            when(authService.reissue(any())).thenThrow(new GeneralException(GeneralErrorCode.EXPIRED_TOKEN));
+
+            mockMvc.perform(post("/api/auth/reissue")
+                            .contentType(MediaType.APPLICATION_JSON)
+                            .content(objectMapper.writeValueAsString(new ReissueRequest("expired-token"))))
+                    .andExpect(status().isUnauthorized())
+                    .andExpect(jsonPath("$.isSuccess").value(false))
+                    .andExpect(jsonPath("$.code").value("AUTH_401_004"));
+        }
+
+        @Test
+        @DisplayName("유효하지 않은 리프레시 토큰이면 401을 반환한다")
+        void reissue_invalidToken_returns401() throws Exception {
+            when(authService.reissue(any())).thenThrow(new GeneralException(GeneralErrorCode.INVALID_TOKEN));
+
+            mockMvc.perform(post("/api/auth/reissue")
+                            .contentType(MediaType.APPLICATION_JSON)
+                            .content(objectMapper.writeValueAsString(new ReissueRequest("invalid-token"))))
+                    .andExpect(status().isUnauthorized())
+                    .andExpect(jsonPath("$.isSuccess").value(false))
+                    .andExpect(jsonPath("$.code").value("AUTH_401_003"));
         }
     }
 }
