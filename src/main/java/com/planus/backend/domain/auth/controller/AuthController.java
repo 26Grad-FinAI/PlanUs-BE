@@ -14,6 +14,7 @@ import com.planus.backend.global.apiPayload.code.GeneralSuccessCode;
 import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
 import org.springframework.http.HttpStatus;
+import org.springframework.security.core.annotation.AuthenticationPrincipal;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
@@ -85,5 +86,17 @@ public class AuthController {
     @PostMapping("/reissue")
     public ApiResponse<LoginResponse> reissue(@Valid @RequestBody ReissueRequest request) {
         return ApiResponse.onSuccess(GeneralSuccessCode.OK, authService.reissue(request));
+    }
+
+    /**
+     * 로그아웃하고 DB의 리프레시 토큰 해시를 삭제한다.
+     *
+     * @param authentication JWT 필터가 주입한 인증 정보 (userId 포함)
+     * @return 200 OK
+     */
+    @PostMapping("/logout")
+    public ApiResponse<Void> logout(@AuthenticationPrincipal Long userId) {
+        authService.logout(userId);
+        return ApiResponse.onSuccess(GeneralSuccessCode.OK);
     }
 }

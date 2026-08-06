@@ -131,6 +131,22 @@ public class AuthService {
         return AuthConverter.toLoginResponse(user, newAccessToken, newRefreshToken);
     }
 
+    /**
+     * 로그아웃을 처리한다.
+     *
+     * <p>DB에 저장된 리프레시 토큰 해시를 null로 갱신하여 이후 토큰 재발급을 불가능하게 만든다.</p>
+     *
+     * @param userId 로그아웃할 사용자 ID (SecurityContext에서 추출)
+     */
+    @Transactional
+    public void logout(Long userId) {
+        UserAccount user =
+                userAccountRepository
+                        .findById(userId)
+                        .orElseThrow(() -> new GeneralException(GeneralErrorCode.NOT_FOUND));
+        user.updateRefreshToken(null);
+    }
+
     private void validateTerms(boolean agreeToTerms) {
         if (!agreeToTerms) {
             throw new GeneralException(GeneralErrorCode.TERMS_NOT_AGREED);

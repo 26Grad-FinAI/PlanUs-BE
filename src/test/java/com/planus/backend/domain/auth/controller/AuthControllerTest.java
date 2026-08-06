@@ -14,6 +14,10 @@ import com.planus.backend.domain.auth.dto.ReissueRequest;
 import com.planus.backend.domain.auth.dto.SignUpRequest;
 import com.planus.backend.domain.auth.dto.SignUpResponse;
 import com.planus.backend.domain.auth.dto.SocialLoginRequest;
+import java.util.List;
+import org.springframework.security.authentication.UsernamePasswordAuthenticationToken;
+import org.springframework.security.core.context.SecurityContextHolder;
+import org.springframework.security.web.method.annotation.AuthenticationPrincipalArgumentResolver;
 import com.planus.backend.domain.auth.service.AuthService;
 import com.planus.backend.domain.auth.service.GoogleOAuthService;
 import com.planus.backend.domain.auth.service.KakaoOAuthService;
@@ -43,6 +47,7 @@ class AuthControllerTest {
         kakaoOAuthService = mock(KakaoOAuthService.class);
         mockMvc = MockMvcBuilders.standaloneSetup(new AuthController(authService, googleOAuthService, kakaoOAuthService))
                 .setControllerAdvice(new GeneralExceptionAdvice())
+                .setCustomArgumentResolvers(new AuthenticationPrincipalArgumentResolver())
                 .build();
     }
 
@@ -329,6 +334,25 @@ class AuthControllerTest {
                     .andExpect(jsonPath("$.isSuccess").value(true))
                     .andExpect(jsonPath("$.result.accessToken").value("new-access-token"))
                     .andExpect(jsonPath("$.result.refreshToken").value("new-refresh-token"));
+        }
+    }
+
+    @Nested
+    @DisplayName("POST /api/auth/logout 성공")
+    class LogoutSuccess {
+
+        @Test
+        @DisplayName("유효한 액세스 토큰으로 200을 반환한다")
+        void logout_success_returns200() throws Exception {
+            SecurityContextHolder.getContext().setAuthentication(
+                    new UsernamePasswordAuthenticationToken(1L, null, List.of()));
+            try {
+                mockMvc.perform(post("/api/auth/logout"))
+                        .andExpect(status().isOk())
+                        .andExpect(jsonPath("$.isSuccess").value(true));
+            } finally {
+                SecurityContextHolder.clearContext();
+            }
         }
     }
 
