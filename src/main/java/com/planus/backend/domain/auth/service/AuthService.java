@@ -12,6 +12,8 @@ import com.planus.backend.domain.user.repository.UserAccountRepository;
 import com.planus.backend.global.apiPayload.code.GeneralErrorCode;
 import com.planus.backend.global.apiPayload.exception.GeneralException;
 import com.planus.backend.global.security.JwtProvider;
+import jakarta.persistence.EntityManager;
+import jakarta.persistence.LockModeType;
 import java.util.Optional;
 import java.util.regex.Pattern;
 import lombok.RequiredArgsConstructor;
@@ -34,6 +36,7 @@ public class AuthService {
     private final UserAccountRepository userAccountRepository;
     private final PasswordEncoder passwordEncoder;
     private final JwtProvider jwtProvider;
+    private final EntityManager entityManager;
 
     /**
      * 회원가입을 처리한다.
@@ -111,8 +114,9 @@ public class AuthService {
         Long userId = jwtProvider.parseUserId(request.refreshToken());
 
         UserAccount user =
-                userAccountRepository
-                        .findById(userId)
+                Optional.ofNullable(
+                                entityManager.find(
+                                        UserAccount.class, userId, LockModeType.PESSIMISTIC_WRITE))
                         .orElseThrow(() -> new GeneralException(GeneralErrorCode.INVALID_TOKEN));
 
         String incomingHash = jwtProvider.hashToken(request.refreshToken());

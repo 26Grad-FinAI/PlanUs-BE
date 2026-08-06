@@ -40,7 +40,7 @@ class AuthServiceTest {
         userAccountRepository = mock(UserAccountRepository.class);
         passwordEncoder = mock(PasswordEncoder.class);
         jwtProvider = mock(JwtProvider.class);
-        authService = new AuthService(userAccountRepository, passwordEncoder, jwtProvider);
+        authService = new AuthService(userAccountRepository, passwordEncoder, jwtProvider, mock(jakarta.persistence.EntityManager.class));
     }
 
     private SignUpRequest validRequest() {
