@@ -2,6 +2,7 @@ package com.planus.backend.domain.auth.controller;
 
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.Mockito.mock;
+import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
@@ -350,6 +351,7 @@ class AuthControllerTest {
                 mockMvc.perform(post("/api/auth/logout"))
                         .andExpect(status().isOk())
                         .andExpect(jsonPath("$.isSuccess").value(true));
+                verify(authService).logout(1L);
             } finally {
                 SecurityContextHolder.clearContext();
             }
