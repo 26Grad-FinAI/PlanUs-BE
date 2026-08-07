@@ -52,10 +52,10 @@ public class SecurityConfig {
                                     .write(objectMapper.writeValueAsString(
                                             ApiResponse.onFailure(GeneralErrorCode.UNAUTHORIZED, null)));
                         }))
-                .authorizeHttpRequests(auth -> auth.requestMatchers("/api/auth/**")
-                        .permitAll()
-                        .anyRequest()
-                        .authenticated())
+                .authorizeHttpRequests(auth -> auth
+                        .requestMatchers("/api/auth/logout").authenticated()
+                        .requestMatchers("/api/auth/**").permitAll()
+                        .anyRequest().authenticated())
                 .addFilterBefore(jwtAuthenticationFilter, UsernamePasswordAuthenticationFilter.class);
         return http.build();
     }
