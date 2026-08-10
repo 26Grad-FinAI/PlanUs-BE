@@ -1,8 +1,10 @@
 package com.planus.backend.global.security;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
+import com.planus.backend.domain.user.repository.UserAccountRepository;
 import com.planus.backend.global.apiPayload.ApiResponse;
 import com.planus.backend.global.apiPayload.code.BaseErrorCode;
+import com.planus.backend.global.apiPayload.code.GeneralErrorCode;
 import com.planus.backend.global.apiPayload.exception.GeneralException;
 import jakarta.servlet.FilterChain;
 import jakarta.servlet.ServletException;
@@ -23,6 +25,7 @@ public class JwtAuthenticationFilter extends OncePerRequestFilter {
 
     private final JwtProvider jwtProvider;
     private final ObjectMapper objectMapper;
+    private final UserAccountRepository userAccountRepository;
 
     @Override
     protected void doFilterInternal(
@@ -34,6 +37,11 @@ public class JwtAuthenticationFilter extends OncePerRequestFilter {
         if (token != null) {
             try {
                 Long userId = jwtProvider.parseUserId(token);
+                // 탈퇴된 사용자의 토큰을 즉시 무효화하기 위해 DB에서 유저 존재 여부를 확인한다.
+                if (!userAccountRepository.existsById(userId)) {
+                    sendErrorResponse(response, GeneralErrorCode.UNAUTHORIZED);
+                    return;
+                }
                 UsernamePasswordAuthenticationToken authentication =
                         new UsernamePasswordAuthenticationToken(userId, null, List.of());
                 SecurityContextHolder.getContext().setAuthentication(authentication);

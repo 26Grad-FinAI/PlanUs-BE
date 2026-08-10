@@ -192,35 +192,92 @@ class KakaoOAuthServiceTest {
     class LoginFailure {
 
         @Test
-        @DisplayName("이메일 소유 인증이 안 된 계정이면 UNVERIFIED_SOCIAL_EMAIL 예외가 발생한다")
-        void login_emailNotVerified_throwsUnverifiedSocialEmail() {
+        @DisplayName("emailVerified == false여도 로그인에 성공한다")
+        void login_emailNotVerified_succeeds() {
             KakaoOAuthService.KakaoUserInfo unverifiedUserInfo = new KakaoOAuthService.KakaoUserInfo(
                     123456789L,
                     new KakaoOAuthService.KakaoAccount(
                             "user@kakao.com", false, true, new KakaoOAuthService.KakaoProfile("홍길동")));
             doReturn("kakao-access-token").when(kakaoOAuthService).fetchAccessToken(anyString(), anyString());
             doReturn(unverifiedUserInfo).when(kakaoOAuthService).fetchUserInfo("kakao-access-token");
+            UserAccount spyUser = spy(UserAccount.builder()
+                    .id(1L).email("user@kakao.com").provider(AuthProvider.KAKAO).providerId("123456789").build());
+            when(userAccountRepository.findByProviderAndProviderId(AuthProvider.KAKAO, "123456789"))
+                    .thenReturn(Optional.of(spyUser));
+            when(jwtProvider.generateAccessToken(1L)).thenReturn("access-token");
+            when(jwtProvider.generateRefreshToken(1L)).thenReturn("refresh-token");
+            when(jwtProvider.hashToken("refresh-token")).thenReturn("hashed-token");
 
-            assertThatThrownBy(() -> kakaoOAuthService.login(validRequest()))
-                    .isInstanceOf(GeneralException.class)
-                    .satisfies(ex -> assertThat(((GeneralException) ex).getErrorCode())
-                            .isEqualTo(GeneralErrorCode.UNVERIFIED_SOCIAL_EMAIL));
+            LoginResponse response = kakaoOAuthService.login(validRequest());
+
+            assertThat(response.userId()).isEqualTo(1L);
         }
 
         @Test
-        @DisplayName("이메일이 유효하지 않은 계정이면 UNVERIFIED_SOCIAL_EMAIL 예외가 발생한다")
-        void login_emailNotValid_throwsUnverifiedSocialEmail() {
+        @DisplayName("emailValid == false여도 로그인에 성공한다")
+        void login_emailNotValid_succeeds() {
             KakaoOAuthService.KakaoUserInfo invalidEmailUserInfo = new KakaoOAuthService.KakaoUserInfo(
                     123456789L,
                     new KakaoOAuthService.KakaoAccount(
                             "user@kakao.com", true, false, new KakaoOAuthService.KakaoProfile("홍길동")));
             doReturn("kakao-access-token").when(kakaoOAuthService).fetchAccessToken(anyString(), anyString());
             doReturn(invalidEmailUserInfo).when(kakaoOAuthService).fetchUserInfo("kakao-access-token");
+            UserAccount spyUser = spy(UserAccount.builder()
+                    .id(1L).email("user@kakao.com").provider(AuthProvider.KAKAO).providerId("123456789").build());
+            when(userAccountRepository.findByProviderAndProviderId(AuthProvider.KAKAO, "123456789"))
+                    .thenReturn(Optional.of(spyUser));
+            when(jwtProvider.generateAccessToken(1L)).thenReturn("access-token");
+            when(jwtProvider.generateRefreshToken(1L)).thenReturn("refresh-token");
+            when(jwtProvider.hashToken("refresh-token")).thenReturn("hashed-token");
 
-            assertThatThrownBy(() -> kakaoOAuthService.login(validRequest()))
-                    .isInstanceOf(GeneralException.class)
-                    .satisfies(ex -> assertThat(((GeneralException) ex).getErrorCode())
-                            .isEqualTo(GeneralErrorCode.UNVERIFIED_SOCIAL_EMAIL));
+            LoginResponse response = kakaoOAuthService.login(validRequest());
+
+            assertThat(response.userId()).isEqualTo(1L);
+        }
+
+        @Test
+        @DisplayName("kakao_account가 없는 신규 사용자는 null 이메일과 기본 닉네임으로 저장된다")
+        void login_newUser_kakaoAccountNull_savesWithNullEmailAndDefaultNickname() {
+            KakaoOAuthService.KakaoUserInfo noAccountUserInfo =
+                    new KakaoOAuthService.KakaoUserInfo(123456789L, null);
+            doReturn("kakao-access-token").when(kakaoOAuthService).fetchAccessToken(anyString(), anyString());
+            doReturn(noAccountUserInfo).when(kakaoOAuthService).fetchUserInfo("kakao-access-token");
+            UserAccount spyUser = spy(UserAccount.builder()
+                    .id(1L).nickname("카카오 사용자").provider(AuthProvider.KAKAO).providerId("123456789").build());
+            when(userAccountRepository.findByProviderAndProviderId(AuthProvider.KAKAO, "123456789"))
+                    .thenReturn(Optional.empty())
+                    .thenReturn(Optional.of(spyUser));
+            when(jwtProvider.generateAccessToken(1L)).thenReturn("access-token");
+            when(jwtProvider.generateRefreshToken(1L)).thenReturn("refresh-token");
+            when(jwtProvider.hashToken("refresh-token")).thenReturn("hashed-token");
+
+            LoginResponse response = kakaoOAuthService.login(validRequest());
+
+            assertThat(response.userId()).isEqualTo(1L);
+            assertThat(response.email()).isNull();
+        }
+
+        @Test
+        @DisplayName("이메일이 없는 신규 사용자는 null 이메일로 저장되고 로그인에 성공한다")
+        void login_newUser_emailNull_savesWithNullEmail() {
+            KakaoOAuthService.KakaoUserInfo noEmailUserInfo = new KakaoOAuthService.KakaoUserInfo(
+                    123456789L,
+                    new KakaoOAuthService.KakaoAccount(null, null, null, new KakaoOAuthService.KakaoProfile("홍길동")));
+            doReturn("kakao-access-token").when(kakaoOAuthService).fetchAccessToken(anyString(), anyString());
+            doReturn(noEmailUserInfo).when(kakaoOAuthService).fetchUserInfo("kakao-access-token");
+            UserAccount spyUser = spy(UserAccount.builder()
+                    .id(1L).nickname("홍길동").provider(AuthProvider.KAKAO).providerId("123456789").build());
+            when(userAccountRepository.findByProviderAndProviderId(AuthProvider.KAKAO, "123456789"))
+                    .thenReturn(Optional.empty())
+                    .thenReturn(Optional.of(spyUser));
+            when(jwtProvider.generateAccessToken(1L)).thenReturn("access-token");
+            when(jwtProvider.generateRefreshToken(1L)).thenReturn("refresh-token");
+            when(jwtProvider.hashToken("refresh-token")).thenReturn("hashed-token");
+
+            LoginResponse response = kakaoOAuthService.login(validRequest());
+
+            assertThat(response.userId()).isEqualTo(1L);
+            assertThat(response.email()).isNull();
         }
 
         @Test

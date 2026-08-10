@@ -7,6 +7,7 @@ import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
+import com.planus.backend.domain.user.repository.UserAccountRepository;
 import com.planus.backend.global.apiPayload.code.GeneralErrorCode;
 import com.planus.backend.global.apiPayload.exception.GeneralException;
 import jakarta.servlet.FilterChain;
@@ -21,12 +22,14 @@ import org.springframework.security.core.context.SecurityContextHolder;
 class JwtAuthenticationFilterTest {
 
     private JwtProvider jwtProvider;
+    private UserAccountRepository userAccountRepository;
     private JwtAuthenticationFilter filter;
 
     @BeforeEach
     void setUp() {
         jwtProvider = mock(JwtProvider.class);
-        filter = new JwtAuthenticationFilter(jwtProvider, new ObjectMapper());
+        userAccountRepository = mock(UserAccountRepository.class);
+        filter = new JwtAuthenticationFilter(jwtProvider, new ObjectMapper(), userAccountRepository);
         SecurityContextHolder.clearContext();
     }
 
@@ -48,6 +51,7 @@ class JwtAuthenticationFilterTest {
             FilterChain filterChain = mock(FilterChain.class);
 
             when(jwtProvider.parseUserId("valid-token")).thenReturn(1L);
+            when(userAccountRepository.existsById(1L)).thenReturn(true);
 
             filter.doFilterInternal(request, response, filterChain);
 
@@ -55,6 +59,23 @@ class JwtAuthenticationFilterTest {
             assertThat(SecurityContextHolder.getContext().getAuthentication().getPrincipal())
                     .isEqualTo(1L);
             verify(filterChain).doFilter(request, response);
+        }
+
+        @Test
+        @DisplayName("탈퇴된 유저의 토큰이면 401과 AUTH_401_001을 반환하고 필터 체인을 중단한다")
+        void withdrawnUser_returns401WithUnauthorizedCode() throws Exception {
+            MockHttpServletRequest request = requestWithToken("valid-token");
+            MockHttpServletResponse response = new MockHttpServletResponse();
+            FilterChain filterChain = mock(FilterChain.class);
+
+            when(jwtProvider.parseUserId("valid-token")).thenReturn(1L);
+            when(userAccountRepository.existsById(1L)).thenReturn(false);
+
+            filter.doFilterInternal(request, response, filterChain);
+
+            assertThat(response.getStatus()).isEqualTo(401);
+            assertThat(response.getContentAsString()).contains("AUTH_401_001");
+            verify(filterChain, never()).doFilter(request, response);
         }
     }
 

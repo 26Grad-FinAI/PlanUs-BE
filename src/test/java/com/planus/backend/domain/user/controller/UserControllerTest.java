@@ -11,6 +11,7 @@ import com.planus.backend.domain.auth.service.AuthService;
 import com.planus.backend.global.apiPayload.code.GeneralErrorCode;
 import com.planus.backend.global.apiPayload.exception.GeneralException;
 import com.planus.backend.global.apiPayload.handler.GeneralExceptionAdvice;
+import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
@@ -24,6 +25,11 @@ class UserControllerTest {
 
     private MockMvc mockMvc;
     private AuthService authService;
+
+    @AfterEach
+    void tearDown() {
+        SecurityContextHolder.clearContext();
+    }
 
     @BeforeEach
     void setUp() {

@@ -1,6 +1,7 @@
 package com.planus.backend.global.security;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
+import com.planus.backend.domain.user.repository.UserAccountRepository;
 import com.planus.backend.global.apiPayload.ApiResponse;
 import com.planus.backend.global.apiPayload.code.GeneralErrorCode;
 import org.springframework.context.annotation.Bean;
@@ -21,8 +22,8 @@ public class SecurityConfig {
 
     @Bean
     public JwtAuthenticationFilter jwtAuthenticationFilter(
-            JwtProvider jwtProvider, ObjectMapper objectMapper) {
-        return new JwtAuthenticationFilter(jwtProvider, objectMapper);
+            JwtProvider jwtProvider, ObjectMapper objectMapper, UserAccountRepository userAccountRepository) {
+        return new JwtAuthenticationFilter(jwtProvider, objectMapper, userAccountRepository);
     }
 
     /**
