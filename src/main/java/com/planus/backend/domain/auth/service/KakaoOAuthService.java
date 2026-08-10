@@ -78,10 +78,6 @@ public class KakaoOAuthService {
         }
         String accessToken = fetchAccessToken(request.code(), request.redirectUri());
         KakaoUserInfo userInfo = fetchUserInfo(accessToken);
-        if (!Boolean.TRUE.equals(userInfo.kakaoAccount().emailVerified())
-                || !Boolean.TRUE.equals(userInfo.kakaoAccount().emailValid())) {
-            throw new GeneralException(GeneralErrorCode.UNVERIFIED_SOCIAL_EMAIL);
-        }
         UserAccount user = findOrCreateUser(userInfo);
 
         String jwtAccessToken = jwtProvider.generateAccessToken(user.getId());
@@ -139,8 +135,7 @@ public class KakaoOAuthService {
                     .retrieve()
                     .body(KakaoUserInfo.class);
 
-            if (userInfo == null || userInfo.id() == null || userInfo.kakaoAccount() == null
-                    || userInfo.kakaoAccount().email() == null) {
+            if (userInfo == null || userInfo.id() == null) {
                 throw new GeneralException(GeneralErrorCode.INVALID_CREDENTIALS);
             }
             return userInfo;
@@ -170,12 +165,17 @@ public class KakaoOAuthService {
      * @throws GeneralException 동일 이메일로 다른 provider 계정이 존재하면 SOCIAL_LOGIN_EMAIL_CONFLICT
      */
     private UserAccount createUser(KakaoUserInfo userInfo, String providerId) {
-        String email = userInfo.kakaoAccount().email();
-        userAccountRepository.findByEmail(email).ifPresent(existing -> {
-            throw new GeneralException(GeneralErrorCode.SOCIAL_LOGIN_EMAIL_CONFLICT);
-        });
+        KakaoAccount kakaoAccount = userInfo.kakaoAccount();
+        String email = kakaoAccount != null ? kakaoAccount.email() : null;
 
-        String nickname = Optional.ofNullable(userInfo.kakaoAccount().profile())
+        if (email != null) {
+            userAccountRepository.findByEmail(email).ifPresent(existing -> {
+                throw new GeneralException(GeneralErrorCode.SOCIAL_LOGIN_EMAIL_CONFLICT);
+            });
+        }
+
+        String nickname = Optional.ofNullable(kakaoAccount)
+                .map(KakaoAccount::profile)
                 .map(KakaoProfile::nickname)
                 .orElse("카카오 사용자");
 

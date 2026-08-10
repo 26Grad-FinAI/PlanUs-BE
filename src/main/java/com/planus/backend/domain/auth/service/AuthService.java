@@ -147,6 +147,22 @@ public class AuthService {
         user.updateRefreshToken(null);
     }
 
+    /**
+     * 회원 탈퇴를 처리한다.
+     *
+     * <p>사용자 계정을 DB에서 삭제한다.</p>
+     *
+     * @param userId 탈퇴할 사용자 ID (SecurityContext에서 추출)
+     */
+    @Transactional
+    public void withdraw(Long userId) {
+        UserAccount user =
+                userAccountRepository
+                        .findById(userId)
+                        .orElseThrow(() -> new GeneralException(GeneralErrorCode.NOT_FOUND));
+        userAccountRepository.delete(user);
+    }
+
     private void validateTerms(boolean agreeToTerms) {
         if (!agreeToTerms) {
             throw new GeneralException(GeneralErrorCode.TERMS_NOT_AGREED);
