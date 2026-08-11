@@ -7,12 +7,14 @@ import static org.mockito.Mockito.spy;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
+import com.planus.backend.domain.user.dto.UserProfileGetResponse;
 import com.planus.backend.domain.user.dto.UserProfileRequest;
 import com.planus.backend.domain.user.dto.UserProfileResponse;
 import com.planus.backend.domain.user.entity.UserAccount;
 import com.planus.backend.domain.user.repository.UserAccountRepository;
 import com.planus.backend.global.apiPayload.code.GeneralErrorCode;
 import com.planus.backend.global.apiPayload.exception.GeneralException;
+import java.util.List;
 import java.util.Optional;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
@@ -32,7 +34,7 @@ class UserServiceTest {
 
     @Nested
     @DisplayName("saveProfile 성공")
-    class Success {
+    class SaveProfileSuccess {
 
         @Test
         @DisplayName("프로필 저장 후 가용예산(소득 - 고정지출 - 저축목표)을 반환한다")
@@ -95,7 +97,7 @@ class UserServiceTest {
                     3_000_000L,
                     1_000_000L,
                     500_000L,
-                    "독서",
+                    List.of("DINING", "TRAVEL"),
                     "SAVING",
                     true,
                     false);
@@ -104,7 +106,7 @@ class UserServiceTest {
 
     @Nested
     @DisplayName("saveProfile 실패")
-    class Failure {
+    class SaveProfileFailure {
 
         @Test
         @DisplayName("존재하지 않는 userId이면 NOT_FOUND 예외가 발생한다")
@@ -112,6 +114,56 @@ class UserServiceTest {
             when(userAccountRepository.findById(999L)).thenReturn(Optional.empty());
 
             assertThatThrownBy(() -> userService.saveProfile(999L, validRequest()))
+                    .isInstanceOf(GeneralException.class)
+                    .satisfies(ex -> assertThat(((GeneralException) ex).getErrorCode())
+                            .isEqualTo(GeneralErrorCode.NOT_FOUND));
+        }
+    }
+
+    @Nested
+    @DisplayName("getProfile 성공")
+    class GetProfileSuccess {
+
+        @Test
+        @DisplayName("userId로 조회 시 프로필 전체 정보를 반환한다")
+        void getProfile_returnsFullProfile() {
+            UserAccount user = UserAccount.builder()
+                    .id(1L)
+                    .email("spendwise@email.com")
+                    .nickname("김스펜드")
+                    .age(28)
+                    .gender("MALE")
+                    .residence("서울특별시")
+                    .monthlyIncome(3_000_000L)
+                    .monthlyFixedExpenses(1_000_000L)
+                    .monthlySavingsGoal(500_000L)
+                    .hobbies(List.of("DINING", "TRAVEL"))
+                    .spendingHabit("BALANCED")
+                    .employmentStatus(true)
+                    .homeOwnership(false)
+                    .build();
+            when(userAccountRepository.findById(1L)).thenReturn(Optional.of(user));
+
+            UserProfileGetResponse response = userService.getProfile(1L);
+
+            assertThat(response.userId()).isEqualTo(1L);
+            assertThat(response.email()).isEqualTo("spendwise@email.com");
+            assertThat(response.hobbies()).containsExactly("DINING", "TRAVEL");
+            assertThat(response.availableBudget()).isEqualTo(1_500_000L);
+            assertThat(response.profileCompleted()).isTrue();
+        }
+    }
+
+    @Nested
+    @DisplayName("getProfile 실패")
+    class GetProfileFailure {
+
+        @Test
+        @DisplayName("존재하지 않는 userId이면 NOT_FOUND 예외가 발생한다")
+        void getProfile_userNotFound_throwsNotFound() {
+            when(userAccountRepository.findById(999L)).thenReturn(Optional.empty());
+
+            assertThatThrownBy(() -> userService.getProfile(999L))
                     .isInstanceOf(GeneralException.class)
                     .satisfies(ex -> assertThat(((GeneralException) ex).getErrorCode())
                             .isEqualTo(GeneralErrorCode.NOT_FOUND));
@@ -126,7 +178,7 @@ class UserServiceTest {
                 3_000_000L,
                 1_000_000L,
                 500_000L,
-                "독서",
+                List.of("DINING", "TRAVEL"),
                 "SAVING",
                 true,
                 false);

@@ -1,6 +1,7 @@
 package com.planus.backend.domain.user.service;
 
 import com.planus.backend.domain.user.converter.UserConverter;
+import com.planus.backend.domain.user.dto.UserProfileGetResponse;
 import com.planus.backend.domain.user.dto.UserProfileRequest;
 import com.planus.backend.domain.user.dto.UserProfileResponse;
 import com.planus.backend.domain.user.entity.UserAccount;
@@ -39,11 +40,27 @@ public class UserService {
                 request.monthlyIncome(),
                 request.monthlyFixedExpenses(),
                 request.monthlySavingsGoal(),
-                request.hobby(),
+                request.hobbies(),
                 request.spendingHabit(),
                 request.employmentStatus(),
                 request.homeOwnership());
 
         return UserConverter.toProfileResponse(user);
+    }
+
+    /**
+     * 사용자 프로필을 조회한다.
+     *
+     * @param userId JWT 필터가 주입한 사용자 ID
+     * @return 사용자 프로필 전체 정보
+     */
+    @Transactional(readOnly = true)
+    public UserProfileGetResponse getProfile(Long userId) {
+        UserAccount user =
+                userAccountRepository
+                        .findById(userId)
+                        .orElseThrow(() -> new GeneralException(GeneralErrorCode.NOT_FOUND));
+
+        return UserConverter.toProfileGetResponse(user);
     }
 }
