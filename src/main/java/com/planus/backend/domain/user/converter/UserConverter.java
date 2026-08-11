@@ -1,5 +1,6 @@
 package com.planus.backend.domain.user.converter;
 
+import com.planus.backend.domain.user.dto.UserProfileGetResponse;
 import com.planus.backend.domain.user.dto.UserProfileResponse;
 import com.planus.backend.domain.user.entity.UserAccount;
 import lombok.AccessLevel;
@@ -22,5 +23,32 @@ public class UserConverter {
                 user.availableBudget(),
                 user.isProfileCompleted(),
                 "프로필 저장 완료. AI 예산 산출이 시작됩니다.");
+    }
+
+    /**
+     * {@link UserAccount}를 프로필 조회 응답 DTO로 변환한다.
+     *
+     * @param user 조회된 사용자 엔티티
+     * @return 프로필 조회 응답 DTO
+     */
+    public static UserProfileGetResponse toProfileGetResponse(UserAccount user) {
+        return new UserProfileGetResponse(
+                user.getId(),
+                user.getEmail(),
+                user.getNickname(),
+                user.getAge(),
+                user.getGender(),
+                user.getResidence(),
+                user.getMonthlyIncome(),
+                user.getMonthlyFixedExpenses(),
+                user.getMonthlySavingsGoal(),
+                user.availableBudget(),
+                user.getHobbies(),
+                user.getSpendingHabit(),
+                user.getEmploymentStatus(),
+                user.getHomeOwnership(),
+                user.isProfileCompleted(),
+                user.getCreatedAt(),
+                user.getUpdatedAt());
     }
 }

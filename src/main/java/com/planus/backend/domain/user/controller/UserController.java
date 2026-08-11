@@ -1,6 +1,7 @@
 package com.planus.backend.domain.user.controller;
 
 import com.planus.backend.domain.auth.service.AuthService;
+import com.planus.backend.domain.user.dto.UserProfileGetResponse;
 import com.planus.backend.domain.user.dto.UserProfileRequest;
 import com.planus.backend.domain.user.dto.UserProfileResponse;
 import com.planus.backend.domain.user.service.UserService;
@@ -11,6 +12,7 @@ import lombok.RequiredArgsConstructor;
 import org.springframework.http.HttpStatus;
 import org.springframework.security.core.annotation.AuthenticationPrincipal;
 import org.springframework.web.bind.annotation.DeleteMapping;
+import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
@@ -38,6 +40,17 @@ public class UserController {
     public ApiResponse<UserProfileResponse> saveProfile(
             @AuthenticationPrincipal Long userId, @Valid @RequestBody UserProfileRequest request) {
         return ApiResponse.onSuccess(GeneralSuccessCode.CREATED, userService.saveProfile(userId, request));
+    }
+
+    /**
+     * 사용자 프로필을 조회한다.
+     *
+     * @param userId JWT 필터가 주입한 인증 정보 (userId 포함)
+     * @return 200 OK, 사용자 프로필 전체 정보
+     */
+    @GetMapping("/me/profile")
+    public ApiResponse<UserProfileGetResponse> getProfile(@AuthenticationPrincipal Long userId) {
+        return ApiResponse.onSuccess(GeneralSuccessCode.OK, userService.getProfile(userId));
     }
 
     /**

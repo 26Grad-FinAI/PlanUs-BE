@@ -7,18 +7,21 @@ import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.delete;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.planus.backend.domain.auth.service.AuthService;
+import com.planus.backend.domain.user.dto.UserProfileGetResponse;
 import com.planus.backend.domain.user.dto.UserProfileRequest;
 import com.planus.backend.domain.user.dto.UserProfileResponse;
 import com.planus.backend.domain.user.service.UserService;
 import com.planus.backend.global.apiPayload.code.GeneralErrorCode;
 import com.planus.backend.global.apiPayload.exception.GeneralException;
 import com.planus.backend.global.apiPayload.handler.GeneralExceptionAdvice;
+import java.util.List;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
@@ -123,6 +126,61 @@ class UserControllerTest {
     }
 
     @Nested
+    @DisplayName("GET /api/users/me/profile")
+    class GetProfile {
+
+        @Nested
+        @DisplayName("성공")
+        class Success {
+
+            @Test
+            @DisplayName("200 OK와 프로필 전체 정보를 반환한다")
+            void getProfile_success_returns200() throws Exception {
+                SecurityContextHolder.getContext().setAuthentication(
+                        new UsernamePasswordAuthenticationToken(1L, null));
+
+                UserProfileGetResponse response = new UserProfileGetResponse(
+                        1L, "spendwise@email.com", "김스펜드", 28, "MALE", "서울특별시",
+                        3_000_000L, 1_000_000L, 500_000L, 1_500_000L,
+                        List.of("DINING", "TRAVEL"), "BALANCED", true, false, true, null, null);
+                when(userService.getProfile(1L)).thenReturn(response);
+
+                mockMvc.perform(get("/api/users/me/profile"))
+                        .andExpect(status().isOk())
+                        .andExpect(jsonPath("$.isSuccess").value(true))
+                        .andExpect(jsonPath("$.result.userId").value(1L))
+                        .andExpect(jsonPath("$.result.email").value("spendwise@email.com"))
+                        .andExpect(jsonPath("$.result.nickname").value("김스펜드"))
+                        .andExpect(jsonPath("$.result.availableBudget").value(1_500_000L))
+                        .andExpect(jsonPath("$.result.hobbies[0]").value("DINING"))
+                        .andExpect(jsonPath("$.result.hobbies[1]").value("TRAVEL"))
+                        .andExpect(jsonPath("$.result.profileCompleted").value(true));
+
+                verify(userService).getProfile(1L);
+            }
+        }
+
+        @Nested
+        @DisplayName("실패")
+        class Failure {
+
+            @Test
+            @DisplayName("존재하지 않는 userId이면 404를 반환한다")
+            void getProfile_userNotFound_returns404() throws Exception {
+                SecurityContextHolder.getContext().setAuthentication(
+                        new UsernamePasswordAuthenticationToken(999L, null));
+                when(userService.getProfile(999L))
+                        .thenThrow(new GeneralException(GeneralErrorCode.NOT_FOUND));
+
+                mockMvc.perform(get("/api/users/me/profile"))
+                        .andExpect(status().isNotFound())
+                        .andExpect(jsonPath("$.isSuccess").value(false))
+                        .andExpect(jsonPath("$.code").value("COMMON_404_001"));
+            }
+        }
+    }
+
+    @Nested
     @DisplayName("DELETE /api/users/me")
     class Withdraw {
 
@@ -161,7 +219,7 @@ class UserControllerTest {
                 3_000_000L,
                 1_000_000L,
                 500_000L,
-                "독서",
+                List.of("DINING", "TRAVEL"),
                 "SAVING",
                 true,
                 false);

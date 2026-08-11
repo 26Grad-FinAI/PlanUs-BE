@@ -2,20 +2,29 @@ package com.planus.backend.domain.user.entity;
 
 import jakarta.persistence.Column;
 import jakarta.persistence.Entity;
+import jakarta.persistence.EntityListeners;
 import jakarta.persistence.EnumType;
 import jakarta.persistence.Enumerated;
 import jakarta.persistence.GeneratedValue;
 import jakarta.persistence.GenerationType;
 import jakarta.persistence.Id;
 import jakarta.persistence.Table;
+import java.time.LocalDateTime;
+import java.util.List;
 import lombok.AllArgsConstructor;
 import lombok.Builder;
 import lombok.Getter;
 import lombok.NoArgsConstructor;
+import org.hibernate.annotations.JdbcTypeCode;
+import org.hibernate.type.SqlTypes;
+import org.springframework.data.annotation.CreatedDate;
+import org.springframework.data.annotation.LastModifiedDate;
+import org.springframework.data.jpa.domain.support.AuditingEntityListener;
 
 /** 사용자 계정 엔티티. user 테이블 매핑. 소득·고정지출·저축목표 등 재무 정보 포함. */
 @Entity
 @Table(name = "user")
+@EntityListeners(AuditingEntityListener.class)
 @Getter
 @NoArgsConstructor
 @AllArgsConstructor
@@ -59,13 +68,23 @@ public class UserAccount {
     private String gender;
     private String residence;
 
-    private String hobby;
+    @JdbcTypeCode(SqlTypes.JSON)
+    @Column(name = "hobbies", columnDefinition = "jsonb")
+    private List<String> hobbies;
 
     @Column(name = "home_ownership")
     private Boolean homeOwnership;
 
     @Column(name = "refresh_token")
     private String refreshToken;
+
+    @CreatedDate
+    @Column(name = "created_at", nullable = false, updatable = false)
+    private LocalDateTime createdAt;
+
+    @LastModifiedDate
+    @Column(name = "updated_at", nullable = false)
+    private LocalDateTime updatedAt;
 
     /** 가용예산 = 소득 − 고정지출 − 저축목표. */
     public long availableBudget() {
@@ -78,7 +97,7 @@ public class UserAccount {
                 && monthlyIncome > 0
                 && gender != null
                 && residence != null
-                && hobby != null
+                && hobbies != null && !hobbies.isEmpty()
                 && spendingHabit != null
                 && employmentStatus != null
                 && homeOwnership != null;
@@ -92,7 +111,7 @@ public class UserAccount {
             long monthlyIncome,
             long monthlyFixedExpenses,
             long monthlySavingsGoal,
-            String hobby,
+            List<String> hobbies,
             String spendingHabit,
             Boolean employmentStatus,
             Boolean homeOwnership) {
@@ -102,7 +121,7 @@ public class UserAccount {
         this.monthlyIncome = monthlyIncome;
         this.monthlyFixedExpenses = monthlyFixedExpenses;
         this.monthlySavingsGoal = monthlySavingsGoal;
-        this.hobby = hobby;
+        this.hobbies = hobbies;
         this.spendingHabit = spendingHabit;
         this.employmentStatus = employmentStatus;
         this.homeOwnership = homeOwnership;
