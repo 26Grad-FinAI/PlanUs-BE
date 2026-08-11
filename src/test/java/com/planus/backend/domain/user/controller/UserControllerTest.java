@@ -108,6 +108,46 @@ class UserControllerTest {
             }
 
             @Test
+            @DisplayName("hobbies에 빈 문자열 요소가 포함되면 400을 반환한다")
+            void saveProfile_blankHobbyElement_returns400() throws Exception {
+                SecurityContextHolder.getContext().setAuthentication(
+                        new UsernamePasswordAuthenticationToken(1L, null));
+
+                UserProfileRequest requestWithBlankHobby = new UserProfileRequest(
+                        30, "MALE", "서울",
+                        3_000_000L, 1_000_000L, 500_000L,
+                        List.of("DINING", ""),
+                        "SAVING", true, false);
+
+                mockMvc.perform(post("/api/users/me/profile")
+                                .contentType(MediaType.APPLICATION_JSON)
+                                .content(objectMapper.writeValueAsString(requestWithBlankHobby)))
+                        .andExpect(status().isBadRequest())
+                        .andExpect(jsonPath("$.isSuccess").value(false))
+                        .andExpect(jsonPath("$.code").value("COMMON_400_002"));
+            }
+
+            @Test
+            @DisplayName("hobbies에 공백만 있는 요소가 포함되면 400을 반환한다")
+            void saveProfile_whitespaceHobbyElement_returns400() throws Exception {
+                SecurityContextHolder.getContext().setAuthentication(
+                        new UsernamePasswordAuthenticationToken(1L, null));
+
+                UserProfileRequest requestWithWhitespaceHobby = new UserProfileRequest(
+                        30, "MALE", "서울",
+                        3_000_000L, 1_000_000L, 500_000L,
+                        List.of("   "),
+                        "SAVING", true, false);
+
+                mockMvc.perform(post("/api/users/me/profile")
+                                .contentType(MediaType.APPLICATION_JSON)
+                                .content(objectMapper.writeValueAsString(requestWithWhitespaceHobby)))
+                        .andExpect(status().isBadRequest())
+                        .andExpect(jsonPath("$.isSuccess").value(false))
+                        .andExpect(jsonPath("$.code").value("COMMON_400_002"));
+            }
+
+            @Test
             @DisplayName("존재하지 않는 userId이면 404를 반환한다")
             void saveProfile_userNotFound_returns404() throws Exception {
                 SecurityContextHolder.getContext().setAuthentication(

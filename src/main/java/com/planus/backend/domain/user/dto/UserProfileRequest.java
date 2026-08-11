@@ -15,7 +15,7 @@ import java.util.List;
  * @param monthlyIncome        월 소득
  * @param monthlyFixedExpenses 월 고정지출
  * @param monthlySavingsGoal   월 저축 목표
- * @param hobbies              취미 목록 (1개 이상)
+ * @param hobbies              취미 목록 (1개 이상, 각 요소는 공백 불가)
  * @param spendingHabit        소비 습관 (SAVING / BALANCED / SPENDING)
  * @param employmentStatus     재직 여부
  * @param homeOwnership        자가 보유 여부
@@ -27,7 +27,7 @@ public record UserProfileRequest(
         @NotNull Long monthlyIncome,
         @NotNull Long monthlyFixedExpenses,
         @NotNull Long monthlySavingsGoal,
-        @NotEmpty List<String> hobbies,
+        @NotEmpty List<@NotBlank String> hobbies,
         @NotBlank String spendingHabit,
         @NotNull Boolean employmentStatus,
         @NotNull Boolean homeOwnership) {}
