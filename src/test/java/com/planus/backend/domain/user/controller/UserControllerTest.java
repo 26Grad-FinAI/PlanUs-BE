@@ -9,6 +9,7 @@ import static org.mockito.Mockito.when;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.delete;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.put;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
@@ -17,6 +18,7 @@ import com.planus.backend.domain.auth.service.AuthService;
 import com.planus.backend.domain.user.dto.UserProfileGetResponse;
 import com.planus.backend.domain.user.dto.UserProfileRequest;
 import com.planus.backend.domain.user.dto.UserProfileResponse;
+import com.planus.backend.domain.user.dto.UserProfileUpdateResponse;
 import com.planus.backend.domain.user.service.UserService;
 import com.planus.backend.global.apiPayload.code.GeneralErrorCode;
 import com.planus.backend.global.apiPayload.exception.GeneralException;
@@ -156,6 +158,73 @@ class UserControllerTest {
                         .thenThrow(new GeneralException(GeneralErrorCode.NOT_FOUND));
 
                 mockMvc.perform(post("/api/users/me/profile")
+                                .contentType(MediaType.APPLICATION_JSON)
+                                .content(objectMapper.writeValueAsString(validRequest())))
+                        .andExpect(status().isNotFound())
+                        .andExpect(jsonPath("$.isSuccess").value(false))
+                        .andExpect(jsonPath("$.code").value("COMMON_404_001"));
+            }
+        }
+    }
+
+    @Nested
+    @DisplayName("PUT /api/users/me/profile")
+    class UpdateProfile {
+
+        @Nested
+        @DisplayName("성공")
+        class Success {
+
+            @Test
+            @DisplayName("올바른 요청 시 200과 userId·availableBudget·message·updatedAt을 반환한다")
+            void updateProfile_success_returns200() throws Exception {
+                SecurityContextHolder.getContext().setAuthentication(
+                        new UsernamePasswordAuthenticationToken(1L, null));
+
+                UserProfileUpdateResponse response =
+                        new UserProfileUpdateResponse(1L, 1_500_000L, "프로필 수정 완료. 예산 재산출이 트리거됩니다.", null);
+                when(userService.updateProfile(eq(1L), any())).thenReturn(response);
+
+                mockMvc.perform(put("/api/users/me/profile")
+                                .contentType(MediaType.APPLICATION_JSON)
+                                .content(objectMapper.writeValueAsString(validRequest())))
+                        .andExpect(status().isOk())
+                        .andExpect(jsonPath("$.isSuccess").value(true))
+                        .andExpect(jsonPath("$.result.userId").value(1L))
+                        .andExpect(jsonPath("$.result.availableBudget").value(1_500_000L))
+                        .andExpect(jsonPath("$.result.message").value("프로필 수정 완료. 예산 재산출이 트리거됩니다."));
+
+                verify(userService).updateProfile(eq(1L), any());
+            }
+        }
+
+        @Nested
+        @DisplayName("실패")
+        class Failure {
+
+            @Test
+            @DisplayName("필수 필드 누락 시 400을 반환한다")
+            void updateProfile_missingField_returns400() throws Exception {
+                SecurityContextHolder.getContext().setAuthentication(
+                        new UsernamePasswordAuthenticationToken(1L, null));
+
+                mockMvc.perform(put("/api/users/me/profile")
+                                .contentType(MediaType.APPLICATION_JSON)
+                                .content("{}"))
+                        .andExpect(status().isBadRequest())
+                        .andExpect(jsonPath("$.isSuccess").value(false))
+                        .andExpect(jsonPath("$.code").value("COMMON_400_002"));
+            }
+
+            @Test
+            @DisplayName("존재하지 않는 userId이면 404를 반환한다")
+            void updateProfile_userNotFound_returns404() throws Exception {
+                SecurityContextHolder.getContext().setAuthentication(
+                        new UsernamePasswordAuthenticationToken(999L, null));
+                when(userService.updateProfile(eq(999L), any()))
+                        .thenThrow(new GeneralException(GeneralErrorCode.NOT_FOUND));
+
+                mockMvc.perform(put("/api/users/me/profile")
                                 .contentType(MediaType.APPLICATION_JSON)
                                 .content(objectMapper.writeValueAsString(validRequest())))
                         .andExpect(status().isNotFound())

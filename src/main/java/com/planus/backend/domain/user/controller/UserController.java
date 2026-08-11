@@ -4,6 +4,7 @@ import com.planus.backend.domain.auth.service.AuthService;
 import com.planus.backend.domain.user.dto.UserProfileGetResponse;
 import com.planus.backend.domain.user.dto.UserProfileRequest;
 import com.planus.backend.domain.user.dto.UserProfileResponse;
+import com.planus.backend.domain.user.dto.UserProfileUpdateResponse;
 import com.planus.backend.domain.user.service.UserService;
 import com.planus.backend.global.apiPayload.ApiResponse;
 import com.planus.backend.global.apiPayload.code.GeneralSuccessCode;
@@ -14,6 +15,7 @@ import org.springframework.security.core.annotation.AuthenticationPrincipal;
 import org.springframework.web.bind.annotation.DeleteMapping;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PostMapping;
+import org.springframework.web.bind.annotation.PutMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.ResponseStatus;
@@ -40,6 +42,19 @@ public class UserController {
     public ApiResponse<UserProfileResponse> saveProfile(
             @AuthenticationPrincipal Long userId, @Valid @RequestBody UserProfileRequest request) {
         return ApiResponse.onSuccess(GeneralSuccessCode.CREATED, userService.saveProfile(userId, request));
+    }
+
+    /**
+     * 사용자 프로필을 수정하고 가용예산·수정일시를 반환한다.
+     *
+     * @param userId  JWT 필터가 주입한 인증 정보 (userId 포함)
+     * @param request 수정할 프로필 전체 필드
+     * @return 200 OK, userId·가용예산·수정일시
+     */
+    @PutMapping("/me/profile")
+    public ApiResponse<UserProfileUpdateResponse> updateProfile(
+            @AuthenticationPrincipal Long userId, @Valid @RequestBody UserProfileRequest request) {
+        return ApiResponse.onSuccess(GeneralSuccessCode.OK, userService.updateProfile(userId, request));
     }
 
     /**
