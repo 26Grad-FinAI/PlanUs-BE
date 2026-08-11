@@ -20,6 +20,7 @@ public class UserConverter {
                 user.getId(),
                 user.getNickname(),
                 user.availableBudget(),
+                user.isProfileCompleted(),
                 "프로필 저장 완료. AI 예산 산출이 시작됩니다.");
     }
 }

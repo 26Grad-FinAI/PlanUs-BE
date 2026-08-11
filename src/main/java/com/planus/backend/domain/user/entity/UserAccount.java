@@ -72,9 +72,16 @@ public class UserAccount {
         return monthlyIncome - monthlyFixedExpenses - monthlySavingsGoal;
     }
 
-    /** 재무 프로필(소득, 나이) 입력 완료 여부. */
+    /** 프로필 입력 완료 여부. 10개 필수 필드가 모두 채워진 경우에만 완료로 판단한다. */
     public boolean isProfileCompleted() {
-        return age != null && monthlyIncome > 0;
+        return age != null
+                && monthlyIncome > 0
+                && gender != null
+                && residence != null
+                && hobby != null
+                && spendingHabit != null
+                && employmentStatus != null
+                && homeOwnership != null;
     }
 
     /** 사용자 프로필 정보를 최초 저장하거나 갱신한다. */

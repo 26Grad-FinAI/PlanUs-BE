@@ -49,6 +49,20 @@ class UserServiceTest {
         }
 
         @Test
+        @DisplayName("프로필 저장 후 profileCompleted가 true이다")
+        void saveProfile_profileCompletedIsTrue() {
+            UserAccount user = spy(UserAccount.builder()
+                    .id(1L)
+                    .nickname("김스펜드")
+                    .build());
+            when(userAccountRepository.findById(1L)).thenReturn(Optional.of(user));
+
+            UserProfileResponse response = userService.saveProfile(1L, validRequest());
+
+            assertThat(response.profileCompleted()).isTrue();
+        }
+
+        @Test
         @DisplayName("프로필 저장 후 userId와 nickname이 올바르게 반환된다")
         void saveProfile_returnsUserIdAndNickname() {
             UserAccount user = spy(UserAccount.builder()

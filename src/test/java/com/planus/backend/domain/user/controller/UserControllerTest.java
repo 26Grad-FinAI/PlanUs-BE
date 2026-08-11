@@ -68,7 +68,7 @@ class UserControllerTest {
                         new UsernamePasswordAuthenticationToken(1L, null));
 
                 UserProfileResponse response =
-                        new UserProfileResponse(1L, "김스펜드", 1_500_000L, "프로필 저장 완료. AI 예산 산출이 시작됩니다.");
+                        new UserProfileResponse(1L, "김스펜드", 1_500_000L, true, "프로필 저장 완료. AI 예산 산출이 시작됩니다.");
                 when(userService.saveProfile(eq(1L), any())).thenReturn(response);
 
                 mockMvc.perform(post("/api/users/me/profile")
@@ -79,6 +79,7 @@ class UserControllerTest {
                         .andExpect(jsonPath("$.result.userId").value(1L))
                         .andExpect(jsonPath("$.result.nickname").value("김스펜드"))
                         .andExpect(jsonPath("$.result.availableBudget").value(1_500_000L))
+                        .andExpect(jsonPath("$.result.profileCompleted").value(true))
                         .andExpect(jsonPath("$.result.message").value("프로필 저장 완료. AI 예산 산출이 시작됩니다."));
 
                 verify(userService).saveProfile(eq(1L), any());

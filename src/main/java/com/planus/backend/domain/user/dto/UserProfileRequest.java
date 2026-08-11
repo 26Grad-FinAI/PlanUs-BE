@@ -4,6 +4,20 @@ import jakarta.validation.constraints.NotBlank;
 import jakarta.validation.constraints.NotNull;
 import jakarta.validation.constraints.Positive;
 
+/**
+ * 사용자 프로필 저장 요청 DTO.
+ *
+ * @param age                  나이 (양수)
+ * @param gender               성별
+ * @param residence            거주지
+ * @param monthlyIncome        월 소득
+ * @param monthlyFixedExpenses 월 고정지출
+ * @param monthlySavingsGoal   월 저축 목표
+ * @param hobby                취미
+ * @param spendingHabit        소비 습관 (SAVING / BALANCED / SPENDING)
+ * @param employmentStatus     재직 여부
+ * @param homeOwnership        자가 보유 여부
+ */
 public record UserProfileRequest(
         @NotNull @Positive Integer age,
         @NotBlank String gender,

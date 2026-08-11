@@ -42,4 +42,42 @@ class UserConverterTest {
 
         assertThat(response.message()).isEqualTo("프로필 저장 완료. AI 예산 산출이 시작됩니다.");
     }
+
+    @Test
+    @DisplayName("10개 필드가 모두 채워진 유저는 profileCompleted가 true이다")
+    void toProfileResponse_profileCompleted_true() {
+        UserAccount user = UserAccount.builder()
+                .id(1L)
+                .nickname("김스펜드")
+                .age(30)
+                .gender("MALE")
+                .residence("서울")
+                .monthlyIncome(3_000_000L)
+                .monthlyFixedExpenses(1_000_000L)
+                .monthlySavingsGoal(500_000L)
+                .hobby("독서")
+                .spendingHabit("SAVING")
+                .employmentStatus(true)
+                .homeOwnership(false)
+                .build();
+
+        UserProfileResponse response = UserConverter.toProfileResponse(user);
+
+        assertThat(response.profileCompleted()).isTrue();
+    }
+
+    @Test
+    @DisplayName("age와 monthlyIncome만 있고 나머지 필드가 없으면 profileCompleted가 false이다")
+    void toProfileResponse_profileCompleted_false_whenPartialFields() {
+        UserAccount user = UserAccount.builder()
+                .id(1L)
+                .nickname("김스펜드")
+                .age(30)
+                .monthlyIncome(3_000_000L)
+                .build();
+
+        UserProfileResponse response = UserConverter.toProfileResponse(user);
+
+        assertThat(response.profileCompleted()).isFalse();
+    }
 }
