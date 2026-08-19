@@ -11,7 +11,13 @@ import lombok.NoArgsConstructor;
 @NoArgsConstructor(access = AccessLevel.PRIVATE)
 public class ExpenseConverter {
 
-    /** 요청 DTO → Expense 엔티티. */
+    /**
+     * 요청 DTO를 Expense 엔티티로 변환한다.
+     *
+     * @param userId  인증된 사용자 ID
+     * @param request 지출 등록 요청
+     * @return Expense 엔티티 (type = "EXPENSE")
+     */
     public static Expense toExpense(Long userId, ExpenseRequest request) {
         return Expense.builder()
                 .userId(userId)
@@ -28,7 +34,12 @@ public class ExpenseConverter {
                 .build();
     }
 
-    /** Expense 엔티티 → 응답 DTO. */
+    /**
+     * Expense 엔티티를 응답 DTO로 변환한다.
+     *
+     * @param expense 저장된 Expense 엔티티
+     * @return 지출 등록 응답 DTO
+     */
     public static ExpenseResponse toExpenseResponse(Expense expense) {
         return new ExpenseResponse(
                 expense.getId(),

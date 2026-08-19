@@ -171,12 +171,36 @@ class ExpenseControllerTest {
                 when(expenseService.createExpense(eq(1L), any()))
                         .thenThrow(new GeneralException(GeneralErrorCode.INVALID_EMOTION));
 
+                ExpenseRequest request = new ExpenseRequest(
+                        15000L, "스타벅스 아메리카노",
+                        LocalDateTime.of(2026, 8, 19, 12, 0), 2,
+                        "친구랑 같이", "HAPPY", null, null);
+
                 mockMvc.perform(post("/api/expenses")
                                 .contentType(MediaType.APPLICATION_JSON)
-                                .content(objectMapper.writeValueAsString(validRequest())))
+                                .content(objectMapper.writeValueAsString(request)))
                         .andExpect(status().isBadRequest())
                         .andExpect(jsonPath("$.isSuccess").value(false))
                         .andExpect(jsonPath("$.code").value("EXPENSE_400_002"));
+            }
+
+            @Test
+            @DisplayName("내역이 255자를 초과하면 400을 반환한다")
+            void createExpense_titleTooLong_returns400() throws Exception {
+                SecurityContextHolder.getContext().setAuthentication(
+                        new UsernamePasswordAuthenticationToken(1L, null));
+
+                ExpenseRequest request = new ExpenseRequest(
+                        10000L, "가".repeat(256),
+                        LocalDateTime.of(2026, 8, 19, 12, 0), 1,
+                        null, null, null, null);
+
+                mockMvc.perform(post("/api/expenses")
+                                .contentType(MediaType.APPLICATION_JSON)
+                                .content(objectMapper.writeValueAsString(request)))
+                        .andExpect(status().isBadRequest())
+                        .andExpect(jsonPath("$.isSuccess").value(false))
+                        .andExpect(jsonPath("$.code").value("COMMON_400_002"));
             }
         }
     }
