@@ -49,11 +49,20 @@ public class IncomeService {
                         .findByUserIdAndYearMonth(userId, yearMonth)
                         .orElseThrow(() -> new GeneralException(GeneralErrorCode.BUDGET_NOT_FOUND));
 
-        budget.addTotalBudget(request.amount());
+        BudgetCategory budgetCategory =
+                budgetCategoryRepository
+                        .findByBudgetIdAndCategoryId(budget.getId(), request.categoryId())
+                        .orElseThrow(
+                                () ->
+                                        new GeneralException(
+                                                GeneralErrorCode.BUDGET_CATEGORY_NOT_FOUND));
 
-        budgetCategoryRepository
-                .findByBudgetIdAndCategoryId(budget.getId(), request.categoryId())
-                .ifPresent(bc -> bc.addAmount(request.amount()));
+        try {
+            budget.addTotalBudget(request.amount());
+            budgetCategory.addAmount(request.amount());
+        } catch (ArithmeticException e) {
+            throw new GeneralException(GeneralErrorCode.BUDGET_OVERFLOW);
+        }
 
         return IncomeConverter.toIncomeResponse(saved);
     }

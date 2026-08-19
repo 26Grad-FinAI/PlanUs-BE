@@ -91,43 +91,6 @@ class IncomeServiceTest {
         }
 
         @Test
-        @DisplayName("BudgetCategory가 없으면 totalBudget만 업데이트한다")
-        void createIncome_noBudgetCategory_updatesTotalBudgetOnly() {
-            Expense saved = Expense.builder()
-                    .id(2L)
-                    .userId(1L)
-                    .type("INCOME")
-                    .amount(100000L)
-                    .title("용돈")
-                    .expenseDate(LocalDateTime.of(2026, 8, 15, 10, 0))
-                    .categoryId(3)
-                    .recurring(false)
-                    .planned(false)
-                    .createdAt(LocalDateTime.of(2026, 8, 15, 10, 0))
-                    .build();
-            when(expenseRepository.save(any())).thenReturn(saved);
-
-            Budget budget = Budget.builder()
-                    .id(10L)
-                    .userId(1L)
-                    .yearMonth(LocalDate.of(2026, 8, 1))
-                    .totalBudget(1000000L)
-                    .build();
-            when(budgetRepository.findByUserIdAndYearMonth(1L, LocalDate.of(2026, 8, 1)))
-                    .thenReturn(Optional.of(budget));
-            when(budgetCategoryRepository.findByBudgetIdAndCategoryId(10L, 3))
-                    .thenReturn(Optional.empty());
-
-            IncomeRequest request = new IncomeRequest(
-                    100000L, "용돈", LocalDateTime.of(2026, 8, 15, 10, 0), 3, null);
-
-            IncomeResponse response = incomeService.createIncome(1L, request);
-
-            assertThat(response.id()).isEqualTo(2L);
-            assertThat(budget.getTotalBudget()).isEqualTo(1100000L);
-        }
-
-        @Test
         @DisplayName("저장 시 ExpenseRepository.save가 호출된다")
         void createIncome_invokesSave() {
             Expense saved = Expense.builder()
@@ -148,8 +111,11 @@ class IncomeServiceTest {
                     .id(10L).userId(1L).yearMonth(LocalDate.of(2026, 8, 1)).totalBudget(1000000L).build();
             when(budgetRepository.findByUserIdAndYearMonth(1L, LocalDate.of(2026, 8, 1)))
                     .thenReturn(Optional.of(budget));
+
+            BudgetCategory budgetCategory = BudgetCategory.builder()
+                    .id(100L).budgetId(10L).categoryId(1).amount(200000L).build();
             when(budgetCategoryRepository.findByBudgetIdAndCategoryId(10L, 1))
-                    .thenReturn(Optional.empty());
+                    .thenReturn(Optional.of(budgetCategory));
 
             incomeService.createIncome(1L, validRequest());
 
@@ -200,6 +166,57 @@ class IncomeServiceTest {
                     .isInstanceOf(GeneralException.class)
                     .satisfies(ex -> assertThat(((GeneralException) ex).getErrorCode())
                             .isEqualTo(GeneralErrorCode.BUDGET_NOT_FOUND));
+        }
+
+        @Test
+        @DisplayName("BudgetCategory가 없으면 BUDGET_CATEGORY_NOT_FOUND 예외가 발생한다")
+        void createIncome_noBudgetCategory_throwsBudgetCategoryNotFound() {
+            when(expenseRepository.save(any())).thenReturn(Expense.builder()
+                    .id(1L).userId(1L).type("INCOME").amount(500000L).title("월급")
+                    .expenseDate(LocalDateTime.of(2026, 8, 25, 9, 0)).categoryId(1)
+                    .recurring(false).planned(false)
+                    .createdAt(LocalDateTime.of(2026, 8, 25, 9, 0)).build());
+
+            Budget budget = Budget.builder()
+                    .id(10L).userId(1L).yearMonth(LocalDate.of(2026, 8, 1)).totalBudget(1000000L).build();
+            when(budgetRepository.findByUserIdAndYearMonth(1L, LocalDate.of(2026, 8, 1)))
+                    .thenReturn(Optional.of(budget));
+            when(budgetCategoryRepository.findByBudgetIdAndCategoryId(10L, 1))
+                    .thenReturn(Optional.empty());
+
+            assertThatThrownBy(() -> incomeService.createIncome(1L, validRequest()))
+                    .isInstanceOf(GeneralException.class)
+                    .satisfies(ex -> assertThat(((GeneralException) ex).getErrorCode())
+                            .isEqualTo(GeneralErrorCode.BUDGET_CATEGORY_NOT_FOUND));
+        }
+
+        @Test
+        @DisplayName("수입 금액이 너무 크면 BUDGET_OVERFLOW 예외가 발생한다")
+        void createIncome_overflow_throwsBudgetOverflow() {
+            when(expenseRepository.save(any())).thenReturn(Expense.builder()
+                    .id(1L).userId(1L).type("INCOME").amount(Long.MAX_VALUE).title("큰 수입")
+                    .expenseDate(LocalDateTime.of(2026, 8, 25, 9, 0)).categoryId(1)
+                    .recurring(false).planned(false)
+                    .createdAt(LocalDateTime.of(2026, 8, 25, 9, 0)).build());
+
+            Budget budget = Budget.builder()
+                    .id(10L).userId(1L).yearMonth(LocalDate.of(2026, 8, 1)).totalBudget(1L).build();
+            when(budgetRepository.findByUserIdAndYearMonth(1L, LocalDate.of(2026, 8, 1)))
+                    .thenReturn(Optional.of(budget));
+
+            BudgetCategory budgetCategory = BudgetCategory.builder()
+                    .id(100L).budgetId(10L).categoryId(1).amount(1L).build();
+            when(budgetCategoryRepository.findByBudgetIdAndCategoryId(10L, 1))
+                    .thenReturn(Optional.of(budgetCategory));
+
+            IncomeRequest request = new IncomeRequest(
+                    Long.MAX_VALUE, "큰 수입",
+                    LocalDateTime.of(2026, 8, 25, 9, 0), 1, null);
+
+            assertThatThrownBy(() -> incomeService.createIncome(1L, request))
+                    .isInstanceOf(GeneralException.class)
+                    .satisfies(ex -> assertThat(((GeneralException) ex).getErrorCode())
+                            .isEqualTo(GeneralErrorCode.BUDGET_OVERFLOW));
         }
     }
 

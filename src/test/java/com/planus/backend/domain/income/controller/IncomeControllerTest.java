@@ -176,6 +176,40 @@ class IncomeControllerTest {
             }
 
             @Test
+            @DisplayName("카테고리 예산 배분 미설정 시 404를 반환한다")
+            void createIncome_budgetCategoryNotFound_returns404() throws Exception {
+                SecurityContextHolder.getContext().setAuthentication(
+                        new UsernamePasswordAuthenticationToken(1L, null));
+
+                when(incomeService.createIncome(eq(1L), any()))
+                        .thenThrow(new GeneralException(GeneralErrorCode.BUDGET_CATEGORY_NOT_FOUND));
+
+                mockMvc.perform(post("/api/incomes")
+                                .contentType(MediaType.APPLICATION_JSON)
+                                .content(objectMapper.writeValueAsString(validRequest())))
+                        .andExpect(status().isNotFound())
+                        .andExpect(jsonPath("$.isSuccess").value(false))
+                        .andExpect(jsonPath("$.code").value("INCOME_404_002"));
+            }
+
+            @Test
+            @DisplayName("예산 오버플로 시 400을 반환한다")
+            void createIncome_budgetOverflow_returns400() throws Exception {
+                SecurityContextHolder.getContext().setAuthentication(
+                        new UsernamePasswordAuthenticationToken(1L, null));
+
+                when(incomeService.createIncome(eq(1L), any()))
+                        .thenThrow(new GeneralException(GeneralErrorCode.BUDGET_OVERFLOW));
+
+                mockMvc.perform(post("/api/incomes")
+                                .contentType(MediaType.APPLICATION_JSON)
+                                .content(objectMapper.writeValueAsString(validRequest())))
+                        .andExpect(status().isBadRequest())
+                        .andExpect(jsonPath("$.isSuccess").value(false))
+                        .andExpect(jsonPath("$.code").value("INCOME_400_001"));
+            }
+
+            @Test
             @DisplayName("내역이 255자를 초과하면 400을 반환한다")
             void createIncome_titleTooLong_returns400() throws Exception {
                 SecurityContextHolder.getContext().setAuthentication(
