@@ -28,6 +28,7 @@ public class Expense {
 
     private String type; // EXPENSE / INCOME
     private long amount; // 원
+    private String title; // 내역
 
     @Column(name = "expense_date")
     private LocalDateTime expenseDate;

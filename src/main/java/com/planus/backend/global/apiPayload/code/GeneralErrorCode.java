@@ -30,7 +30,11 @@ public enum GeneralErrorCode implements BaseErrorCode {
     INVALID_CREDENTIALS(HttpStatus.UNAUTHORIZED, "AUTH_401_002", "이메일 또는 비밀번호가 올바르지 않습니다."),
     INVALID_TOKEN(HttpStatus.UNAUTHORIZED, "AUTH_401_003", "유효하지 않은 토큰입니다."),
     EXPIRED_TOKEN(HttpStatus.UNAUTHORIZED, "AUTH_401_004", "만료된 토큰입니다."),
-    SOCIAL_LOGIN_EMAIL_CONFLICT(HttpStatus.CONFLICT, "AUTH_409_002", "이미 다른 방식으로 가입된 이메일입니다.");
+    SOCIAL_LOGIN_EMAIL_CONFLICT(HttpStatus.CONFLICT, "AUTH_409_002", "이미 다른 방식으로 가입된 이메일입니다."),
+
+    // Expense
+    INVALID_CATEGORY(HttpStatus.BAD_REQUEST, "EXPENSE_400_001", "유효하지 않은 카테고리입니다. (1~11)"),
+    INVALID_EMOTION(HttpStatus.BAD_REQUEST, "EXPENSE_400_002", "유효하지 않은 감정 태그입니다.");
 
     private final HttpStatus httpStatus;
     private final String code;
