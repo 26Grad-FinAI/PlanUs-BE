@@ -25,4 +25,9 @@ public class BudgetCategory {
     private Integer categoryId;
 
     private long amount;
+
+    /** 카테고리 예산에 금액을 추가한다. (수입 등록 시 사용) */
+    public void addAmount(long amount) {
+        this.amount = Math.addExact(this.amount, amount);
+    }
 }

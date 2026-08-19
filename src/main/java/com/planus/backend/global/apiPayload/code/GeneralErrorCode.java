@@ -34,7 +34,14 @@ public enum GeneralErrorCode implements BaseErrorCode {
 
     // Expense
     INVALID_CATEGORY(HttpStatus.BAD_REQUEST, "EXPENSE_400_001", "유효하지 않은 카테고리입니다. (1~11)"),
-    INVALID_EMOTION(HttpStatus.BAD_REQUEST, "EXPENSE_400_002", "유효하지 않은 감정 태그입니다.");
+    INVALID_EMOTION(HttpStatus.BAD_REQUEST, "EXPENSE_400_002", "유효하지 않은 감정 태그입니다."),
+
+    // Income
+    BUDGET_NOT_FOUND(HttpStatus.NOT_FOUND, "INCOME_404_001", "해당 월의 예산이 설정되지 않았습니다."),
+    BUDGET_CATEGORY_NOT_FOUND(
+            HttpStatus.NOT_FOUND, "INCOME_404_002", "해당 카테고리의 예산 배분이 설정되지 않았습니다."),
+    BUDGET_OVERFLOW(
+            HttpStatus.BAD_REQUEST, "INCOME_400_001", "수입 금액이 너무 커 예산 한도를 초과합니다.");
 
     private final HttpStatus httpStatus;
     private final String code;

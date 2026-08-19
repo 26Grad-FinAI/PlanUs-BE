@@ -32,4 +32,9 @@ public class Budget {
 
     @Column(name = "total_budget")
     private long totalBudget;
+
+    /** 총 예산에 금액을 추가한다. (수입 등록 시 사용) */
+    public void addTotalBudget(long amount) {
+        this.totalBudget = Math.addExact(this.totalBudget, amount);
+    }
 }
