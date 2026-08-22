@@ -57,18 +57,18 @@ class GoogleOAuthServiceHttpContractTest {
     @Test
     @DisplayName("fetchAccessToken은 올바른 form 파라미터를 Google token endpoint로 전송한다")
     void fetchAccessToken_sendsCorrectFormParams() {
-        mockServer.expect(requestTo(TOKEN_URI))
+        mockServer
+                .expect(requestTo(TOKEN_URI))
                 .andExpect(method(HttpMethod.POST))
                 .andExpect(content().contentType(MediaType.APPLICATION_FORM_URLENCODED))
-                .andExpect(content().string(allOf(
-                        containsString("code=auth-code"),
-                        containsString("client_id=test-client-id"),
-                        containsString("client_secret=test-client-secret"),
-                        containsString("redirect_uri=http%3A%2F%2Flocalhost%2Fcallback"),
-                        containsString("grant_type=authorization_code"))))
-                .andRespond(withSuccess(
-                        "{\"access_token\":\"google-access-token\"}",
-                        MediaType.APPLICATION_JSON));
+                .andExpect(content()
+                        .string(allOf(
+                                containsString("code=auth-code"),
+                                containsString("client_id=test-client-id"),
+                                containsString("client_secret=test-client-secret"),
+                                containsString("redirect_uri=http%3A%2F%2Flocalhost%2Fcallback"),
+                                containsString("grant_type=authorization_code"))))
+                .andRespond(withSuccess("{\"access_token\":\"google-access-token\"}", MediaType.APPLICATION_JSON));
 
         String token = googleOAuthService.fetchAccessToken("auth-code", "http://localhost/callback");
 
@@ -79,7 +79,8 @@ class GoogleOAuthServiceHttpContractTest {
     @Test
     @DisplayName("fetchUserInfo는 Authorization 헤더를 포함해 userinfo endpoint를 호출하고 email_verified를 매핑한다")
     void fetchUserInfo_sendsAuthorizationHeaderAndMapsEmailVerified() {
-        mockServer.expect(requestTo(USERINFO_URI))
+        mockServer
+                .expect(requestTo(USERINFO_URI))
                 .andExpect(method(HttpMethod.GET))
                 .andExpect(header("Authorization", "Bearer test-token"))
                 .andRespond(withSuccess(
@@ -97,8 +98,7 @@ class GoogleOAuthServiceHttpContractTest {
     @Test
     @DisplayName("Google token endpoint가 4xx를 반환하면 INVALID_CREDENTIALS 예외가 발생한다")
     void fetchAccessToken_googleReturns4xx_throwsInvalidCredentials() {
-        mockServer.expect(requestTo(TOKEN_URI))
-                .andRespond(withStatus(HttpStatus.BAD_REQUEST));
+        mockServer.expect(requestTo(TOKEN_URI)).andRespond(withStatus(HttpStatus.BAD_REQUEST));
 
         assertThatThrownBy(() -> googleOAuthService.fetchAccessToken("bad-code", "http://localhost/callback"))
                 .isInstanceOf(GeneralException.class)
@@ -110,8 +110,7 @@ class GoogleOAuthServiceHttpContractTest {
     @Test
     @DisplayName("Google token endpoint가 5xx를 반환하면 SOCIAL_LOGIN_UNAVAILABLE 예외가 발생한다")
     void fetchAccessToken_googleReturns5xx_throwsSocialLoginUnavailable() {
-        mockServer.expect(requestTo(TOKEN_URI))
-                .andRespond(withServerError());
+        mockServer.expect(requestTo(TOKEN_URI)).andRespond(withServerError());
 
         assertThatThrownBy(() -> googleOAuthService.fetchAccessToken("code", "http://localhost/callback"))
                 .isInstanceOf(GeneralException.class)

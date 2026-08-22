@@ -32,10 +32,14 @@ import org.springframework.test.context.bean.override.mockito.MockitoSpyBean;
 @ActiveProfiles("test")
 class ReissueTokenConcurrencyIntegrationTest {
 
-    @MockitoSpyBean private AuthService authService;
+    @MockitoSpyBean
+    private AuthService authService;
 
-    @Autowired private JwtProvider jwtProvider;
-    @Autowired private UserAccountRepository userAccountRepository;
+    @Autowired
+    private JwtProvider jwtProvider;
+
+    @Autowired
+    private UserAccountRepository userAccountRepository;
 
     @AfterEach
     void tearDown() {
@@ -46,14 +50,11 @@ class ReissueTokenConcurrencyIntegrationTest {
     @DisplayName("동일 리프레시 토큰으로 동시 재발급 요청이 오면 하나만 성공하고 나머지는 INVALID_TOKEN이 발생한다")
     void concurrentReissue_onlyOneSucceeds() throws InterruptedException {
         // Given: 사용자 생성 후 리프레시 토큰 해시 저장
-        UserAccount user =
-                userAccountRepository.save(
-                        UserAccount.builder()
-                                .email("concurrent@example.com")
-                                .password(
-                                        "$2a$10$dummyhashfortest000000000000000000000000000000000000000")
-                                .provider(AuthProvider.LOCAL)
-                                .build());
+        UserAccount user = userAccountRepository.save(UserAccount.builder()
+                .email("concurrent@example.com")
+                .password("$2a$10$dummyhashfortest000000000000000000000000000000000000000")
+                .provider(AuthProvider.LOCAL)
+                .build());
 
         String refreshToken = jwtProvider.generateRefreshToken(user.getId());
         user.updateRefreshToken(jwtProvider.hashToken(refreshToken));
@@ -63,11 +64,10 @@ class ReissueTokenConcurrencyIntegrationTest {
 
         // 두 스레드가 동시에 reissue()에 진입하도록 barrier 설정
         CyclicBarrier barrier = new CyclicBarrier(2);
-        doAnswer(
-                        invocation -> {
-                            barrier.await(5, TimeUnit.SECONDS);
-                            return invocation.callRealMethod();
-                        })
+        doAnswer(invocation -> {
+                    barrier.await(5, TimeUnit.SECONDS);
+                    return invocation.callRealMethod();
+                })
                 .when(authService)
                 .reissue(any(ReissueRequest.class));
 
@@ -76,20 +76,19 @@ class ReissueTokenConcurrencyIntegrationTest {
         List<LoginResponse> successes = new ArrayList<>();
         List<Exception> errors = new ArrayList<>();
 
-        Runnable task =
-                () -> {
-                    try {
-                        startLatch.await();
-                        LoginResponse response = authService.reissue(request);
-                        synchronized (successes) {
-                            successes.add(response);
-                        }
-                    } catch (Exception e) {
-                        synchronized (errors) {
-                            errors.add(e);
-                        }
-                    }
-                };
+        Runnable task = () -> {
+            try {
+                startLatch.await();
+                LoginResponse response = authService.reissue(request);
+                synchronized (successes) {
+                    successes.add(response);
+                }
+            } catch (Exception e) {
+                synchronized (errors) {
+                    errors.add(e);
+                }
+            }
+        };
 
         Thread t1 = new Thread(task);
         Thread t2 = new Thread(task);
@@ -102,11 +101,8 @@ class ReissueTokenConcurrencyIntegrationTest {
         // Then: 정확히 하나만 성공하고 나머지는 INVALID_TOKEN
         assertThat(successes).hasSize(1);
         assertThat(errors).hasSize(1);
-        assertThat(errors.get(0))
-                .isInstanceOf(GeneralException.class)
-                .satisfies(
-                        ex ->
-                                assertThat(((GeneralException) ex).getErrorCode())
-                                        .isEqualTo(GeneralErrorCode.INVALID_TOKEN));
+        assertThat(errors.get(0)).isInstanceOf(GeneralException.class).satisfies(ex -> assertThat(
+                        ((GeneralException) ex).getErrorCode())
+                .isEqualTo(GeneralErrorCode.INVALID_TOKEN));
     }
 }

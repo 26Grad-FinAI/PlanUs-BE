@@ -97,7 +97,8 @@ public class UserAccount {
                 && monthlyIncome > 0
                 && gender != null
                 && residence != null
-                && hobbies != null && !hobbies.isEmpty()
+                && hobbies != null
+                && !hobbies.isEmpty()
                 && spendingHabit != null
                 && employmentStatus != null
                 && homeOwnership != null;

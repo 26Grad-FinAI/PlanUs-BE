@@ -103,7 +103,8 @@ public class GoogleOAuthService {
         params.add("grant_type", "authorization_code");
 
         try {
-            GoogleTokenResponse response = restClient.post()
+            GoogleTokenResponse response = restClient
+                    .post()
                     .uri(tokenUri)
                     .contentType(MediaType.APPLICATION_FORM_URLENCODED)
                     .body(params)
@@ -115,8 +116,10 @@ public class GoogleOAuthService {
             }
             return response.accessToken();
         } catch (HttpClientErrorException e) {
-            log.warn("[GoogleOAuth] fetchAccessToken failed. status={}, body={}",
-                    e.getStatusCode(), e.getResponseBodyAsString());
+            log.warn(
+                    "[GoogleOAuth] fetchAccessToken failed. status={}, body={}",
+                    e.getStatusCode(),
+                    e.getResponseBodyAsString());
             throw new GeneralException(GeneralErrorCode.INVALID_CREDENTIALS, e);
         } catch (HttpServerErrorException | ResourceAccessException e) {
             log.warn("[GoogleOAuth] fetchAccessToken failed. cause={}", e.getMessage());
@@ -131,7 +134,8 @@ public class GoogleOAuthService {
      */
     protected GoogleUserInfo fetchUserInfo(String accessToken) {
         try {
-            GoogleUserInfo userInfo = restClient.get()
+            GoogleUserInfo userInfo = restClient
+                    .get()
                     .uri(userinfoUri)
                     .header("Authorization", "Bearer " + accessToken)
                     .retrieve()
@@ -142,8 +146,10 @@ public class GoogleOAuthService {
             }
             return userInfo;
         } catch (HttpClientErrorException e) {
-            log.warn("[GoogleOAuth] fetchUserInfo failed. status={}, body={}",
-                    e.getStatusCode(), e.getResponseBodyAsString());
+            log.warn(
+                    "[GoogleOAuth] fetchUserInfo failed. status={}, body={}",
+                    e.getStatusCode(),
+                    e.getResponseBodyAsString());
             throw new GeneralException(GeneralErrorCode.INVALID_CREDENTIALS, e);
         } catch (HttpServerErrorException | ResourceAccessException e) {
             log.warn("[GoogleOAuth] fetchUserInfo failed. cause={}", e.getMessage());
@@ -187,5 +193,6 @@ public class GoogleOAuthService {
 
     record GoogleTokenResponse(@JsonProperty("access_token") String accessToken) {}
 
-    record GoogleUserInfo(String sub, String email, String name, @JsonProperty("email_verified") Boolean emailVerified) {}
+    record GoogleUserInfo(
+            String sub, String email, String name, @JsonProperty("email_verified") Boolean emailVerified) {}
 }

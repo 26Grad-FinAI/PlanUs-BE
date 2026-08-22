@@ -39,25 +39,26 @@ public class SecurityConfig {
      */
     @Bean
     public SecurityFilterChain filterChain(
-            HttpSecurity http,
-            JwtAuthenticationFilter jwtAuthenticationFilter,
-            ObjectMapper objectMapper)
+            HttpSecurity http, JwtAuthenticationFilter jwtAuthenticationFilter, ObjectMapper objectMapper)
             throws Exception {
         http.csrf(AbstractHttpConfigurer::disable)
                 .sessionManagement(session -> session.sessionCreationPolicy(SessionCreationPolicy.STATELESS))
-                .exceptionHandling(handling -> handling.authenticationEntryPoint(
-                        (request, response, authException) -> {
-                            response.setStatus(GeneralErrorCode.UNAUTHORIZED.getHttpStatus().value());
-                            response.setContentType("application/json;charset=UTF-8");
-                            response.getWriter()
-                                    .write(objectMapper.writeValueAsString(
-                                            ApiResponse.onFailure(GeneralErrorCode.UNAUTHORIZED, null)));
-                        }))
-                .authorizeHttpRequests(auth -> auth
-                        .requestMatchers("/api/auth/logout").authenticated()
-                        .requestMatchers("/api/auth/**").permitAll()
-                        .requestMatchers("/swagger-ui/**", "/v3/api-docs/**").permitAll()
-                        .anyRequest().authenticated())
+                .exceptionHandling(handling -> handling.authenticationEntryPoint((request, response, authException) -> {
+                    response.setStatus(
+                            GeneralErrorCode.UNAUTHORIZED.getHttpStatus().value());
+                    response.setContentType("application/json;charset=UTF-8");
+                    response.getWriter()
+                            .write(objectMapper.writeValueAsString(
+                                    ApiResponse.onFailure(GeneralErrorCode.UNAUTHORIZED, null)));
+                }))
+                .authorizeHttpRequests(auth -> auth.requestMatchers("/api/auth/logout")
+                        .authenticated()
+                        .requestMatchers("/api/auth/**")
+                        .permitAll()
+                        .requestMatchers("/swagger-ui/**", "/v3/api-docs/**")
+                        .permitAll()
+                        .anyRequest()
+                        .authenticated())
                 .addFilterBefore(jwtAuthenticationFilter, UsernamePasswordAuthenticationFilter.class);
         return http.build();
     }

@@ -34,12 +34,7 @@ class AuthServiceReissueTest {
         userAccountRepository = mock(UserAccountRepository.class);
         jwtProvider = mock(JwtProvider.class);
         entityManager = mock(EntityManager.class);
-        authService =
-                new AuthService(
-                        userAccountRepository,
-                        mock(PasswordEncoder.class),
-                        jwtProvider,
-                        entityManager);
+        authService = new AuthService(userAccountRepository, mock(PasswordEncoder.class), jwtProvider, entityManager);
     }
 
     @Nested
@@ -49,12 +44,11 @@ class AuthServiceReissueTest {
         @Test
         @DisplayName("유효한 리프레시 토큰으로 새 토큰이 발급되고 DB 해시가 갱신된다")
         void reissue_validToken_returnsNewTokens() {
-            UserAccount spyUser =
-                    spy(UserAccount.builder()
-                            .id(1L)
-                            .email("user@example.com")
-                            .refreshToken("stored-hash")
-                            .build());
+            UserAccount spyUser = spy(UserAccount.builder()
+                    .id(1L)
+                    .email("user@example.com")
+                    .refreshToken("stored-hash")
+                    .build());
             when(jwtProvider.parseUserId("valid-refresh-token")).thenReturn(1L);
             when(entityManager.find(UserAccount.class, 1L, LockModeType.PESSIMISTIC_WRITE))
                     .thenReturn(spyUser);
@@ -85,10 +79,8 @@ class AuthServiceReissueTest {
 
             assertThatThrownBy(() -> authService.reissue(new ReissueRequest("expired-token")))
                     .isInstanceOf(GeneralException.class)
-                    .satisfies(
-                            ex ->
-                                    assertThat(((GeneralException) ex).getErrorCode())
-                                            .isEqualTo(GeneralErrorCode.EXPIRED_TOKEN));
+                    .satisfies(ex -> assertThat(((GeneralException) ex).getErrorCode())
+                            .isEqualTo(GeneralErrorCode.EXPIRED_TOKEN));
         }
 
         @Test
@@ -99,10 +91,8 @@ class AuthServiceReissueTest {
 
             assertThatThrownBy(() -> authService.reissue(new ReissueRequest("tampered-token")))
                     .isInstanceOf(GeneralException.class)
-                    .satisfies(
-                            ex ->
-                                    assertThat(((GeneralException) ex).getErrorCode())
-                                            .isEqualTo(GeneralErrorCode.INVALID_TOKEN));
+                    .satisfies(ex -> assertThat(((GeneralException) ex).getErrorCode())
+                            .isEqualTo(GeneralErrorCode.INVALID_TOKEN));
         }
 
         @Test
@@ -117,10 +107,8 @@ class AuthServiceReissueTest {
 
             assertThatThrownBy(() -> authService.reissue(new ReissueRequest("stolen-token")))
                     .isInstanceOf(GeneralException.class)
-                    .satisfies(
-                            ex ->
-                                    assertThat(((GeneralException) ex).getErrorCode())
-                                            .isEqualTo(GeneralErrorCode.INVALID_TOKEN));
+                    .satisfies(ex -> assertThat(((GeneralException) ex).getErrorCode())
+                            .isEqualTo(GeneralErrorCode.INVALID_TOKEN));
         }
 
         @Test
@@ -132,10 +120,8 @@ class AuthServiceReissueTest {
 
             assertThatThrownBy(() -> authService.reissue(new ReissueRequest("orphan-token")))
                     .isInstanceOf(GeneralException.class)
-                    .satisfies(
-                            ex ->
-                                    assertThat(((GeneralException) ex).getErrorCode())
-                                            .isEqualTo(GeneralErrorCode.INVALID_TOKEN));
+                    .satisfies(ex -> assertThat(((GeneralException) ex).getErrorCode())
+                            .isEqualTo(GeneralErrorCode.INVALID_TOKEN));
         }
     }
 }

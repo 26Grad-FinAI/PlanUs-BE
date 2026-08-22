@@ -65,10 +65,7 @@ class KakaoOAuthServiceTest {
         return new KakaoOAuthService.KakaoUserInfo(
                 123456789L,
                 new KakaoOAuthService.KakaoAccount(
-                        "user@kakao.com",
-                        true,
-                        true,
-                        new KakaoOAuthService.KakaoProfile("홍길동")));
+                        "user@kakao.com", true, true, new KakaoOAuthService.KakaoProfile("홍길동")));
     }
 
     private void stubOAuthCalls() {
@@ -92,8 +89,8 @@ class KakaoOAuthServiceTest {
                     .providerId("123456789")
                     .build());
             when(userAccountRepository.findByProviderAndProviderId(AuthProvider.KAKAO, "123456789"))
-                    .thenReturn(Optional.empty())           // findOrCreateUser 최초 조회
-                    .thenReturn(Optional.of(spyUser));      // saveAndFlush 후 T1 재조회
+                    .thenReturn(Optional.empty()) // findOrCreateUser 최초 조회
+                    .thenReturn(Optional.of(spyUser)); // saveAndFlush 후 T1 재조회
             when(userAccountRepository.findByEmail("user@kakao.com")).thenReturn(Optional.empty());
             when(jwtProvider.generateAccessToken(1L)).thenReturn("access-token");
             when(jwtProvider.generateRefreshToken(1L)).thenReturn("refresh-token");
@@ -136,8 +133,7 @@ class KakaoOAuthServiceTest {
         @DisplayName("닉네임 동의를 거부한 신규 사용자는 기본 닉네임으로 저장된다")
         void login_newUser_profileNull_savesWithDefaultNickname() {
             KakaoOAuthService.KakaoUserInfo noProfileUserInfo = new KakaoOAuthService.KakaoUserInfo(
-                    123456789L,
-                    new KakaoOAuthService.KakaoAccount("user@kakao.com", true, true, null));
+                    123456789L, new KakaoOAuthService.KakaoAccount("user@kakao.com", true, true, null));
             doReturn("kakao-access-token").when(kakaoOAuthService).fetchAccessToken(anyString(), anyString());
             doReturn(noProfileUserInfo).when(kakaoOAuthService).fetchUserInfo("kakao-access-token");
             UserAccount spyUser = spy(UserAccount.builder()
@@ -148,8 +144,8 @@ class KakaoOAuthServiceTest {
                     .providerId("123456789")
                     .build());
             when(userAccountRepository.findByProviderAndProviderId(AuthProvider.KAKAO, "123456789"))
-                    .thenReturn(Optional.empty())           // findOrCreateUser 최초 조회
-                    .thenReturn(Optional.of(spyUser));      // saveAndFlush 후 T1 재조회
+                    .thenReturn(Optional.empty()) // findOrCreateUser 최초 조회
+                    .thenReturn(Optional.of(spyUser)); // saveAndFlush 후 T1 재조회
             when(userAccountRepository.findByEmail("user@kakao.com")).thenReturn(Optional.empty());
             when(jwtProvider.generateAccessToken(1L)).thenReturn("access-token");
             when(jwtProvider.generateRefreshToken(1L)).thenReturn("refresh-token");
@@ -201,7 +197,11 @@ class KakaoOAuthServiceTest {
             doReturn("kakao-access-token").when(kakaoOAuthService).fetchAccessToken(anyString(), anyString());
             doReturn(unverifiedUserInfo).when(kakaoOAuthService).fetchUserInfo("kakao-access-token");
             UserAccount spyUser = spy(UserAccount.builder()
-                    .id(1L).email("user@kakao.com").provider(AuthProvider.KAKAO).providerId("123456789").build());
+                    .id(1L)
+                    .email("user@kakao.com")
+                    .provider(AuthProvider.KAKAO)
+                    .providerId("123456789")
+                    .build());
             when(userAccountRepository.findByProviderAndProviderId(AuthProvider.KAKAO, "123456789"))
                     .thenReturn(Optional.of(spyUser));
             when(jwtProvider.generateAccessToken(1L)).thenReturn("access-token");
@@ -223,7 +223,11 @@ class KakaoOAuthServiceTest {
             doReturn("kakao-access-token").when(kakaoOAuthService).fetchAccessToken(anyString(), anyString());
             doReturn(invalidEmailUserInfo).when(kakaoOAuthService).fetchUserInfo("kakao-access-token");
             UserAccount spyUser = spy(UserAccount.builder()
-                    .id(1L).email("user@kakao.com").provider(AuthProvider.KAKAO).providerId("123456789").build());
+                    .id(1L)
+                    .email("user@kakao.com")
+                    .provider(AuthProvider.KAKAO)
+                    .providerId("123456789")
+                    .build());
             when(userAccountRepository.findByProviderAndProviderId(AuthProvider.KAKAO, "123456789"))
                     .thenReturn(Optional.of(spyUser));
             when(jwtProvider.generateAccessToken(1L)).thenReturn("access-token");
@@ -238,12 +242,15 @@ class KakaoOAuthServiceTest {
         @Test
         @DisplayName("kakao_account가 없는 신규 사용자는 null 이메일과 기본 닉네임으로 저장된다")
         void login_newUser_kakaoAccountNull_savesWithNullEmailAndDefaultNickname() {
-            KakaoOAuthService.KakaoUserInfo noAccountUserInfo =
-                    new KakaoOAuthService.KakaoUserInfo(123456789L, null);
+            KakaoOAuthService.KakaoUserInfo noAccountUserInfo = new KakaoOAuthService.KakaoUserInfo(123456789L, null);
             doReturn("kakao-access-token").when(kakaoOAuthService).fetchAccessToken(anyString(), anyString());
             doReturn(noAccountUserInfo).when(kakaoOAuthService).fetchUserInfo("kakao-access-token");
             UserAccount spyUser = spy(UserAccount.builder()
-                    .id(1L).nickname("카카오 사용자").provider(AuthProvider.KAKAO).providerId("123456789").build());
+                    .id(1L)
+                    .nickname("카카오 사용자")
+                    .provider(AuthProvider.KAKAO)
+                    .providerId("123456789")
+                    .build());
             when(userAccountRepository.findByProviderAndProviderId(AuthProvider.KAKAO, "123456789"))
                     .thenReturn(Optional.empty())
                     .thenReturn(Optional.of(spyUser));
@@ -266,7 +273,11 @@ class KakaoOAuthServiceTest {
             doReturn("kakao-access-token").when(kakaoOAuthService).fetchAccessToken(anyString(), anyString());
             doReturn(noEmailUserInfo).when(kakaoOAuthService).fetchUserInfo("kakao-access-token");
             UserAccount spyUser = spy(UserAccount.builder()
-                    .id(1L).nickname("홍길동").provider(AuthProvider.KAKAO).providerId("123456789").build());
+                    .id(1L)
+                    .nickname("홍길동")
+                    .provider(AuthProvider.KAKAO)
+                    .providerId("123456789")
+                    .build());
             when(userAccountRepository.findByProviderAndProviderId(AuthProvider.KAKAO, "123456789"))
                     .thenReturn(Optional.empty())
                     .thenReturn(Optional.of(spyUser));
@@ -302,8 +313,8 @@ class KakaoOAuthServiceTest {
         @Test
         @DisplayName("허용되지 않은 redirectUri면 INVALID_REDIRECT_URI 예외가 발생한다")
         void login_invalidRedirectUri_throwsInvalidRedirectUri() {
-            assertThatThrownBy(() -> kakaoOAuthService.login(
-                            new SocialLoginRequest("auth-code", "http://evil.com/callback")))
+            assertThatThrownBy(() ->
+                            kakaoOAuthService.login(new SocialLoginRequest("auth-code", "http://evil.com/callback")))
                     .isInstanceOf(GeneralException.class)
                     .satisfies(ex -> assertThat(((GeneralException) ex).getErrorCode())
                             .isEqualTo(GeneralErrorCode.INVALID_REDIRECT_URI));
@@ -313,7 +324,8 @@ class KakaoOAuthServiceTest {
         @DisplayName("유효하지 않은 인가코드면 INVALID_CREDENTIALS 예외가 발생한다")
         void login_invalidCode_throwsInvalidCredentials() {
             doThrow(new GeneralException(GeneralErrorCode.INVALID_CREDENTIALS))
-                    .when(kakaoOAuthService).fetchAccessToken(anyString(), anyString());
+                    .when(kakaoOAuthService)
+                    .fetchAccessToken(anyString(), anyString());
 
             assertThatThrownBy(() -> kakaoOAuthService.login(validRequest()))
                     .isInstanceOf(GeneralException.class)
@@ -324,9 +336,11 @@ class KakaoOAuthServiceTest {
         @Test
         @DisplayName("Kakao 서버 오류(5xx)면 SOCIAL_LOGIN_UNAVAILABLE 예외가 발생한다")
         void login_kakaoServerError_throwsSocialLoginUnavailable() {
-            doThrow(new GeneralException(GeneralErrorCode.SOCIAL_LOGIN_UNAVAILABLE,
+            doThrow(new GeneralException(
+                            GeneralErrorCode.SOCIAL_LOGIN_UNAVAILABLE,
                             new HttpServerErrorException(HttpStatus.INTERNAL_SERVER_ERROR)))
-                    .when(kakaoOAuthService).fetchAccessToken(anyString(), anyString());
+                    .when(kakaoOAuthService)
+                    .fetchAccessToken(anyString(), anyString());
 
             assertThatThrownBy(() -> kakaoOAuthService.login(validRequest()))
                     .isInstanceOf(GeneralException.class)
@@ -337,9 +351,10 @@ class KakaoOAuthServiceTest {
         @Test
         @DisplayName("Kakao 응답 타임아웃이면 SOCIAL_LOGIN_UNAVAILABLE 예외가 발생한다")
         void login_kakaoTimeout_throwsSocialLoginUnavailable() {
-            doThrow(new GeneralException(GeneralErrorCode.SOCIAL_LOGIN_UNAVAILABLE,
-                            new ResourceAccessException("timeout")))
-                    .when(kakaoOAuthService).fetchAccessToken(anyString(), anyString());
+            doThrow(new GeneralException(
+                            GeneralErrorCode.SOCIAL_LOGIN_UNAVAILABLE, new ResourceAccessException("timeout")))
+                    .when(kakaoOAuthService)
+                    .fetchAccessToken(anyString(), anyString());
 
             assertThatThrownBy(() -> kakaoOAuthService.login(validRequest()))
                     .isInstanceOf(GeneralException.class)

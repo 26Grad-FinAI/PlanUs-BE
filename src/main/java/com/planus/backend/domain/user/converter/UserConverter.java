@@ -34,10 +34,7 @@ public class UserConverter {
      */
     public static UserProfileUpdateResponse toProfileUpdateResponse(UserAccount user) {
         return new UserProfileUpdateResponse(
-                user.getId(),
-                user.availableBudget(),
-                "프로필 수정 완료. 예산 재산출이 트리거됩니다.",
-                user.getUpdatedAt());
+                user.getId(), user.availableBudget(), "프로필 수정 완료. 예산 재산출이 트리거됩니다.", user.getUpdatedAt());
     }
 
     /**

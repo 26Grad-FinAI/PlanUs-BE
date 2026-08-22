@@ -44,18 +44,13 @@ public class IncomeService {
         Expense saved = expenseRepository.save(expense);
 
         LocalDate yearMonth = request.incomeDate().toLocalDate().withDayOfMonth(1);
-        Budget budget =
-                budgetRepository
-                        .findByUserIdAndYearMonth(userId, yearMonth)
-                        .orElseThrow(() -> new GeneralException(GeneralErrorCode.BUDGET_NOT_FOUND));
+        Budget budget = budgetRepository
+                .findByUserIdAndYearMonth(userId, yearMonth)
+                .orElseThrow(() -> new GeneralException(GeneralErrorCode.BUDGET_NOT_FOUND));
 
-        BudgetCategory budgetCategory =
-                budgetCategoryRepository
-                        .findByBudgetIdAndCategoryId(budget.getId(), request.categoryId())
-                        .orElseThrow(
-                                () ->
-                                        new GeneralException(
-                                                GeneralErrorCode.BUDGET_CATEGORY_NOT_FOUND));
+        BudgetCategory budgetCategory = budgetCategoryRepository
+                .findByBudgetIdAndCategoryId(budget.getId(), request.categoryId())
+                .orElseThrow(() -> new GeneralException(GeneralErrorCode.BUDGET_CATEGORY_NOT_FOUND));
 
         try {
             budget.addTotalBudget(request.amount());

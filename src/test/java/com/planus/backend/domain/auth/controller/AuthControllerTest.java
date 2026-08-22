@@ -15,21 +15,21 @@ import com.planus.backend.domain.auth.dto.ReissueRequest;
 import com.planus.backend.domain.auth.dto.SignUpRequest;
 import com.planus.backend.domain.auth.dto.SignUpResponse;
 import com.planus.backend.domain.auth.dto.SocialLoginRequest;
-import java.util.List;
-import org.springframework.security.authentication.UsernamePasswordAuthenticationToken;
-import org.springframework.security.core.context.SecurityContextHolder;
-import org.springframework.security.web.method.annotation.AuthenticationPrincipalArgumentResolver;
 import com.planus.backend.domain.auth.service.AuthService;
 import com.planus.backend.domain.auth.service.GoogleOAuthService;
 import com.planus.backend.domain.auth.service.KakaoOAuthService;
 import com.planus.backend.global.apiPayload.code.GeneralErrorCode;
 import com.planus.backend.global.apiPayload.exception.GeneralException;
 import com.planus.backend.global.apiPayload.handler.GeneralExceptionAdvice;
+import java.util.List;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Nested;
 import org.junit.jupiter.api.Test;
 import org.springframework.http.MediaType;
+import org.springframework.security.authentication.UsernamePasswordAuthenticationToken;
+import org.springframework.security.core.context.SecurityContextHolder;
+import org.springframework.security.web.method.annotation.AuthenticationPrincipalArgumentResolver;
 import org.springframework.test.web.servlet.MockMvc;
 import org.springframework.test.web.servlet.setup.MockMvcBuilders;
 
@@ -46,7 +46,8 @@ class AuthControllerTest {
         authService = mock(AuthService.class);
         googleOAuthService = mock(GoogleOAuthService.class);
         kakaoOAuthService = mock(KakaoOAuthService.class);
-        mockMvc = MockMvcBuilders.standaloneSetup(new AuthController(authService, googleOAuthService, kakaoOAuthService))
+        mockMvc = MockMvcBuilders.standaloneSetup(
+                        new AuthController(authService, googleOAuthService, kakaoOAuthService))
                 .setControllerAdvice(new GeneralExceptionAdvice())
                 .setCustomArgumentResolvers(new AuthenticationPrincipalArgumentResolver())
                 .build();
@@ -168,8 +169,7 @@ class AuthControllerTest {
         @Test
         @DisplayName("올바른 이메일/비밀번호로 200과 토큰을 반환한다")
         void login_success_returns200() throws Exception {
-            LoginResponse response =
-                    new LoginResponse(1L, "user@example.com", "access-token", "refresh-token", false);
+            LoginResponse response = new LoginResponse(1L, "user@example.com", "access-token", "refresh-token", false);
             when(authService.login(any())).thenReturn(response);
 
             mockMvc.perform(post("/api/auth/login")
@@ -204,7 +204,8 @@ class AuthControllerTest {
 
             mockMvc.perform(post("/api/auth/login")
                             .contentType(MediaType.APPLICATION_JSON)
-                            .content(objectMapper.writeValueAsString(new LoginRequest("user@example.com", "wrongpass"))))
+                            .content(
+                                    objectMapper.writeValueAsString(new LoginRequest("user@example.com", "wrongpass"))))
                     .andExpect(status().isUnauthorized())
                     .andExpect(jsonPath("$.isSuccess").value(false))
                     .andExpect(jsonPath("$.code").value("AUTH_401_002"));
@@ -218,8 +219,7 @@ class AuthControllerTest {
         @Test
         @DisplayName("올바른 인가코드로 200과 토큰을 반환한다")
         void googleLogin_success_returns200() throws Exception {
-            LoginResponse response =
-                    new LoginResponse(1L, "user@example.com", "access-token", "refresh-token", false);
+            LoginResponse response = new LoginResponse(1L, "user@example.com", "access-token", "refresh-token", false);
             when(googleOAuthService.login(any())).thenReturn(response);
 
             mockMvc.perform(post("/api/auth/oauth2/google")
@@ -251,8 +251,7 @@ class AuthControllerTest {
         @Test
         @DisplayName("유효하지 않은 인가코드면 401을 반환한다")
         void googleLogin_invalidCode_returns401() throws Exception {
-            when(googleOAuthService.login(any()))
-                    .thenThrow(new GeneralException(GeneralErrorCode.INVALID_CREDENTIALS));
+            when(googleOAuthService.login(any())).thenThrow(new GeneralException(GeneralErrorCode.INVALID_CREDENTIALS));
 
             mockMvc.perform(post("/api/auth/oauth2/google")
                             .contentType(MediaType.APPLICATION_JSON)
@@ -271,8 +270,7 @@ class AuthControllerTest {
         @Test
         @DisplayName("올바른 인가코드로 200과 토큰을 반환한다")
         void kakaoLogin_success_returns200() throws Exception {
-            LoginResponse response =
-                    new LoginResponse(1L, "user@kakao.com", "access-token", "refresh-token", false);
+            LoginResponse response = new LoginResponse(1L, "user@kakao.com", "access-token", "refresh-token", false);
             when(kakaoOAuthService.login(any())).thenReturn(response);
 
             mockMvc.perform(post("/api/auth/oauth2/kakao")
@@ -304,8 +302,7 @@ class AuthControllerTest {
         @Test
         @DisplayName("유효하지 않은 인가코드면 401을 반환한다")
         void kakaoLogin_invalidCode_returns401() throws Exception {
-            when(kakaoOAuthService.login(any()))
-                    .thenThrow(new GeneralException(GeneralErrorCode.INVALID_CREDENTIALS));
+            when(kakaoOAuthService.login(any())).thenThrow(new GeneralException(GeneralErrorCode.INVALID_CREDENTIALS));
 
             mockMvc.perform(post("/api/auth/oauth2/kakao")
                             .contentType(MediaType.APPLICATION_JSON)
@@ -345,8 +342,8 @@ class AuthControllerTest {
         @Test
         @DisplayName("유효한 액세스 토큰으로 200을 반환한다")
         void logout_success_returns200() throws Exception {
-            SecurityContextHolder.getContext().setAuthentication(
-                    new UsernamePasswordAuthenticationToken(1L, null, List.of()));
+            SecurityContextHolder.getContext()
+                    .setAuthentication(new UsernamePasswordAuthenticationToken(1L, null, List.of()));
             try {
                 mockMvc.perform(post("/api/auth/logout"))
                         .andExpect(status().isOk())

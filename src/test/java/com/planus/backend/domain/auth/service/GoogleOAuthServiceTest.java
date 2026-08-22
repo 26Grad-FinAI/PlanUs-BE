@@ -23,14 +23,14 @@ import com.planus.backend.global.apiPayload.exception.GeneralException;
 import com.planus.backend.global.security.JwtProvider;
 import java.util.List;
 import java.util.Optional;
-import org.springframework.dao.DataIntegrityViolationException;
-import org.springframework.http.HttpStatus;
-import org.springframework.web.client.HttpServerErrorException;
-import org.springframework.web.client.ResourceAccessException;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Nested;
 import org.junit.jupiter.api.Test;
+import org.springframework.dao.DataIntegrityViolationException;
+import org.springframework.http.HttpStatus;
+import org.springframework.web.client.HttpServerErrorException;
+import org.springframework.web.client.ResourceAccessException;
 import org.springframework.web.client.RestClient;
 
 class GoogleOAuthServiceTest {
@@ -86,8 +86,8 @@ class GoogleOAuthServiceTest {
                     .providerId("sub123")
                     .build());
             when(userAccountRepository.findByProviderAndProviderId(AuthProvider.GOOGLE, "sub123"))
-                    .thenReturn(Optional.empty())           // findOrCreateUser 최초 조회
-                    .thenReturn(Optional.of(spyUser));      // saveAndFlush 후 T1 재조회
+                    .thenReturn(Optional.empty()) // findOrCreateUser 최초 조회
+                    .thenReturn(Optional.of(spyUser)); // saveAndFlush 후 T1 재조회
             when(userAccountRepository.findByEmail("user@example.com")).thenReturn(Optional.empty());
             when(jwtProvider.generateAccessToken(1L)).thenReturn("access-token");
             when(jwtProvider.generateRefreshToken(1L)).thenReturn("refresh-token");
@@ -137,7 +137,7 @@ class GoogleOAuthServiceTest {
                     .providerId("sub123")
                     .build());
             when(userAccountRepository.findByProviderAndProviderId(AuthProvider.GOOGLE, "sub123"))
-                    .thenReturn(Optional.empty())          // 첫 조회: 없음
+                    .thenReturn(Optional.empty()) // 첫 조회: 없음
                     .thenReturn(Optional.of(existingUser)); // 중복 키 후 재조회: 있음
             when(userAccountRepository.findByEmail("user@example.com")).thenReturn(Optional.empty());
             when(userAccountPersister.saveAndFlush(any())).thenThrow(new DataIntegrityViolationException("duplicate"));
@@ -193,8 +193,8 @@ class GoogleOAuthServiceTest {
         @Test
         @DisplayName("허용되지 않은 redirectUri면 INVALID_REDIRECT_URI 예외가 발생한다")
         void login_invalidRedirectUri_throwsInvalidRedirectUri() {
-            assertThatThrownBy(() -> googleOAuthService.login(
-                            new SocialLoginRequest("auth-code", "http://evil.com/callback")))
+            assertThatThrownBy(() ->
+                            googleOAuthService.login(new SocialLoginRequest("auth-code", "http://evil.com/callback")))
                     .isInstanceOf(GeneralException.class)
                     .satisfies(ex -> assertThat(((GeneralException) ex).getErrorCode())
                             .isEqualTo(GeneralErrorCode.INVALID_REDIRECT_URI));
@@ -204,7 +204,8 @@ class GoogleOAuthServiceTest {
         @DisplayName("유효하지 않은 인가코드면 INVALID_CREDENTIALS 예외가 발생한다")
         void login_invalidCode_throwsInvalidCredentials() {
             doThrow(new GeneralException(GeneralErrorCode.INVALID_CREDENTIALS))
-                    .when(googleOAuthService).fetchAccessToken(anyString(), anyString());
+                    .when(googleOAuthService)
+                    .fetchAccessToken(anyString(), anyString());
 
             assertThatThrownBy(() -> googleOAuthService.login(validRequest()))
                     .isInstanceOf(GeneralException.class)
@@ -215,9 +216,11 @@ class GoogleOAuthServiceTest {
         @Test
         @DisplayName("Google 서버 오류(5xx)면 SOCIAL_LOGIN_UNAVAILABLE 예외가 발생한다")
         void login_googleServerError_throwsSocialLoginUnavailable() {
-            doThrow(new GeneralException(GeneralErrorCode.SOCIAL_LOGIN_UNAVAILABLE,
+            doThrow(new GeneralException(
+                            GeneralErrorCode.SOCIAL_LOGIN_UNAVAILABLE,
                             new HttpServerErrorException(HttpStatus.INTERNAL_SERVER_ERROR)))
-                    .when(googleOAuthService).fetchAccessToken(anyString(), anyString());
+                    .when(googleOAuthService)
+                    .fetchAccessToken(anyString(), anyString());
 
             assertThatThrownBy(() -> googleOAuthService.login(validRequest()))
                     .isInstanceOf(GeneralException.class)
@@ -228,9 +231,10 @@ class GoogleOAuthServiceTest {
         @Test
         @DisplayName("Google 응답 타임아웃이면 SOCIAL_LOGIN_UNAVAILABLE 예외가 발생한다")
         void login_googleTimeout_throwsSocialLoginUnavailable() {
-            doThrow(new GeneralException(GeneralErrorCode.SOCIAL_LOGIN_UNAVAILABLE,
-                            new ResourceAccessException("timeout")))
-                    .when(googleOAuthService).fetchAccessToken(anyString(), anyString());
+            doThrow(new GeneralException(
+                            GeneralErrorCode.SOCIAL_LOGIN_UNAVAILABLE, new ResourceAccessException("timeout")))
+                    .when(googleOAuthService)
+                    .fetchAccessToken(anyString(), anyString());
 
             assertThatThrownBy(() -> googleOAuthService.login(validRequest()))
                     .isInstanceOf(GeneralException.class)

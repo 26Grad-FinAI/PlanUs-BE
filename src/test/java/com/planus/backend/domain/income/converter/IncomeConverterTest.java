@@ -19,10 +19,7 @@ class IncomeConverterTest {
         @Test
         @DisplayName("요청 DTO의 필드가 엔티티에 올바르게 매핑된다")
         void mapsFieldsCorrectly() {
-            IncomeRequest request = new IncomeRequest(
-                    500000L, "월급",
-                    LocalDateTime.of(2026, 8, 25, 9, 0), 1,
-                    "8월 급여");
+            IncomeRequest request = new IncomeRequest(500000L, "월급", LocalDateTime.of(2026, 8, 25, 9, 0), 1, "8월 급여");
 
             Expense expense = IncomeConverter.toExpense(1L, request);
 
@@ -41,8 +38,7 @@ class IncomeConverterTest {
         @Test
         @DisplayName("메모가 null이면 null로 매핑된다")
         void memoNull_mappedToNull() {
-            IncomeRequest request = new IncomeRequest(
-                    100000L, "용돈", LocalDateTime.now(), 2, null);
+            IncomeRequest request = new IncomeRequest(100000L, "용돈", LocalDateTime.now(), 2, null);
 
             Expense expense = IncomeConverter.toExpense(1L, request);
 
