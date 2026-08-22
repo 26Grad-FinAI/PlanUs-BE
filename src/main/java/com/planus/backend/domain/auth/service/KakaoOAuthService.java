@@ -101,7 +101,8 @@ public class KakaoOAuthService {
         params.add("grant_type", "authorization_code");
 
         try {
-            KakaoTokenResponse response = restClient.post()
+            KakaoTokenResponse response = restClient
+                    .post()
                     .uri(tokenUri)
                     .contentType(MediaType.APPLICATION_FORM_URLENCODED)
                     .body(params)
@@ -113,8 +114,10 @@ public class KakaoOAuthService {
             }
             return response.accessToken();
         } catch (HttpClientErrorException e) {
-            log.warn("[KakaoOAuth] fetchAccessToken failed. status={}, body={}",
-                    e.getStatusCode(), e.getResponseBodyAsString());
+            log.warn(
+                    "[KakaoOAuth] fetchAccessToken failed. status={}, body={}",
+                    e.getStatusCode(),
+                    e.getResponseBodyAsString());
             throw new GeneralException(GeneralErrorCode.INVALID_CREDENTIALS, e);
         } catch (HttpServerErrorException | ResourceAccessException e) {
             log.warn("[KakaoOAuth] fetchAccessToken failed. cause={}", e.getMessage());
@@ -129,7 +132,8 @@ public class KakaoOAuthService {
      */
     protected KakaoUserInfo fetchUserInfo(String accessToken) {
         try {
-            KakaoUserInfo userInfo = restClient.get()
+            KakaoUserInfo userInfo = restClient
+                    .get()
                     .uri(userinfoUri)
                     .header("Authorization", "Bearer " + accessToken)
                     .retrieve()
@@ -140,8 +144,10 @@ public class KakaoOAuthService {
             }
             return userInfo;
         } catch (HttpClientErrorException e) {
-            log.warn("[KakaoOAuth] fetchUserInfo failed. status={}, body={}",
-                    e.getStatusCode(), e.getResponseBodyAsString());
+            log.warn(
+                    "[KakaoOAuth] fetchUserInfo failed. status={}, body={}",
+                    e.getStatusCode(),
+                    e.getResponseBodyAsString());
             throw new GeneralException(GeneralErrorCode.INVALID_CREDENTIALS, e);
         } catch (HttpServerErrorException | ResourceAccessException e) {
             log.warn("[KakaoOAuth] fetchUserInfo failed. cause={}", e.getMessage());

@@ -61,13 +61,15 @@ class IncomeControllerTest {
             @Test
             @DisplayName("올바른 요청 시 201과 등록된 수입 정보를 반환한다")
             void createIncome_success_returns201() throws Exception {
-                SecurityContextHolder.getContext().setAuthentication(
-                        new UsernamePasswordAuthenticationToken(1L, null));
+                SecurityContextHolder.getContext().setAuthentication(new UsernamePasswordAuthenticationToken(1L, null));
 
                 IncomeResponse response = new IncomeResponse(
-                        1L, 500000L, "월급",
+                        1L,
+                        500000L,
+                        "월급",
                         LocalDateTime.of(2026, 8, 25, 9, 0),
-                        1, "8월 급여",
+                        1,
+                        "8월 급여",
                         LocalDateTime.of(2026, 8, 25, 9, 0));
                 when(incomeService.createIncome(eq(1L), any())).thenReturn(response);
 
@@ -93,8 +95,7 @@ class IncomeControllerTest {
             @Test
             @DisplayName("필수 필드 누락 시 400을 반환한다")
             void createIncome_missingField_returns400() throws Exception {
-                SecurityContextHolder.getContext().setAuthentication(
-                        new UsernamePasswordAuthenticationToken(1L, null));
+                SecurityContextHolder.getContext().setAuthentication(new UsernamePasswordAuthenticationToken(1L, null));
 
                 mockMvc.perform(post("/api/incomes")
                                 .contentType(MediaType.APPLICATION_JSON)
@@ -107,11 +108,9 @@ class IncomeControllerTest {
             @Test
             @DisplayName("금액이 0이면 400을 반환한다")
             void createIncome_zeroAmount_returns400() throws Exception {
-                SecurityContextHolder.getContext().setAuthentication(
-                        new UsernamePasswordAuthenticationToken(1L, null));
+                SecurityContextHolder.getContext().setAuthentication(new UsernamePasswordAuthenticationToken(1L, null));
 
-                IncomeRequest request = new IncomeRequest(
-                        0L, "테스트", LocalDateTime.of(2026, 8, 25, 9, 0), 1, null);
+                IncomeRequest request = new IncomeRequest(0L, "테스트", LocalDateTime.of(2026, 8, 25, 9, 0), 1, null);
 
                 mockMvc.perform(post("/api/incomes")
                                 .contentType(MediaType.APPLICATION_JSON)
@@ -124,11 +123,9 @@ class IncomeControllerTest {
             @Test
             @DisplayName("내역이 빈 문자열이면 400을 반환한다")
             void createIncome_blankTitle_returns400() throws Exception {
-                SecurityContextHolder.getContext().setAuthentication(
-                        new UsernamePasswordAuthenticationToken(1L, null));
+                SecurityContextHolder.getContext().setAuthentication(new UsernamePasswordAuthenticationToken(1L, null));
 
-                IncomeRequest request = new IncomeRequest(
-                        100000L, "  ", LocalDateTime.of(2026, 8, 25, 9, 0), 1, null);
+                IncomeRequest request = new IncomeRequest(100000L, "  ", LocalDateTime.of(2026, 8, 25, 9, 0), 1, null);
 
                 mockMvc.perform(post("/api/incomes")
                                 .contentType(MediaType.APPLICATION_JSON)
@@ -141,14 +138,13 @@ class IncomeControllerTest {
             @Test
             @DisplayName("유효하지 않은 카테고리이면 400을 반환한다")
             void createIncome_invalidCategory_returns400() throws Exception {
-                SecurityContextHolder.getContext().setAuthentication(
-                        new UsernamePasswordAuthenticationToken(1L, null));
+                SecurityContextHolder.getContext().setAuthentication(new UsernamePasswordAuthenticationToken(1L, null));
 
                 when(incomeService.createIncome(eq(1L), any()))
                         .thenThrow(new GeneralException(GeneralErrorCode.INVALID_CATEGORY));
 
-                IncomeRequest request = new IncomeRequest(
-                        100000L, "테스트", LocalDateTime.of(2026, 8, 25, 9, 0), 99, null);
+                IncomeRequest request =
+                        new IncomeRequest(100000L, "테스트", LocalDateTime.of(2026, 8, 25, 9, 0), 99, null);
 
                 mockMvc.perform(post("/api/incomes")
                                 .contentType(MediaType.APPLICATION_JSON)
@@ -161,8 +157,7 @@ class IncomeControllerTest {
             @Test
             @DisplayName("해당 월 예산 미설정 시 404를 반환한다")
             void createIncome_budgetNotFound_returns404() throws Exception {
-                SecurityContextHolder.getContext().setAuthentication(
-                        new UsernamePasswordAuthenticationToken(1L, null));
+                SecurityContextHolder.getContext().setAuthentication(new UsernamePasswordAuthenticationToken(1L, null));
 
                 when(incomeService.createIncome(eq(1L), any()))
                         .thenThrow(new GeneralException(GeneralErrorCode.BUDGET_NOT_FOUND));
@@ -178,8 +173,7 @@ class IncomeControllerTest {
             @Test
             @DisplayName("카테고리 예산 배분 미설정 시 404를 반환한다")
             void createIncome_budgetCategoryNotFound_returns404() throws Exception {
-                SecurityContextHolder.getContext().setAuthentication(
-                        new UsernamePasswordAuthenticationToken(1L, null));
+                SecurityContextHolder.getContext().setAuthentication(new UsernamePasswordAuthenticationToken(1L, null));
 
                 when(incomeService.createIncome(eq(1L), any()))
                         .thenThrow(new GeneralException(GeneralErrorCode.BUDGET_CATEGORY_NOT_FOUND));
@@ -195,8 +189,7 @@ class IncomeControllerTest {
             @Test
             @DisplayName("예산 오버플로 시 400을 반환한다")
             void createIncome_budgetOverflow_returns400() throws Exception {
-                SecurityContextHolder.getContext().setAuthentication(
-                        new UsernamePasswordAuthenticationToken(1L, null));
+                SecurityContextHolder.getContext().setAuthentication(new UsernamePasswordAuthenticationToken(1L, null));
 
                 when(incomeService.createIncome(eq(1L), any()))
                         .thenThrow(new GeneralException(GeneralErrorCode.BUDGET_OVERFLOW));
@@ -212,12 +205,10 @@ class IncomeControllerTest {
             @Test
             @DisplayName("내역이 255자를 초과하면 400을 반환한다")
             void createIncome_titleTooLong_returns400() throws Exception {
-                SecurityContextHolder.getContext().setAuthentication(
-                        new UsernamePasswordAuthenticationToken(1L, null));
+                SecurityContextHolder.getContext().setAuthentication(new UsernamePasswordAuthenticationToken(1L, null));
 
-                IncomeRequest request = new IncomeRequest(
-                        100000L, "가".repeat(256),
-                        LocalDateTime.of(2026, 8, 25, 9, 0), 1, null);
+                IncomeRequest request =
+                        new IncomeRequest(100000L, "가".repeat(256), LocalDateTime.of(2026, 8, 25, 9, 0), 1, null);
 
                 mockMvc.perform(post("/api/incomes")
                                 .contentType(MediaType.APPLICATION_JSON)
@@ -230,11 +221,6 @@ class IncomeControllerTest {
     }
 
     private IncomeRequest validRequest() {
-        return new IncomeRequest(
-                500000L,
-                "월급",
-                LocalDateTime.of(2026, 8, 25, 9, 0),
-                1,
-                "8월 급여");
+        return new IncomeRequest(500000L, "월급", LocalDateTime.of(2026, 8, 25, 9, 0), 1, "8월 급여");
     }
 }

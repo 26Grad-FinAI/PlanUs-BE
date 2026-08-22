@@ -28,8 +28,7 @@ public class JwtAuthenticationFilter extends OncePerRequestFilter {
     private final UserAccountRepository userAccountRepository;
 
     @Override
-    protected void doFilterInternal(
-            HttpServletRequest request, HttpServletResponse response, FilterChain filterChain)
+    protected void doFilterInternal(HttpServletRequest request, HttpServletResponse response, FilterChain filterChain)
             throws ServletException, IOException {
 
         String token = resolveToken(request);
@@ -68,11 +67,9 @@ public class JwtAuthenticationFilter extends OncePerRequestFilter {
      * <p>필터는 DispatcherServlet 앞에서 동작하므로 {@code @ControllerAdvice}가 예외를 처리하지 못한다.
      * 때문에 {@link HttpServletResponse}에 직접 JSON을 작성한다.</p>
      */
-    private void sendErrorResponse(HttpServletResponse response, BaseErrorCode errorCode)
-            throws IOException {
+    private void sendErrorResponse(HttpServletResponse response, BaseErrorCode errorCode) throws IOException {
         response.setStatus(errorCode.getHttpStatus().value());
         response.setContentType("application/json;charset=UTF-8");
-        response.getWriter()
-                .write(objectMapper.writeValueAsString(ApiResponse.onFailure(errorCode, null)));
+        response.getWriter().write(objectMapper.writeValueAsString(ApiResponse.onFailure(errorCode, null)));
     }
 }

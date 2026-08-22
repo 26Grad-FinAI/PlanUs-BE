@@ -26,12 +26,8 @@ class AuthServiceWithdrawTest {
     @BeforeEach
     void setUp() {
         userAccountRepository = mock(UserAccountRepository.class);
-        authService =
-                new AuthService(
-                        userAccountRepository,
-                        mock(PasswordEncoder.class),
-                        mock(JwtProvider.class),
-                        mock(EntityManager.class));
+        authService = new AuthService(
+                userAccountRepository, mock(PasswordEncoder.class), mock(JwtProvider.class), mock(EntityManager.class));
     }
 
     @Test
@@ -53,8 +49,6 @@ class AuthServiceWithdrawTest {
         assertThatThrownBy(() -> authService.withdraw(999L))
                 .isInstanceOf(GeneralException.class)
                 .satisfies(
-                        ex ->
-                                assertThat(((GeneralException) ex).getErrorCode())
-                                        .isEqualTo(GeneralErrorCode.NOT_FOUND));
+                        ex -> assertThat(((GeneralException) ex).getErrorCode()).isEqualTo(GeneralErrorCode.NOT_FOUND));
     }
 }

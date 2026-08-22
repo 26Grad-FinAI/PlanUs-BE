@@ -30,8 +30,7 @@ public class AuthService {
     private static final Pattern PASSWORD_PATTERN = Pattern.compile("^(?=.*[A-Za-z])(?=.*\\d).{8,}$");
 
     /** 타이밍 공격 방지용 더미 BCrypt 해시. 이메일 미존재 시 비교에만 사용하며 실제 로그인에 쓰이지 않는다. */
-    private static final String DUMMY_PASSWORD_HASH =
-            "$2a$10$N9qo8uLOickgx2ZMRZoMyeIjZAgcfl7p92ldGxad68LJZdL17lhWy";
+    private static final String DUMMY_PASSWORD_HASH = "$2a$10$N9qo8uLOickgx2ZMRZoMyeIjZAgcfl7p92ldGxad68LJZdL17lhWy";
 
     private final UserAccountRepository userAccountRepository;
     private final PasswordEncoder passwordEncoder;
@@ -113,11 +112,9 @@ public class AuthService {
     public LoginResponse reissue(ReissueRequest request) {
         Long userId = jwtProvider.parseUserId(request.refreshToken());
 
-        UserAccount user =
-                Optional.ofNullable(
-                                entityManager.find(
-                                        UserAccount.class, userId, LockModeType.PESSIMISTIC_WRITE))
-                        .orElseThrow(() -> new GeneralException(GeneralErrorCode.INVALID_TOKEN));
+        UserAccount user = Optional.ofNullable(
+                        entityManager.find(UserAccount.class, userId, LockModeType.PESSIMISTIC_WRITE))
+                .orElseThrow(() -> new GeneralException(GeneralErrorCode.INVALID_TOKEN));
 
         String incomingHash = jwtProvider.hashToken(request.refreshToken());
         if (!incomingHash.equals(user.getRefreshToken())) {
@@ -140,10 +137,9 @@ public class AuthService {
      */
     @Transactional
     public void logout(Long userId) {
-        UserAccount user =
-                userAccountRepository
-                        .findById(userId)
-                        .orElseThrow(() -> new GeneralException(GeneralErrorCode.NOT_FOUND));
+        UserAccount user = userAccountRepository
+                .findById(userId)
+                .orElseThrow(() -> new GeneralException(GeneralErrorCode.NOT_FOUND));
         user.updateRefreshToken(null);
     }
 
@@ -156,10 +152,9 @@ public class AuthService {
      */
     @Transactional
     public void withdraw(Long userId) {
-        UserAccount user =
-                userAccountRepository
-                        .findById(userId)
-                        .orElseThrow(() -> new GeneralException(GeneralErrorCode.NOT_FOUND));
+        UserAccount user = userAccountRepository
+                .findById(userId)
+                .orElseThrow(() -> new GeneralException(GeneralErrorCode.NOT_FOUND));
         userAccountRepository.delete(user);
     }
 

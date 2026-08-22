@@ -10,8 +10,4 @@ import java.time.LocalDateTime;
  * @param message         안내 메시지
  * @param updatedAt       프로필 마지막 수정일시
  */
-public record UserProfileUpdateResponse(
-        Long userId,
-        long availableBudget,
-        String message,
-        LocalDateTime updatedAt) {}
+public record UserProfileUpdateResponse(Long userId, long availableBudget, String message, LocalDateTime updatedAt) {}

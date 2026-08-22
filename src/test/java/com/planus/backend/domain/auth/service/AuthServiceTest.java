@@ -15,13 +15,13 @@ import com.planus.backend.domain.auth.dto.LoginRequest;
 import com.planus.backend.domain.auth.dto.LoginResponse;
 import com.planus.backend.domain.auth.dto.SignUpRequest;
 import com.planus.backend.domain.auth.dto.SignUpResponse;
-import java.util.Optional;
 import com.planus.backend.domain.user.entity.AuthProvider;
 import com.planus.backend.domain.user.entity.UserAccount;
 import com.planus.backend.domain.user.repository.UserAccountRepository;
 import com.planus.backend.global.apiPayload.code.GeneralErrorCode;
 import com.planus.backend.global.apiPayload.exception.GeneralException;
 import com.planus.backend.global.security.JwtProvider;
+import java.util.Optional;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Nested;
@@ -40,7 +40,8 @@ class AuthServiceTest {
         userAccountRepository = mock(UserAccountRepository.class);
         passwordEncoder = mock(PasswordEncoder.class);
         jwtProvider = mock(JwtProvider.class);
-        authService = new AuthService(userAccountRepository, passwordEncoder, jwtProvider, mock(jakarta.persistence.EntityManager.class));
+        authService = new AuthService(
+                userAccountRepository, passwordEncoder, jwtProvider, mock(jakarta.persistence.EntityManager.class));
     }
 
     private SignUpRequest validRequest() {
@@ -80,7 +81,6 @@ class AuthServiceTest {
             assertThat(response.profileCompleted()).isFalse();
             verify(spyUser).updateRefreshToken("hashed-token");
         }
-
     }
 
     @Nested

@@ -50,8 +50,7 @@ class SocialLoginConcurrencyIntegrationTest {
         KakaoOAuthService.KakaoUserInfo userInfo = new KakaoOAuthService.KakaoUserInfo(
                 123456789L,
                 new KakaoOAuthService.KakaoAccount(
-                        "concurrent@kakao.com", true, true,
-                        new KakaoOAuthService.KakaoProfile("홍길동")));
+                        "concurrent@kakao.com", true, true, new KakaoOAuthService.KakaoProfile("홍길동")));
 
         doReturn("kakao-token").when(kakaoOAuthService).fetchAccessToken(anyString(), anyString());
         doReturn(userInfo).when(kakaoOAuthService).fetchUserInfo("kakao-token");
@@ -59,9 +58,11 @@ class SocialLoginConcurrencyIntegrationTest {
         // 두 스레드가 동시에 saveAndFlush에 진입하도록 barrier 설정
         CyclicBarrier barrier = new CyclicBarrier(2);
         doAnswer(invocation -> {
-            barrier.await(5, TimeUnit.SECONDS);
-            return invocation.callRealMethod();
-        }).when(userAccountPersister).saveAndFlush(any(UserAccount.class));
+                    barrier.await(5, TimeUnit.SECONDS);
+                    return invocation.callRealMethod();
+                })
+                .when(userAccountPersister)
+                .saveAndFlush(any(UserAccount.class));
 
         SocialLoginRequest request = new SocialLoginRequest("auth-code", "http://localhost/callback");
 
@@ -97,8 +98,8 @@ class SocialLoginConcurrencyIntegrationTest {
         t2.join(10_000);
 
         assertThat(errors).isEmpty();
-        UserAccount saved = userAccountRepository.findByEmail("concurrent@kakao.com")
-                .orElseThrow();
+        UserAccount saved =
+                userAccountRepository.findByEmail("concurrent@kakao.com").orElseThrow();
         assertThat(saved.getRefreshToken()).as("refresh token이 DB에 저장되어야 한다").isNotNull();
     }
 }

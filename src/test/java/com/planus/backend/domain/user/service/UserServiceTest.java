@@ -40,10 +40,7 @@ class UserServiceTest {
         @Test
         @DisplayName("프로필 저장 후 가용예산(소득 - 고정지출 - 저축목표)을 반환한다")
         void saveProfile_returnsCorrectAvailableBudget() {
-            UserAccount user = spy(UserAccount.builder()
-                    .id(1L)
-                    .nickname("김스펜드")
-                    .build());
+            UserAccount user = spy(UserAccount.builder().id(1L).nickname("김스펜드").build());
             when(userAccountRepository.findById(1L)).thenReturn(Optional.of(user));
 
             UserProfileResponse response = userService.saveProfile(1L, validRequest());
@@ -54,10 +51,7 @@ class UserServiceTest {
         @Test
         @DisplayName("프로필 저장 후 profileCompleted가 true이다")
         void saveProfile_profileCompletedIsTrue() {
-            UserAccount user = spy(UserAccount.builder()
-                    .id(1L)
-                    .nickname("김스펜드")
-                    .build());
+            UserAccount user = spy(UserAccount.builder().id(1L).nickname("김스펜드").build());
             when(userAccountRepository.findById(1L)).thenReturn(Optional.of(user));
 
             UserProfileResponse response = userService.saveProfile(1L, validRequest());
@@ -68,10 +62,7 @@ class UserServiceTest {
         @Test
         @DisplayName("프로필 저장 후 userId와 nickname이 올바르게 반환된다")
         void saveProfile_returnsUserIdAndNickname() {
-            UserAccount user = spy(UserAccount.builder()
-                    .id(1L)
-                    .nickname("김스펜드")
-                    .build());
+            UserAccount user = spy(UserAccount.builder().id(1L).nickname("김스펜드").build());
             when(userAccountRepository.findById(1L)).thenReturn(Optional.of(user));
 
             UserProfileResponse response = userService.saveProfile(1L, validRequest());
@@ -83,25 +74,23 @@ class UserServiceTest {
         @Test
         @DisplayName("saveProfile 호출 시 UserAccount.updateProfile이 요청값으로 실행된다")
         void saveProfile_invokesUpdateProfileWithRequestValues() {
-            UserAccount user = spy(UserAccount.builder()
-                    .id(1L)
-                    .nickname("김스펜드")
-                    .build());
+            UserAccount user = spy(UserAccount.builder().id(1L).nickname("김스펜드").build());
             when(userAccountRepository.findById(1L)).thenReturn(Optional.of(user));
 
             userService.saveProfile(1L, validRequest());
 
-            verify(user).updateProfile(
-                    30,
-                    "MALE",
-                    "서울",
-                    3_000_000L,
-                    1_000_000L,
-                    500_000L,
-                    List.of("DINING", "TRAVEL"),
-                    "SAVING",
-                    true,
-                    false);
+            verify(user)
+                    .updateProfile(
+                            30,
+                            "MALE",
+                            "서울",
+                            3_000_000L,
+                            1_000_000L,
+                            500_000L,
+                            List.of("DINING", "TRAVEL"),
+                            "SAVING",
+                            true,
+                            false);
         }
     }
 
@@ -116,8 +105,8 @@ class UserServiceTest {
 
             assertThatThrownBy(() -> userService.saveProfile(999L, validRequest()))
                     .isInstanceOf(GeneralException.class)
-                    .satisfies(ex -> assertThat(((GeneralException) ex).getErrorCode())
-                            .isEqualTo(GeneralErrorCode.NOT_FOUND));
+                    .satisfies(ex ->
+                            assertThat(((GeneralException) ex).getErrorCode()).isEqualTo(GeneralErrorCode.NOT_FOUND));
         }
     }
 
@@ -128,10 +117,7 @@ class UserServiceTest {
         @Test
         @DisplayName("프로필 수정 후 변경된 가용예산을 반환한다")
         void updateProfile_returnsUpdatedAvailableBudget() {
-            UserAccount user = spy(UserAccount.builder()
-                    .id(1L)
-                    .nickname("김스펜드")
-                    .build());
+            UserAccount user = spy(UserAccount.builder().id(1L).nickname("김스펜드").build());
             when(userAccountRepository.findById(1L)).thenReturn(Optional.of(user));
 
             UserProfileUpdateResponse response = userService.updateProfile(1L, validRequest());
@@ -142,10 +128,7 @@ class UserServiceTest {
         @Test
         @DisplayName("프로필 수정 응답 메시지는 고정 문자열이다")
         void updateProfile_hasFixedMessage() {
-            UserAccount user = spy(UserAccount.builder()
-                    .id(1L)
-                    .nickname("김스펜드")
-                    .build());
+            UserAccount user = spy(UserAccount.builder().id(1L).nickname("김스펜드").build());
             when(userAccountRepository.findById(1L)).thenReturn(Optional.of(user));
 
             UserProfileUpdateResponse response = userService.updateProfile(1L, validRequest());
@@ -156,19 +139,23 @@ class UserServiceTest {
         @Test
         @DisplayName("updateProfile 호출 시 UserAccount.updateProfile이 요청값으로 실행된다")
         void updateProfile_invokesUpdateProfileWithRequestValues() {
-            UserAccount user = spy(UserAccount.builder()
-                    .id(1L)
-                    .nickname("김스펜드")
-                    .build());
+            UserAccount user = spy(UserAccount.builder().id(1L).nickname("김스펜드").build());
             when(userAccountRepository.findById(1L)).thenReturn(Optional.of(user));
 
             userService.updateProfile(1L, validRequest());
 
-            verify(user).updateProfile(
-                    30, "MALE", "서울",
-                    3_000_000L, 1_000_000L, 500_000L,
-                    List.of("DINING", "TRAVEL"),
-                    "SAVING", true, false);
+            verify(user)
+                    .updateProfile(
+                            30,
+                            "MALE",
+                            "서울",
+                            3_000_000L,
+                            1_000_000L,
+                            500_000L,
+                            List.of("DINING", "TRAVEL"),
+                            "SAVING",
+                            true,
+                            false);
         }
     }
 
@@ -183,8 +170,8 @@ class UserServiceTest {
 
             assertThatThrownBy(() -> userService.updateProfile(999L, validRequest()))
                     .isInstanceOf(GeneralException.class)
-                    .satisfies(ex -> assertThat(((GeneralException) ex).getErrorCode())
-                            .isEqualTo(GeneralErrorCode.NOT_FOUND));
+                    .satisfies(ex ->
+                            assertThat(((GeneralException) ex).getErrorCode()).isEqualTo(GeneralErrorCode.NOT_FOUND));
         }
     }
 
@@ -233,22 +220,13 @@ class UserServiceTest {
 
             assertThatThrownBy(() -> userService.getProfile(999L))
                     .isInstanceOf(GeneralException.class)
-                    .satisfies(ex -> assertThat(((GeneralException) ex).getErrorCode())
-                            .isEqualTo(GeneralErrorCode.NOT_FOUND));
+                    .satisfies(ex ->
+                            assertThat(((GeneralException) ex).getErrorCode()).isEqualTo(GeneralErrorCode.NOT_FOUND));
         }
     }
 
     private UserProfileRequest validRequest() {
         return new UserProfileRequest(
-                30,
-                "MALE",
-                "서울",
-                3_000_000L,
-                1_000_000L,
-                500_000L,
-                List.of("DINING", "TRAVEL"),
-                "SAVING",
-                true,
-                false);
+                30, "MALE", "서울", 3_000_000L, 1_000_000L, 500_000L, List.of("DINING", "TRAVEL"), "SAVING", true, false);
     }
 }

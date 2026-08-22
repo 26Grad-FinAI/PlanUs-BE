@@ -10,8 +10,4 @@ package com.planus.backend.domain.user.dto;
  * @param message          안내 메시지
  */
 public record UserProfileResponse(
-        Long userId,
-        String nickname,
-        long availableBudget,
-        boolean profileCompleted,
-        String message) {}
+        Long userId, String nickname, long availableBudget, boolean profileCompleted, String message) {}

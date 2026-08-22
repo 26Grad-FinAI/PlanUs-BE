@@ -69,8 +69,7 @@ class UserControllerTest {
             @Test
             @DisplayName("올바른 요청 시 201과 userId·nickname·availableBudget을 반환한다")
             void saveProfile_success_returns201() throws Exception {
-                SecurityContextHolder.getContext().setAuthentication(
-                        new UsernamePasswordAuthenticationToken(1L, null));
+                SecurityContextHolder.getContext().setAuthentication(new UsernamePasswordAuthenticationToken(1L, null));
 
                 UserProfileResponse response =
                         new UserProfileResponse(1L, "김스펜드", 1_500_000L, true, "프로필 저장 완료. AI 예산 산출이 시작됩니다.");
@@ -98,8 +97,7 @@ class UserControllerTest {
             @Test
             @DisplayName("필수 필드 누락 시 400을 반환한다")
             void saveProfile_missingField_returns400() throws Exception {
-                SecurityContextHolder.getContext().setAuthentication(
-                        new UsernamePasswordAuthenticationToken(1L, null));
+                SecurityContextHolder.getContext().setAuthentication(new UsernamePasswordAuthenticationToken(1L, null));
 
                 mockMvc.perform(post("/api/users/me/profile")
                                 .contentType(MediaType.APPLICATION_JSON)
@@ -112,14 +110,19 @@ class UserControllerTest {
             @Test
             @DisplayName("hobbies에 빈 문자열 요소가 포함되면 400을 반환한다")
             void saveProfile_blankHobbyElement_returns400() throws Exception {
-                SecurityContextHolder.getContext().setAuthentication(
-                        new UsernamePasswordAuthenticationToken(1L, null));
+                SecurityContextHolder.getContext().setAuthentication(new UsernamePasswordAuthenticationToken(1L, null));
 
                 UserProfileRequest requestWithBlankHobby = new UserProfileRequest(
-                        30, "MALE", "서울",
-                        3_000_000L, 1_000_000L, 500_000L,
+                        30,
+                        "MALE",
+                        "서울",
+                        3_000_000L,
+                        1_000_000L,
+                        500_000L,
                         List.of("DINING", ""),
-                        "SAVING", true, false);
+                        "SAVING",
+                        true,
+                        false);
 
                 mockMvc.perform(post("/api/users/me/profile")
                                 .contentType(MediaType.APPLICATION_JSON)
@@ -132,14 +135,10 @@ class UserControllerTest {
             @Test
             @DisplayName("hobbies에 공백만 있는 요소가 포함되면 400을 반환한다")
             void saveProfile_whitespaceHobbyElement_returns400() throws Exception {
-                SecurityContextHolder.getContext().setAuthentication(
-                        new UsernamePasswordAuthenticationToken(1L, null));
+                SecurityContextHolder.getContext().setAuthentication(new UsernamePasswordAuthenticationToken(1L, null));
 
                 UserProfileRequest requestWithWhitespaceHobby = new UserProfileRequest(
-                        30, "MALE", "서울",
-                        3_000_000L, 1_000_000L, 500_000L,
-                        List.of("   "),
-                        "SAVING", true, false);
+                        30, "MALE", "서울", 3_000_000L, 1_000_000L, 500_000L, List.of("   "), "SAVING", true, false);
 
                 mockMvc.perform(post("/api/users/me/profile")
                                 .contentType(MediaType.APPLICATION_JSON)
@@ -152,8 +151,8 @@ class UserControllerTest {
             @Test
             @DisplayName("존재하지 않는 userId이면 404를 반환한다")
             void saveProfile_userNotFound_returns404() throws Exception {
-                SecurityContextHolder.getContext().setAuthentication(
-                        new UsernamePasswordAuthenticationToken(999L, null));
+                SecurityContextHolder.getContext()
+                        .setAuthentication(new UsernamePasswordAuthenticationToken(999L, null));
                 when(userService.saveProfile(eq(999L), any()))
                         .thenThrow(new GeneralException(GeneralErrorCode.NOT_FOUND));
 
@@ -178,8 +177,7 @@ class UserControllerTest {
             @Test
             @DisplayName("올바른 요청 시 200과 userId·availableBudget·message·updatedAt을 반환한다")
             void updateProfile_success_returns200() throws Exception {
-                SecurityContextHolder.getContext().setAuthentication(
-                        new UsernamePasswordAuthenticationToken(1L, null));
+                SecurityContextHolder.getContext().setAuthentication(new UsernamePasswordAuthenticationToken(1L, null));
 
                 UserProfileUpdateResponse response =
                         new UserProfileUpdateResponse(1L, 1_500_000L, "프로필 수정 완료. 예산 재산출이 트리거됩니다.", null);
@@ -205,8 +203,7 @@ class UserControllerTest {
             @Test
             @DisplayName("필수 필드 누락 시 400을 반환한다")
             void updateProfile_missingField_returns400() throws Exception {
-                SecurityContextHolder.getContext().setAuthentication(
-                        new UsernamePasswordAuthenticationToken(1L, null));
+                SecurityContextHolder.getContext().setAuthentication(new UsernamePasswordAuthenticationToken(1L, null));
 
                 mockMvc.perform(put("/api/users/me/profile")
                                 .contentType(MediaType.APPLICATION_JSON)
@@ -219,8 +216,8 @@ class UserControllerTest {
             @Test
             @DisplayName("존재하지 않는 userId이면 404를 반환한다")
             void updateProfile_userNotFound_returns404() throws Exception {
-                SecurityContextHolder.getContext().setAuthentication(
-                        new UsernamePasswordAuthenticationToken(999L, null));
+                SecurityContextHolder.getContext()
+                        .setAuthentication(new UsernamePasswordAuthenticationToken(999L, null));
                 when(userService.updateProfile(eq(999L), any()))
                         .thenThrow(new GeneralException(GeneralErrorCode.NOT_FOUND));
 
@@ -245,13 +242,26 @@ class UserControllerTest {
             @Test
             @DisplayName("200 OK와 프로필 전체 정보를 반환한다")
             void getProfile_success_returns200() throws Exception {
-                SecurityContextHolder.getContext().setAuthentication(
-                        new UsernamePasswordAuthenticationToken(1L, null));
+                SecurityContextHolder.getContext().setAuthentication(new UsernamePasswordAuthenticationToken(1L, null));
 
                 UserProfileGetResponse response = new UserProfileGetResponse(
-                        1L, "spendwise@email.com", "김스펜드", 28, "MALE", "서울특별시",
-                        3_000_000L, 1_000_000L, 500_000L, 1_500_000L,
-                        List.of("DINING", "TRAVEL"), "BALANCED", true, false, true, null, null);
+                        1L,
+                        "spendwise@email.com",
+                        "김스펜드",
+                        28,
+                        "MALE",
+                        "서울특별시",
+                        3_000_000L,
+                        1_000_000L,
+                        500_000L,
+                        1_500_000L,
+                        List.of("DINING", "TRAVEL"),
+                        "BALANCED",
+                        true,
+                        false,
+                        true,
+                        null,
+                        null);
                 when(userService.getProfile(1L)).thenReturn(response);
 
                 mockMvc.perform(get("/api/users/me/profile"))
@@ -276,10 +286,9 @@ class UserControllerTest {
             @Test
             @DisplayName("존재하지 않는 userId이면 404를 반환한다")
             void getProfile_userNotFound_returns404() throws Exception {
-                SecurityContextHolder.getContext().setAuthentication(
-                        new UsernamePasswordAuthenticationToken(999L, null));
-                when(userService.getProfile(999L))
-                        .thenThrow(new GeneralException(GeneralErrorCode.NOT_FOUND));
+                SecurityContextHolder.getContext()
+                        .setAuthentication(new UsernamePasswordAuthenticationToken(999L, null));
+                when(userService.getProfile(999L)).thenThrow(new GeneralException(GeneralErrorCode.NOT_FOUND));
 
                 mockMvc.perform(get("/api/users/me/profile"))
                         .andExpect(status().isNotFound())
@@ -296,8 +305,7 @@ class UserControllerTest {
         @Test
         @DisplayName("회원 탈퇴 성공 시 200 OK를 반환한다")
         void withdraw_success() throws Exception {
-            SecurityContextHolder.getContext().setAuthentication(
-                    new UsernamePasswordAuthenticationToken(1L, null));
+            SecurityContextHolder.getContext().setAuthentication(new UsernamePasswordAuthenticationToken(1L, null));
 
             mockMvc.perform(delete("/api/users/me"))
                     .andExpect(status().isOk())
@@ -309,10 +317,10 @@ class UserControllerTest {
         @Test
         @DisplayName("존재하지 않는 유저 탈퇴 시도 시 404 NOT_FOUND를 반환한다")
         void withdraw_userNotFound_returns404() throws Exception {
-            SecurityContextHolder.getContext().setAuthentication(
-                    new UsernamePasswordAuthenticationToken(999L, null));
+            SecurityContextHolder.getContext().setAuthentication(new UsernamePasswordAuthenticationToken(999L, null));
             doThrow(new GeneralException(GeneralErrorCode.NOT_FOUND))
-                    .when(authService).withdraw(999L);
+                    .when(authService)
+                    .withdraw(999L);
 
             mockMvc.perform(delete("/api/users/me"))
                     .andExpect(status().isNotFound())
@@ -322,15 +330,6 @@ class UserControllerTest {
 
     private UserProfileRequest validRequest() {
         return new UserProfileRequest(
-                30,
-                "MALE",
-                "서울",
-                3_000_000L,
-                1_000_000L,
-                500_000L,
-                List.of("DINING", "TRAVEL"),
-                "SAVING",
-                true,
-                false);
+                30, "MALE", "서울", 3_000_000L, 1_000_000L, 500_000L, List.of("DINING", "TRAVEL"), "SAVING", true, false);
     }
 }

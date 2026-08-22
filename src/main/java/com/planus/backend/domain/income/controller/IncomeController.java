@@ -22,9 +22,7 @@ public class IncomeController {
     @PostMapping
     @ResponseStatus(HttpStatus.CREATED)
     public ApiResponse<IncomeResponse> createIncome(
-            @AuthenticationPrincipal Long userId,
-            @Valid @RequestBody IncomeRequest request) {
-        return ApiResponse.onSuccess(
-                GeneralSuccessCode.CREATED, incomeService.createIncome(userId, request));
+            @AuthenticationPrincipal Long userId, @Valid @RequestBody IncomeRequest request) {
+        return ApiResponse.onSuccess(GeneralSuccessCode.CREATED, incomeService.createIncome(userId, request));
     }
 }

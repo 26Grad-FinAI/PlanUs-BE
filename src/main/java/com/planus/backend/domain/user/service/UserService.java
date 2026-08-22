@@ -29,10 +29,9 @@ public class UserService {
      */
     @Transactional
     public UserProfileResponse saveProfile(Long userId, UserProfileRequest request) {
-        UserAccount user =
-                userAccountRepository
-                        .findById(userId)
-                        .orElseThrow(() -> new GeneralException(GeneralErrorCode.NOT_FOUND));
+        UserAccount user = userAccountRepository
+                .findById(userId)
+                .orElseThrow(() -> new GeneralException(GeneralErrorCode.NOT_FOUND));
 
         user.updateProfile(
                 request.age(),
@@ -61,10 +60,9 @@ public class UserService {
      */
     @Transactional
     public UserProfileUpdateResponse updateProfile(Long userId, UserProfileRequest request) {
-        UserAccount user =
-                userAccountRepository
-                        .findById(userId)
-                        .orElseThrow(() -> new GeneralException(GeneralErrorCode.NOT_FOUND));
+        UserAccount user = userAccountRepository
+                .findById(userId)
+                .orElseThrow(() -> new GeneralException(GeneralErrorCode.NOT_FOUND));
 
         user.updateProfile(
                 request.age(),
@@ -89,10 +87,9 @@ public class UserService {
      */
     @Transactional(readOnly = true)
     public UserProfileGetResponse getProfile(Long userId) {
-        UserAccount user =
-                userAccountRepository
-                        .findById(userId)
-                        .orElseThrow(() -> new GeneralException(GeneralErrorCode.NOT_FOUND));
+        UserAccount user = userAccountRepository
+                .findById(userId)
+                .orElseThrow(() -> new GeneralException(GeneralErrorCode.NOT_FOUND));
 
         return UserConverter.toProfileGetResponse(user);
     }

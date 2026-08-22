@@ -20,9 +20,7 @@ class ExpenseConverterTest {
         @DisplayName("요청 DTO의 필드가 엔티티에 올바르게 매핑된다")
         void mapsFieldsCorrectly() {
             ExpenseRequest request = new ExpenseRequest(
-                    15000L, "스타벅스 아메리카노",
-                    LocalDateTime.of(2026, 8, 19, 12, 0), 2,
-                    "친구랑 같이", "SATISFIED", null, null);
+                    15000L, "스타벅스 아메리카노", LocalDateTime.of(2026, 8, 19, 12, 0), 2, "친구랑 같이", "SATISFIED", null, null);
 
             Expense expense = ExpenseConverter.toExpense(1L, request);
 
@@ -39,9 +37,7 @@ class ExpenseConverterTest {
         @Test
         @DisplayName("isRecurring이 null이면 false로 매핑된다")
         void recurringNull_mappedToFalse() {
-            ExpenseRequest request = new ExpenseRequest(
-                    10000L, "테스트", LocalDateTime.now(), 1,
-                    null, null, null, null);
+            ExpenseRequest request = new ExpenseRequest(10000L, "테스트", LocalDateTime.now(), 1, null, null, null, null);
 
             Expense expense = ExpenseConverter.toExpense(1L, request);
 
@@ -52,9 +48,8 @@ class ExpenseConverterTest {
         @Test
         @DisplayName("isRecurring이 true이면 true로 매핑된다")
         void recurringTrue_mappedToTrue() {
-            ExpenseRequest request = new ExpenseRequest(
-                    500000L, "월세", LocalDateTime.now(), 11,
-                    null, null, true, false);
+            ExpenseRequest request =
+                    new ExpenseRequest(500000L, "월세", LocalDateTime.now(), 11, null, null, true, false);
 
             Expense expense = ExpenseConverter.toExpense(1L, request);
 

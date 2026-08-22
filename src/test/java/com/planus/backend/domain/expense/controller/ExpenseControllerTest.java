@@ -61,14 +61,18 @@ class ExpenseControllerTest {
             @Test
             @DisplayName("올바른 요청 시 201과 등록된 지출 정보를 반환한다")
             void createExpense_success_returns201() throws Exception {
-                SecurityContextHolder.getContext().setAuthentication(
-                        new UsernamePasswordAuthenticationToken(1L, null));
+                SecurityContextHolder.getContext().setAuthentication(new UsernamePasswordAuthenticationToken(1L, null));
 
                 ExpenseResponse response = new ExpenseResponse(
-                        1L, 15000L, "스타벅스 아메리카노",
+                        1L,
+                        15000L,
+                        "스타벅스 아메리카노",
                         LocalDateTime.of(2026, 8, 19, 12, 0),
-                        2, "친구랑 같이", "SATISFIED",
-                        false, false,
+                        2,
+                        "친구랑 같이",
+                        "SATISFIED",
+                        false,
+                        false,
                         LocalDateTime.of(2026, 8, 19, 12, 0));
                 when(expenseService.createExpense(eq(1L), any())).thenReturn(response);
 
@@ -94,8 +98,7 @@ class ExpenseControllerTest {
             @Test
             @DisplayName("필수 필드 누락 시 400을 반환한다")
             void createExpense_missingField_returns400() throws Exception {
-                SecurityContextHolder.getContext().setAuthentication(
-                        new UsernamePasswordAuthenticationToken(1L, null));
+                SecurityContextHolder.getContext().setAuthentication(new UsernamePasswordAuthenticationToken(1L, null));
 
                 mockMvc.perform(post("/api/expenses")
                                 .contentType(MediaType.APPLICATION_JSON)
@@ -108,12 +111,10 @@ class ExpenseControllerTest {
             @Test
             @DisplayName("금액이 0이면 400을 반환한다")
             void createExpense_zeroAmount_returns400() throws Exception {
-                SecurityContextHolder.getContext().setAuthentication(
-                        new UsernamePasswordAuthenticationToken(1L, null));
+                SecurityContextHolder.getContext().setAuthentication(new UsernamePasswordAuthenticationToken(1L, null));
 
-                ExpenseRequest request = new ExpenseRequest(
-                        0L, "테스트", LocalDateTime.of(2026, 8, 19, 12, 0), 1,
-                        null, null, null, null);
+                ExpenseRequest request =
+                        new ExpenseRequest(0L, "테스트", LocalDateTime.of(2026, 8, 19, 12, 0), 1, null, null, null, null);
 
                 mockMvc.perform(post("/api/expenses")
                                 .contentType(MediaType.APPLICATION_JSON)
@@ -126,12 +127,10 @@ class ExpenseControllerTest {
             @Test
             @DisplayName("내역이 빈 문자열이면 400을 반환한다")
             void createExpense_blankTitle_returns400() throws Exception {
-                SecurityContextHolder.getContext().setAuthentication(
-                        new UsernamePasswordAuthenticationToken(1L, null));
+                SecurityContextHolder.getContext().setAuthentication(new UsernamePasswordAuthenticationToken(1L, null));
 
                 ExpenseRequest request = new ExpenseRequest(
-                        10000L, "  ", LocalDateTime.of(2026, 8, 19, 12, 0), 1,
-                        null, null, null, null);
+                        10000L, "  ", LocalDateTime.of(2026, 8, 19, 12, 0), 1, null, null, null, null);
 
                 mockMvc.perform(post("/api/expenses")
                                 .contentType(MediaType.APPLICATION_JSON)
@@ -144,15 +143,13 @@ class ExpenseControllerTest {
             @Test
             @DisplayName("유효하지 않은 카테고리이면 400을 반환한다")
             void createExpense_invalidCategory_returns400() throws Exception {
-                SecurityContextHolder.getContext().setAuthentication(
-                        new UsernamePasswordAuthenticationToken(1L, null));
+                SecurityContextHolder.getContext().setAuthentication(new UsernamePasswordAuthenticationToken(1L, null));
 
                 when(expenseService.createExpense(eq(1L), any()))
                         .thenThrow(new GeneralException(GeneralErrorCode.INVALID_CATEGORY));
 
                 ExpenseRequest request = new ExpenseRequest(
-                        10000L, "테스트", LocalDateTime.of(2026, 8, 19, 12, 0), 99,
-                        null, null, null, null);
+                        10000L, "테스트", LocalDateTime.of(2026, 8, 19, 12, 0), 99, null, null, null, null);
 
                 mockMvc.perform(post("/api/expenses")
                                 .contentType(MediaType.APPLICATION_JSON)
@@ -165,16 +162,13 @@ class ExpenseControllerTest {
             @Test
             @DisplayName("유효하지 않은 감정 태그이면 400을 반환한다")
             void createExpense_invalidEmotion_returns400() throws Exception {
-                SecurityContextHolder.getContext().setAuthentication(
-                        new UsernamePasswordAuthenticationToken(1L, null));
+                SecurityContextHolder.getContext().setAuthentication(new UsernamePasswordAuthenticationToken(1L, null));
 
                 when(expenseService.createExpense(eq(1L), any()))
                         .thenThrow(new GeneralException(GeneralErrorCode.INVALID_EMOTION));
 
                 ExpenseRequest request = new ExpenseRequest(
-                        15000L, "스타벅스 아메리카노",
-                        LocalDateTime.of(2026, 8, 19, 12, 0), 2,
-                        "친구랑 같이", "HAPPY", null, null);
+                        15000L, "스타벅스 아메리카노", LocalDateTime.of(2026, 8, 19, 12, 0), 2, "친구랑 같이", "HAPPY", null, null);
 
                 mockMvc.perform(post("/api/expenses")
                                 .contentType(MediaType.APPLICATION_JSON)
@@ -187,13 +181,10 @@ class ExpenseControllerTest {
             @Test
             @DisplayName("내역이 255자를 초과하면 400을 반환한다")
             void createExpense_titleTooLong_returns400() throws Exception {
-                SecurityContextHolder.getContext().setAuthentication(
-                        new UsernamePasswordAuthenticationToken(1L, null));
+                SecurityContextHolder.getContext().setAuthentication(new UsernamePasswordAuthenticationToken(1L, null));
 
                 ExpenseRequest request = new ExpenseRequest(
-                        10000L, "가".repeat(256),
-                        LocalDateTime.of(2026, 8, 19, 12, 0), 1,
-                        null, null, null, null);
+                        10000L, "가".repeat(256), LocalDateTime.of(2026, 8, 19, 12, 0), 1, null, null, null, null);
 
                 mockMvc.perform(post("/api/expenses")
                                 .contentType(MediaType.APPLICATION_JSON)
@@ -207,13 +198,6 @@ class ExpenseControllerTest {
 
     private ExpenseRequest validRequest() {
         return new ExpenseRequest(
-                15000L,
-                "스타벅스 아메리카노",
-                LocalDateTime.of(2026, 8, 19, 12, 0),
-                2,
-                "친구랑 같이",
-                "SATISFIED",
-                null,
-                null);
+                15000L, "스타벅스 아메리카노", LocalDateTime.of(2026, 8, 19, 12, 0), 2, "친구랑 같이", "SATISFIED", null, null);
     }
 }
