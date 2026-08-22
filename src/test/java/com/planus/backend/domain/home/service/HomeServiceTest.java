@@ -10,15 +10,20 @@ import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
 import com.planus.backend.domain.aifeedback.entity.Budget;
+import com.planus.backend.domain.aifeedback.entity.Expense;
 import com.planus.backend.domain.aifeedback.repository.BudgetRepository;
 import com.planus.backend.domain.aifeedback.repository.ExpenseRepository;
+import com.planus.backend.domain.home.dto.HomeCalendarResponse;
 import com.planus.backend.domain.home.dto.HomeSummaryResponse;
 import com.planus.backend.domain.user.entity.UserAccount;
 import com.planus.backend.domain.user.repository.UserAccountRepository;
 import com.planus.backend.global.apiPayload.code.GeneralErrorCode;
 import com.planus.backend.global.apiPayload.exception.GeneralException;
 import java.time.LocalDate;
+import java.time.LocalDateTime;
 import java.time.YearMonth;
+import java.util.Collections;
+import java.util.List;
 import java.util.Optional;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
@@ -153,6 +158,99 @@ class HomeServiceTest {
 
             assertThat(response.burnRate()).isEqualTo(0.0);
             assertThat(response.remainingBudget()).isEqualTo(-100_000L);
+        }
+    }
+
+    @Nested
+    @DisplayName("getCalendar 성공")
+    class GetCalendarSuccess {
+
+        @Test
+        @DisplayName("거래가 있는 날짜별로 지출·수입 합계를 반환한다")
+        void getCalendar_withTransactions_returnsDailySummaries() {
+            List<Expense> expenses = List.of(
+                    Expense.builder()
+                            .id(1L)
+                            .userId(USER_ID)
+                            .type("EXPENSE")
+                            .amount(15_000L)
+                            .expenseDate(LocalDateTime.of(2026, 8, 1, 12, 0))
+                            .build(),
+                    Expense.builder()
+                            .id(2L)
+                            .userId(USER_ID)
+                            .type("EXPENSE")
+                            .amount(30_000L)
+                            .expenseDate(LocalDateTime.of(2026, 8, 1, 18, 0))
+                            .build(),
+                    Expense.builder()
+                            .id(3L)
+                            .userId(USER_ID)
+                            .type("INCOME")
+                            .amount(3_000_000L)
+                            .expenseDate(LocalDateTime.of(2026, 8, 2, 9, 0))
+                            .build(),
+                    Expense.builder()
+                            .id(4L)
+                            .userId(USER_ID)
+                            .type("EXPENSE")
+                            .amount(12_000L)
+                            .expenseDate(LocalDateTime.of(2026, 8, 2, 12, 0))
+                            .build());
+            when(expenseRepository.findByUserIdAndExpenseDateBetween(eq(USER_ID), any(), any()))
+                    .thenReturn(expenses);
+
+            HomeCalendarResponse response = homeService.getCalendar(USER_ID, YEAR_MONTH);
+
+            assertThat(response.yearMonth()).isEqualTo("2026-08");
+            assertThat(response.dailySummaries()).hasSize(2);
+
+            assertThat(response.dailySummaries().get(0).date()).isEqualTo(LocalDate.of(2026, 8, 1));
+            assertThat(response.dailySummaries().get(0).totalExpense()).isEqualTo(45_000L);
+            assertThat(response.dailySummaries().get(0).totalIncome()).isZero();
+
+            assertThat(response.dailySummaries().get(1).date()).isEqualTo(LocalDate.of(2026, 8, 2));
+            assertThat(response.dailySummaries().get(1).totalExpense()).isEqualTo(12_000L);
+            assertThat(response.dailySummaries().get(1).totalIncome()).isEqualTo(3_000_000L);
+        }
+
+        @Test
+        @DisplayName("거래가 없으면 빈 목록을 반환한다")
+        void getCalendar_noTransactions_returnsEmptyList() {
+            when(expenseRepository.findByUserIdAndExpenseDateBetween(eq(USER_ID), any(), any()))
+                    .thenReturn(Collections.emptyList());
+
+            HomeCalendarResponse response = homeService.getCalendar(USER_ID, YEAR_MONTH);
+
+            assertThat(response.yearMonth()).isEqualTo("2026-08");
+            assertThat(response.dailySummaries()).isEmpty();
+        }
+
+        @Test
+        @DisplayName("날짜 순서대로 정렬되어 반환된다")
+        void getCalendar_returnsSortedByDate() {
+            List<Expense> expenses = List.of(
+                    Expense.builder()
+                            .id(1L)
+                            .userId(USER_ID)
+                            .type("EXPENSE")
+                            .amount(10_000L)
+                            .expenseDate(LocalDateTime.of(2026, 8, 15, 12, 0))
+                            .build(),
+                    Expense.builder()
+                            .id(2L)
+                            .userId(USER_ID)
+                            .type("EXPENSE")
+                            .amount(20_000L)
+                            .expenseDate(LocalDateTime.of(2026, 8, 3, 12, 0))
+                            .build());
+            when(expenseRepository.findByUserIdAndExpenseDateBetween(eq(USER_ID), any(), any()))
+                    .thenReturn(expenses);
+
+            HomeCalendarResponse response = homeService.getCalendar(USER_ID, YEAR_MONTH);
+
+            assertThat(response.dailySummaries().get(0).date()).isEqualTo(LocalDate.of(2026, 8, 3));
+            assertThat(response.dailySummaries().get(1).date()).isEqualTo(LocalDate.of(2026, 8, 15));
         }
     }
 

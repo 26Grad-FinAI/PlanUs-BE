@@ -1,8 +1,11 @@
 package com.planus.backend.domain.home.service;
 
 import com.planus.backend.domain.aifeedback.entity.Budget;
+import com.planus.backend.domain.aifeedback.entity.Expense;
 import com.planus.backend.domain.aifeedback.repository.BudgetRepository;
 import com.planus.backend.domain.aifeedback.repository.ExpenseRepository;
+import com.planus.backend.domain.home.dto.HomeCalendarResponse;
+import com.planus.backend.domain.home.dto.HomeCalendarResponse.DailySummary;
 import com.planus.backend.domain.home.dto.HomeSummaryResponse;
 import com.planus.backend.domain.user.entity.UserAccount;
 import com.planus.backend.domain.user.repository.UserAccountRepository;
@@ -10,9 +13,13 @@ import com.planus.backend.global.apiPayload.code.GeneralErrorCode;
 import com.planus.backend.global.apiPayload.exception.GeneralException;
 import java.math.BigDecimal;
 import java.math.RoundingMode;
+import java.time.LocalDate;
 import java.time.LocalDateTime;
 import java.time.LocalTime;
 import java.time.YearMonth;
+import java.util.List;
+import java.util.Map;
+import java.util.stream.Collectors;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -56,6 +63,39 @@ public class HomeService {
         }
 
         return new HomeSummaryResponse(yearMonth.toString(), totalExpense, budget, burnRate, remainingBudget);
+    }
+
+    /**
+     * 캘린더 뷰용 날짜별 지출·수입 합계를 조회한다.
+     *
+     * @param userId 사용자 ID
+     * @param yearMonth 조회 월
+     * @return 날짜별 지출·수입 합계 목록
+     */
+    public HomeCalendarResponse getCalendar(Long userId, YearMonth yearMonth) {
+        LocalDateTime from = yearMonth.atDay(1).atStartOfDay();
+        LocalDateTime to = yearMonth.atEndOfMonth().atTime(LocalTime.MAX);
+
+        List<Expense> expenses = expenseRepository.findByUserIdAndExpenseDateBetween(userId, from, to);
+
+        Map<LocalDate, List<Expense>> grouped = expenses.stream().collect(Collectors.groupingBy(Expense::getDate));
+
+        List<DailySummary> dailySummaries = grouped.entrySet().stream()
+                .sorted(Map.Entry.comparingByKey())
+                .map(entry -> {
+                    long totalExpense = entry.getValue().stream()
+                            .filter(Expense::isExpense)
+                            .mapToLong(Expense::getAmount)
+                            .sum();
+                    long totalIncome = entry.getValue().stream()
+                            .filter(e -> !e.isExpense())
+                            .mapToLong(Expense::getAmount)
+                            .sum();
+                    return new DailySummary(entry.getKey(), totalExpense, totalIncome);
+                })
+                .toList();
+
+        return new HomeCalendarResponse(yearMonth.toString(), dailySummaries);
     }
 
     private UserAccount findUserOrThrow(Long userId) {

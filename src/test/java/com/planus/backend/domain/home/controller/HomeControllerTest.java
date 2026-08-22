@@ -8,17 +8,25 @@ import static org.springframework.test.web.servlet.request.MockMvcRequestBuilder
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
+import com.fasterxml.jackson.databind.ObjectMapper;
+import com.fasterxml.jackson.databind.SerializationFeature;
+import com.fasterxml.jackson.datatype.jsr310.JavaTimeModule;
+import com.planus.backend.domain.home.dto.HomeCalendarResponse;
+import com.planus.backend.domain.home.dto.HomeCalendarResponse.DailySummary;
 import com.planus.backend.domain.home.dto.HomeSummaryResponse;
 import com.planus.backend.domain.home.service.HomeService;
 import com.planus.backend.global.apiPayload.code.GeneralErrorCode;
 import com.planus.backend.global.apiPayload.exception.GeneralException;
 import com.planus.backend.global.apiPayload.handler.GeneralExceptionAdvice;
+import java.time.LocalDate;
 import java.time.YearMonth;
+import java.util.List;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Nested;
 import org.junit.jupiter.api.Test;
+import org.springframework.http.converter.json.MappingJackson2HttpMessageConverter;
 import org.springframework.security.authentication.UsernamePasswordAuthenticationToken;
 import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.security.web.method.annotation.AuthenticationPrincipalArgumentResolver;
@@ -33,9 +41,16 @@ class HomeControllerTest {
     @BeforeEach
     void setUp() {
         homeService = mock(HomeService.class);
+
+        ObjectMapper objectMapper = new ObjectMapper()
+                .registerModule(new JavaTimeModule())
+                .disable(SerializationFeature.WRITE_DATES_AS_TIMESTAMPS);
+        MappingJackson2HttpMessageConverter converter = new MappingJackson2HttpMessageConverter(objectMapper);
+
         mockMvc = MockMvcBuilders.standaloneSetup(new HomeController(homeService))
                 .setControllerAdvice(new GeneralExceptionAdvice())
                 .setCustomArgumentResolvers(new AuthenticationPrincipalArgumentResolver())
+                .setMessageConverters(converter)
                 .build();
     }
 
@@ -98,6 +113,60 @@ class HomeControllerTest {
                         .andExpect(status().isNotFound())
                         .andExpect(jsonPath("$.isSuccess").value(false))
                         .andExpect(jsonPath("$.code").value("COMMON_404_001"));
+            }
+        }
+    }
+
+    @Nested
+    @DisplayName("GET /api/home/calendar")
+    class GetCalendar {
+
+        @Nested
+        @DisplayName("성공")
+        class Success {
+
+            @Test
+            @DisplayName("올바른 요청 시 200과 날짜별 합계를 반환한다")
+            void getCalendar_success_returns200() throws Exception {
+                SecurityContextHolder.getContext().setAuthentication(new UsernamePasswordAuthenticationToken(1L, null));
+
+                HomeCalendarResponse response = new HomeCalendarResponse(
+                        "2026-08",
+                        List.of(
+                                new DailySummary(LocalDate.of(2026, 8, 1), 45_000L, 0L),
+                                new DailySummary(LocalDate.of(2026, 8, 2), 12_000L, 3_000_000L)));
+                when(homeService.getCalendar(eq(1L), eq(YearMonth.of(2026, 8)))).thenReturn(response);
+
+                mockMvc.perform(get("/api/home/calendar").param("yearMonth", "2026-08"))
+                        .andExpect(status().isOk())
+                        .andExpect(jsonPath("$.isSuccess").value(true))
+                        .andExpect(jsonPath("$.result.yearMonth").value("2026-08"))
+                        .andExpect(jsonPath("$.result.dailySummaries").isArray())
+                        .andExpect(jsonPath("$.result.dailySummaries.length()").value(2))
+                        .andExpect(jsonPath("$.result.dailySummaries[0].date").value("2026-08-01"))
+                        .andExpect(jsonPath("$.result.dailySummaries[0].totalExpense")
+                                .value(45000))
+                        .andExpect(jsonPath("$.result.dailySummaries[0].totalIncome")
+                                .value(0))
+                        .andExpect(jsonPath("$.result.dailySummaries[1].totalExpense")
+                                .value(12000))
+                        .andExpect(jsonPath("$.result.dailySummaries[1].totalIncome")
+                                .value(3000000));
+
+                verify(homeService).getCalendar(eq(1L), eq(YearMonth.of(2026, 8)));
+            }
+        }
+
+        @Nested
+        @DisplayName("실패")
+        class Failure {
+
+            @Test
+            @DisplayName("yearMonth 파라미터가 없으면 400을 반환한다")
+            void getCalendar_missingYearMonth_returns400() throws Exception {
+                SecurityContextHolder.getContext().setAuthentication(new UsernamePasswordAuthenticationToken(1L, null));
+
+                mockMvc.perform(get("/api/home/calendar")).andExpect(status().isBadRequest());
             }
         }
     }
