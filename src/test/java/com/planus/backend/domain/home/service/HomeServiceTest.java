@@ -14,6 +14,7 @@ import com.planus.backend.domain.aifeedback.entity.Expense;
 import com.planus.backend.domain.aifeedback.repository.BudgetRepository;
 import com.planus.backend.domain.aifeedback.repository.ExpenseRepository;
 import com.planus.backend.domain.home.dto.HomeCalendarResponse;
+import com.planus.backend.domain.home.dto.HomeDailyResponse;
 import com.planus.backend.domain.home.dto.HomeSummaryResponse;
 import com.planus.backend.domain.user.entity.UserAccount;
 import com.planus.backend.domain.user.repository.UserAccountRepository;
@@ -251,6 +252,74 @@ class HomeServiceTest {
 
             assertThat(response.dailySummaries().get(0).date()).isEqualTo(LocalDate.of(2026, 8, 3));
             assertThat(response.dailySummaries().get(1).date()).isEqualTo(LocalDate.of(2026, 8, 15));
+        }
+    }
+
+    @Nested
+    @DisplayName("getDailyDetail 성공")
+    class GetDailyDetailSuccess {
+
+        private static final LocalDate DATE = LocalDate.of(2026, 8, 22);
+
+        @Test
+        @DisplayName("해당 날짜의 거래 상세 내역과 합계를 반환한다")
+        void getDailyDetail_withTransactions_returnsDetail() {
+            List<Expense> expenses = List.of(
+                    Expense.builder()
+                            .id(1L)
+                            .userId(USER_ID)
+                            .type("EXPENSE")
+                            .amount(15_000L)
+                            .title("점심 식사")
+                            .categoryId(1)
+                            .emotion("NECESSARY")
+                            .recurring(false)
+                            .planned(false)
+                            .expenseDate(LocalDateTime.of(2026, 8, 22, 12, 30))
+                            .build(),
+                    Expense.builder()
+                            .id(2L)
+                            .userId(USER_ID)
+                            .type("INCOME")
+                            .amount(3_000_000L)
+                            .title("월급")
+                            .categoryId(1)
+                            .recurring(true)
+                            .planned(true)
+                            .expenseDate(LocalDateTime.of(2026, 8, 22, 9, 0))
+                            .build());
+            when(expenseRepository.findByUserIdAndExpenseDateBetween(eq(USER_ID), any(), any()))
+                    .thenReturn(expenses);
+
+            HomeDailyResponse response = homeService.getDailyDetail(USER_ID, DATE);
+
+            assertThat(response.date()).isEqualTo(DATE);
+            assertThat(response.totalExpense()).isEqualTo(15_000L);
+            assertThat(response.totalIncome()).isEqualTo(3_000_000L);
+            assertThat(response.transactions()).hasSize(2);
+
+            assertThat(response.transactions().get(0).id()).isEqualTo(1L);
+            assertThat(response.transactions().get(0).type()).isEqualTo("EXPENSE");
+            assertThat(response.transactions().get(0).title()).isEqualTo("점심 식사");
+            assertThat(response.transactions().get(0).emotion()).isEqualTo("NECESSARY");
+
+            assertThat(response.transactions().get(1).id()).isEqualTo(2L);
+            assertThat(response.transactions().get(1).type()).isEqualTo("INCOME");
+            assertThat(response.transactions().get(1).isRecurring()).isTrue();
+        }
+
+        @Test
+        @DisplayName("거래가 없으면 합계 0과 빈 목록을 반환한다")
+        void getDailyDetail_noTransactions_returnsEmpty() {
+            when(expenseRepository.findByUserIdAndExpenseDateBetween(eq(USER_ID), any(), any()))
+                    .thenReturn(Collections.emptyList());
+
+            HomeDailyResponse response = homeService.getDailyDetail(USER_ID, DATE);
+
+            assertThat(response.date()).isEqualTo(DATE);
+            assertThat(response.totalExpense()).isZero();
+            assertThat(response.totalIncome()).isZero();
+            assertThat(response.transactions()).isEmpty();
         }
     }
 

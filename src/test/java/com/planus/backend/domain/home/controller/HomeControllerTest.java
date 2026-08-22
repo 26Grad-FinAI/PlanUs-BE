@@ -13,13 +13,17 @@ import com.fasterxml.jackson.databind.SerializationFeature;
 import com.fasterxml.jackson.datatype.jsr310.JavaTimeModule;
 import com.planus.backend.domain.home.dto.HomeCalendarResponse;
 import com.planus.backend.domain.home.dto.HomeCalendarResponse.DailySummary;
+import com.planus.backend.domain.home.dto.HomeDailyResponse;
+import com.planus.backend.domain.home.dto.HomeDailyResponse.TransactionDetail;
 import com.planus.backend.domain.home.dto.HomeSummaryResponse;
 import com.planus.backend.domain.home.service.HomeService;
 import com.planus.backend.global.apiPayload.code.GeneralErrorCode;
 import com.planus.backend.global.apiPayload.exception.GeneralException;
 import com.planus.backend.global.apiPayload.handler.GeneralExceptionAdvice;
 import java.time.LocalDate;
+import java.time.LocalTime;
 import java.time.YearMonth;
+import java.util.Collections;
 import java.util.List;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
@@ -167,6 +171,96 @@ class HomeControllerTest {
                 SecurityContextHolder.getContext().setAuthentication(new UsernamePasswordAuthenticationToken(1L, null));
 
                 mockMvc.perform(get("/api/home/calendar")).andExpect(status().isBadRequest());
+            }
+        }
+    }
+
+    @Nested
+    @DisplayName("GET /api/home/daily")
+    class GetDailyDetail {
+
+        @Nested
+        @DisplayName("성공")
+        class Success {
+
+            @Test
+            @DisplayName("올바른 요청 시 200과 거래 상세 내역을 반환한다")
+            void getDailyDetail_success_returns200() throws Exception {
+                SecurityContextHolder.getContext().setAuthentication(new UsernamePasswordAuthenticationToken(1L, null));
+
+                HomeDailyResponse response = new HomeDailyResponse(
+                        LocalDate.of(2026, 8, 22),
+                        15_000L,
+                        3_000_000L,
+                        List.of(
+                                new TransactionDetail(
+                                        1L,
+                                        "EXPENSE",
+                                        15_000L,
+                                        "점심 식사",
+                                        1,
+                                        null,
+                                        "NECESSARY",
+                                        false,
+                                        false,
+                                        LocalTime.of(12, 30)),
+                                new TransactionDetail(
+                                        2L,
+                                        "INCOME",
+                                        3_000_000L,
+                                        "월급",
+                                        1,
+                                        null,
+                                        null,
+                                        true,
+                                        true,
+                                        LocalTime.of(9, 0))));
+                when(homeService.getDailyDetail(eq(1L), eq(LocalDate.of(2026, 8, 22))))
+                        .thenReturn(response);
+
+                mockMvc.perform(get("/api/home/daily").param("date", "2026-08-22"))
+                        .andExpect(status().isOk())
+                        .andExpect(jsonPath("$.isSuccess").value(true))
+                        .andExpect(jsonPath("$.result.date").value("2026-08-22"))
+                        .andExpect(jsonPath("$.result.totalExpense").value(15000))
+                        .andExpect(jsonPath("$.result.totalIncome").value(3000000))
+                        .andExpect(jsonPath("$.result.transactions.length()").value(2))
+                        .andExpect(jsonPath("$.result.transactions[0].id").value(1))
+                        .andExpect(jsonPath("$.result.transactions[0].type").value("EXPENSE"))
+                        .andExpect(jsonPath("$.result.transactions[0].title").value("점심 식사"))
+                        .andExpect(jsonPath("$.result.transactions[1].type").value("INCOME"));
+
+                verify(homeService).getDailyDetail(eq(1L), eq(LocalDate.of(2026, 8, 22)));
+            }
+
+            @Test
+            @DisplayName("거래가 없는 날짜도 200과 빈 목록을 반환한다")
+            void getDailyDetail_noTransactions_returns200WithEmptyList() throws Exception {
+                SecurityContextHolder.getContext().setAuthentication(new UsernamePasswordAuthenticationToken(1L, null));
+
+                HomeDailyResponse response =
+                        new HomeDailyResponse(LocalDate.of(2026, 8, 22), 0L, 0L, Collections.emptyList());
+                when(homeService.getDailyDetail(eq(1L), eq(LocalDate.of(2026, 8, 22))))
+                        .thenReturn(response);
+
+                mockMvc.perform(get("/api/home/daily").param("date", "2026-08-22"))
+                        .andExpect(status().isOk())
+                        .andExpect(jsonPath("$.result.totalExpense").value(0))
+                        .andExpect(jsonPath("$.result.totalIncome").value(0))
+                        .andExpect(jsonPath("$.result.transactions").isEmpty());
+            }
+        }
+
+        @Nested
+        @DisplayName("실패")
+        class Failure {
+
+            @Test
+            @DisplayName("date 파라미터가 없으면 400을 반환한다")
+            void getDailyDetail_missingDate_returns400() throws Exception {
+                SecurityContextHolder.getContext().setAuthentication(new UsernamePasswordAuthenticationToken(1L, null));
+
+                mockMvc.perform(get("/api/home/daily")).andExpect(status().isBadRequest());
             }
         }
     }

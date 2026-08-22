@@ -6,6 +6,8 @@ import com.planus.backend.domain.aifeedback.repository.BudgetRepository;
 import com.planus.backend.domain.aifeedback.repository.ExpenseRepository;
 import com.planus.backend.domain.home.dto.HomeCalendarResponse;
 import com.planus.backend.domain.home.dto.HomeCalendarResponse.DailySummary;
+import com.planus.backend.domain.home.dto.HomeDailyResponse;
+import com.planus.backend.domain.home.dto.HomeDailyResponse.TransactionDetail;
 import com.planus.backend.domain.home.dto.HomeSummaryResponse;
 import com.planus.backend.domain.user.entity.UserAccount;
 import com.planus.backend.domain.user.repository.UserAccountRepository;
@@ -96,6 +98,45 @@ public class HomeService {
                 .toList();
 
         return new HomeCalendarResponse(yearMonth.toString(), dailySummaries);
+    }
+
+    /**
+     * 특정 날짜의 상세 거래 내역을 조회한다.
+     *
+     * @param userId 사용자 ID
+     * @param date 조회 날짜
+     * @return 해당 날짜의 지출·수입 합계 및 거래 상세 목록
+     */
+    public HomeDailyResponse getDailyDetail(Long userId, LocalDate date) {
+        LocalDateTime from = date.atStartOfDay();
+        LocalDateTime to = date.atTime(LocalTime.MAX);
+
+        List<Expense> expenses = expenseRepository.findByUserIdAndExpenseDateBetween(userId, from, to);
+
+        long totalExpense = expenses.stream()
+                .filter(Expense::isExpense)
+                .mapToLong(Expense::getAmount)
+                .sum();
+        long totalIncome = expenses.stream()
+                .filter(e -> !e.isExpense())
+                .mapToLong(Expense::getAmount)
+                .sum();
+
+        List<TransactionDetail> transactions = expenses.stream()
+                .map(e -> new TransactionDetail(
+                        e.getId(),
+                        e.getType(),
+                        e.getAmount(),
+                        e.getTitle(),
+                        e.getCategoryId(),
+                        e.getMemo(),
+                        e.getEmotion(),
+                        e.isRecurring(),
+                        e.isPlanned(),
+                        e.getExpenseDate().toLocalTime()))
+                .toList();
+
+        return new HomeDailyResponse(date, totalExpense, totalIncome, transactions);
     }
 
     private UserAccount findUserOrThrow(Long userId) {
