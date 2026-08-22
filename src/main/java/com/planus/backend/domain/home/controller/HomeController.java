@@ -1,5 +1,6 @@
 package com.planus.backend.domain.home.controller;
 
+import com.planus.backend.domain.home.dto.HomeCalendarResponse;
 import com.planus.backend.domain.home.dto.HomeSummaryResponse;
 import com.planus.backend.domain.home.service.HomeService;
 import com.planus.backend.global.apiPayload.ApiResponse;
@@ -33,5 +34,19 @@ public class HomeController {
             @AuthenticationPrincipal Long userId,
             @RequestParam @DateTimeFormat(pattern = "yyyy-MM") YearMonth yearMonth) {
         return ApiResponse.onSuccess(GeneralSuccessCode.OK, homeService.getSummary(userId, yearMonth));
+    }
+
+    /**
+     * 캘린더 뷰용 날짜별 지출·수입 합계를 조회한다.
+     *
+     * @param userId JWT 인증된 사용자 ID
+     * @param yearMonth 조회 월 (yyyy-MM)
+     * @return 200 OK, 날짜별 지출·수입 합계 목록
+     */
+    @GetMapping("/calendar")
+    public ApiResponse<HomeCalendarResponse> getCalendar(
+            @AuthenticationPrincipal Long userId,
+            @RequestParam @DateTimeFormat(pattern = "yyyy-MM") YearMonth yearMonth) {
+        return ApiResponse.onSuccess(GeneralSuccessCode.OK, homeService.getCalendar(userId, yearMonth));
     }
 }
