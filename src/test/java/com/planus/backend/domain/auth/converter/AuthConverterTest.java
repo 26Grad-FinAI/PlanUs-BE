@@ -19,20 +19,19 @@ class AuthConverterTest {
         @Test
         @DisplayName("요청 필드가 UserAccount에 올바르게 매핑된다")
         void mapsFieldsCorrectly() {
-            SignUpRequest request = new SignUpRequest("user@example.com", "pass1234", "pass1234", "닉네임", true);
+            SignUpRequest request = new SignUpRequest("user@example.com", "pass1234", "pass1234", true);
             String encodedPassword = "encoded_pass1234";
 
             UserAccount user = AuthConverter.toUserAccount(request, encodedPassword);
 
             assertThat(user.getEmail()).isEqualTo("user@example.com");
-            assertThat(user.getNickname()).isEqualTo("닉네임");
             assertThat(user.getPassword()).isEqualTo("encoded_pass1234");
         }
 
         @Test
         @DisplayName("provider가 LOCAL로 설정된다")
         void setsProviderAsLocal() {
-            SignUpRequest request = new SignUpRequest("user@example.com", "pass1234", "pass1234", "닉네임", true);
+            SignUpRequest request = new SignUpRequest("user@example.com", "pass1234", "pass1234", true);
 
             UserAccount user = AuthConverter.toUserAccount(request, "encoded");
 

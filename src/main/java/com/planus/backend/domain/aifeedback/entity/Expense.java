@@ -1,5 +1,7 @@
 package com.planus.backend.domain.aifeedback.entity;
 
+import com.planus.backend.global.apiPayload.code.GeneralErrorCode;
+import com.planus.backend.global.apiPayload.exception.GeneralException;
 import jakarta.persistence.*;
 import java.time.LocalDate;
 import java.time.LocalDateTime;
@@ -60,5 +62,48 @@ public class Expense {
     /** 변동 지출 여부를 반환한다. 지출이면서 반복·예정이 아닌 거래. */
     public boolean isVariable() {
         return isExpense() && !recurring && !planned;
+    }
+
+    /** 소유권을 검증한다. 일치하지 않으면 FORBIDDEN 예외를 던진다. */
+    public void validateOwnership(Long userId) {
+        if (!this.userId.equals(userId)) {
+            throw new GeneralException(GeneralErrorCode.FORBIDDEN);
+        }
+    }
+
+    /** 타입을 검증한다. 일치하지 않으면 BAD_REQUEST 예외를 던진다. */
+    public void validateType(String expectedType) {
+        if (!expectedType.equalsIgnoreCase(this.type)) {
+            throw new GeneralException(GeneralErrorCode.BAD_REQUEST);
+        }
+    }
+
+    /** 지출 정보를 수정한다. */
+    public void updateExpense(
+            long amount,
+            String title,
+            LocalDateTime expenseDate,
+            Integer categoryId,
+            String memo,
+            String emotion,
+            boolean recurring,
+            boolean planned) {
+        this.amount = amount;
+        this.title = title;
+        this.expenseDate = expenseDate;
+        this.categoryId = categoryId;
+        this.memo = memo;
+        this.emotion = emotion;
+        this.recurring = recurring;
+        this.planned = planned;
+    }
+
+    /** 수입 정보를 수정한다. */
+    public void updateIncome(long amount, String title, LocalDateTime expenseDate, Integer categoryId, String memo) {
+        this.amount = amount;
+        this.title = title;
+        this.expenseDate = expenseDate;
+        this.categoryId = categoryId;
+        this.memo = memo;
     }
 }

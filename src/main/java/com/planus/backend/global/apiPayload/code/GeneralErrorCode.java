@@ -39,7 +39,11 @@ public enum GeneralErrorCode implements BaseErrorCode {
     // Income
     BUDGET_NOT_FOUND(HttpStatus.NOT_FOUND, "INCOME_404_001", "해당 월의 예산이 설정되지 않았습니다."),
     BUDGET_CATEGORY_NOT_FOUND(HttpStatus.NOT_FOUND, "INCOME_404_002", "해당 카테고리의 예산 배분이 설정되지 않았습니다."),
-    BUDGET_OVERFLOW(HttpStatus.BAD_REQUEST, "INCOME_400_001", "수입 금액이 너무 커 예산 한도를 초과합니다.");
+    BUDGET_OVERFLOW(HttpStatus.BAD_REQUEST, "INCOME_400_001", "수입 금액이 너무 커 예산 한도를 초과합니다."),
+
+    // Expense / Income 수정·삭제
+    EXPENSE_NOT_FOUND(HttpStatus.NOT_FOUND, "EXPENSE_404_001", "해당 지출 내역을 찾을 수 없습니다."),
+    INCOME_NOT_FOUND(HttpStatus.NOT_FOUND, "INCOME_404_003", "해당 수입 내역을 찾을 수 없습니다.");
 
     private final HttpStatus httpStatus;
     private final String code;

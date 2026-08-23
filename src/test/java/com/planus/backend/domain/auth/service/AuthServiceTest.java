@@ -45,7 +45,7 @@ class AuthServiceTest {
     }
 
     private SignUpRequest validRequest() {
-        return new SignUpRequest("user@example.com", "pass1234", "pass1234", "닉네임", true);
+        return new SignUpRequest("user@example.com", "pass1234", "pass1234", true);
     }
 
     private UserAccount savedUser() {
@@ -90,7 +90,7 @@ class AuthServiceTest {
         @Test
         @DisplayName("약관에 동의하지 않으면 TERMS_NOT_AGREED 예외가 발생한다")
         void signUp_termsNotAgreed() {
-            SignUpRequest request = new SignUpRequest("user@example.com", "pass1234", "pass1234", "닉네임", false);
+            SignUpRequest request = new SignUpRequest("user@example.com", "pass1234", "pass1234", false);
 
             assertThatThrownBy(() -> authService.signUp(request))
                     .isInstanceOf(GeneralException.class)
@@ -103,7 +103,7 @@ class AuthServiceTest {
         @Test
         @DisplayName("이메일 형식이 올바르지 않으면 INVALID_EMAIL_FORMAT 예외가 발생한다")
         void signUp_invalidEmailFormat() {
-            SignUpRequest request = new SignUpRequest("not-an-email", "pass1234", "pass1234", "닉네임", true);
+            SignUpRequest request = new SignUpRequest("not-an-email", "pass1234", "pass1234", true);
 
             assertThatThrownBy(() -> authService.signUp(request))
                     .isInstanceOf(GeneralException.class)
@@ -129,7 +129,7 @@ class AuthServiceTest {
         @Test
         @DisplayName("비밀번호가 조건을 충족하지 않으면 PASSWORD_TOO_WEAK 예외가 발생한다")
         void signUp_passwordTooWeak() {
-            SignUpRequest request = new SignUpRequest("user@example.com", "weakpw", "weakpw", "닉네임", true);
+            SignUpRequest request = new SignUpRequest("user@example.com", "weakpw", "weakpw", true);
             when(userAccountRepository.existsByEmail(anyString())).thenReturn(false);
 
             assertThatThrownBy(() -> authService.signUp(request))
@@ -143,7 +143,7 @@ class AuthServiceTest {
         @Test
         @DisplayName("비밀번호와 확인 비밀번호가 다르면 PASSWORD_MISMATCH 예외가 발생한다")
         void signUp_passwordMismatch() {
-            SignUpRequest request = new SignUpRequest("user@example.com", "pass1234", "pass5678", "닉네임", true);
+            SignUpRequest request = new SignUpRequest("user@example.com", "pass1234", "pass5678", true);
             when(userAccountRepository.existsByEmail(anyString())).thenReturn(false);
 
             assertThatThrownBy(() -> authService.signUp(request))
