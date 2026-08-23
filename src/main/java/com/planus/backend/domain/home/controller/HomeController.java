@@ -1,10 +1,12 @@
 package com.planus.backend.domain.home.controller;
 
 import com.planus.backend.domain.home.dto.HomeCalendarResponse;
+import com.planus.backend.domain.home.dto.HomeDailyResponse;
 import com.planus.backend.domain.home.dto.HomeSummaryResponse;
 import com.planus.backend.domain.home.service.HomeService;
 import com.planus.backend.global.apiPayload.ApiResponse;
 import com.planus.backend.global.apiPayload.code.GeneralSuccessCode;
+import java.time.LocalDate;
 import java.time.YearMonth;
 import lombok.RequiredArgsConstructor;
 import org.springframework.format.annotation.DateTimeFormat;
@@ -48,5 +50,19 @@ public class HomeController {
             @AuthenticationPrincipal Long userId,
             @RequestParam @DateTimeFormat(pattern = "yyyy-MM") YearMonth yearMonth) {
         return ApiResponse.onSuccess(GeneralSuccessCode.OK, homeService.getCalendar(userId, yearMonth));
+    }
+
+    /**
+     * 특정 날짜의 상세 거래 내역을 조회한다.
+     *
+     * @param userId JWT 인증된 사용자 ID
+     * @param date 조회 날짜 (yyyy-MM-dd)
+     * @return 200 OK, 해당 날짜의 거래 상세 목록
+     */
+    @GetMapping("/daily")
+    public ApiResponse<HomeDailyResponse> getDailyDetail(
+            @AuthenticationPrincipal Long userId,
+            @RequestParam @DateTimeFormat(pattern = "yyyy-MM-dd") LocalDate date) {
+        return ApiResponse.onSuccess(GeneralSuccessCode.OK, homeService.getDailyDetail(userId, date));
     }
 }
