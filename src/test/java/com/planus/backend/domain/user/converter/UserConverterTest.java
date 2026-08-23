@@ -35,7 +35,7 @@ class UserConverterTest {
         }
 
         @Test
-        @DisplayName("message는 고정 문자열 '프로필 저장 완료. AI 예산 산출이 시작됩니다.'이다")
+        @DisplayName("message는 고정 문자열 '프로필 저장 완료.'이다")
         void hasFixedMessage() {
             UserAccount user = UserAccount.builder()
                     .id(1L)

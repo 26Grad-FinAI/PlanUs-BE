@@ -57,8 +57,8 @@ public class ExpenseService {
                 .findById(expenseId)
                 .orElseThrow(() -> new GeneralException(GeneralErrorCode.EXPENSE_NOT_FOUND));
 
-        validateOwnership(expense, userId);
-        validateType(expense, "EXPENSE");
+        expense.validateOwnership(userId);
+        expense.validateType("EXPENSE");
         validateCategoryId(request.categoryId());
         validateEmotion(request.emotion());
 
@@ -87,22 +87,10 @@ public class ExpenseService {
                 .findById(expenseId)
                 .orElseThrow(() -> new GeneralException(GeneralErrorCode.EXPENSE_NOT_FOUND));
 
-        validateOwnership(expense, userId);
-        validateType(expense, "EXPENSE");
+        expense.validateOwnership(userId);
+        expense.validateType("EXPENSE");
 
         expenseRepository.delete(expense);
-    }
-
-    private void validateOwnership(Expense expense, Long userId) {
-        if (!expense.getUserId().equals(userId)) {
-            throw new GeneralException(GeneralErrorCode.FORBIDDEN);
-        }
-    }
-
-    private void validateType(Expense expense, String expectedType) {
-        if (!expectedType.equalsIgnoreCase(expense.getType())) {
-            throw new GeneralException(GeneralErrorCode.BAD_REQUEST);
-        }
     }
 
     private void validateCategoryId(Integer categoryId) {

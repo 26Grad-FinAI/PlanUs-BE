@@ -59,6 +59,6 @@ public class ExpenseController {
     @DeleteMapping("/{expenseId}")
     public ApiResponse<Void> deleteExpense(@AuthenticationPrincipal Long userId, @PathVariable Long expenseId) {
         expenseService.deleteExpense(userId, expenseId);
-        return ApiResponse.onSuccess(GeneralSuccessCode.OK, null);
+        return ApiResponse.onSuccess(GeneralSuccessCode.OK);
     }
 }

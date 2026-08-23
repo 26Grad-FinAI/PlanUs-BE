@@ -37,6 +37,6 @@ public class IncomeController {
     @DeleteMapping("/{incomeId}")
     public ApiResponse<Void> deleteIncome(@AuthenticationPrincipal Long userId, @PathVariable Long incomeId) {
         incomeService.deleteIncome(userId, incomeId);
-        return ApiResponse.onSuccess(GeneralSuccessCode.OK, null);
+        return ApiResponse.onSuccess(GeneralSuccessCode.OK);
     }
 }

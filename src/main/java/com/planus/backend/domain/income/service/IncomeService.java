@@ -57,7 +57,7 @@ public class IncomeService {
             budget.addTotalBudget(request.amount());
             budgetCategory.addAmount(request.amount());
         } catch (ArithmeticException e) {
-            throw new GeneralException(GeneralErrorCode.BUDGET_OVERFLOW);
+            throw new GeneralException(GeneralErrorCode.BUDGET_OVERFLOW, e);
         }
 
         return IncomeConverter.toIncomeResponse(saved);
@@ -65,6 +65,9 @@ public class IncomeService {
 
     /**
      * 수입을 수정한다. 예산이 존재하면 기존 금액 차감 후 새 금액을 추가한다.
+     *
+     * <p>카테고리나 연월이 변경될 수 있으므로, 기존/신규 양쪽의 Budget·BudgetCategory를
+     * 먼저 조회한 뒤 일괄 적용하여 비대칭 실행을 방지한다.
      *
      * @param userId   인증된 사용자 ID
      * @param incomeId 수정할 수입 ID
@@ -77,21 +80,46 @@ public class IncomeService {
                 .findById(incomeId)
                 .orElseThrow(() -> new GeneralException(GeneralErrorCode.INCOME_NOT_FOUND));
 
-        validateOwnership(income, userId);
-        validateType(income, "INCOME");
+        income.validateOwnership(userId);
+        income.validateType("INCOME");
         validateCategoryId(request.categoryId());
 
         long oldAmount = income.getAmount();
         Integer oldCategoryId = income.getCategoryId();
         LocalDate oldYearMonth = income.getDate().withDayOfMonth(1);
+        LocalDate newYearMonth = request.incomeDate().toLocalDate().withDayOfMonth(1);
+
+        // 기존·신규 Budget/BudgetCategory를 미리 조회
+        Optional<Budget> oldBudgetOpt = budgetRepository.findByUserIdAndYearMonth(userId, oldYearMonth);
+        Optional<BudgetCategory> oldBcOpt = oldBudgetOpt.flatMap(
+                b -> budgetCategoryRepository.findByBudgetIdAndCategoryId(b.getId(), oldCategoryId));
+
+        Optional<Budget> newBudgetOpt;
+        Optional<BudgetCategory> newBcOpt;
+        if (oldYearMonth.equals(newYearMonth)) {
+            newBudgetOpt = oldBudgetOpt;
+        } else {
+            newBudgetOpt = budgetRepository.findByUserIdAndYearMonth(userId, newYearMonth);
+        }
+        newBcOpt = newBudgetOpt.flatMap(
+                b -> budgetCategoryRepository.findByBudgetIdAndCategoryId(b.getId(), request.categoryId()));
 
         income.updateIncome(
                 request.amount(), request.title(), request.incomeDate(), request.categoryId(), request.memo());
 
-        // 예산 조정: budget이 없으면 스킵
-        LocalDate newYearMonth = request.incomeDate().toLocalDate().withDayOfMonth(1);
-        adjustBudget(userId, oldYearMonth, oldCategoryId, -oldAmount);
-        adjustBudget(userId, newYearMonth, request.categoryId(), request.amount());
+        // 예산 조정: 조회 결과가 있는 쪽만 일괄 적용
+        try {
+            if (oldBudgetOpt.isPresent() && oldBcOpt.isPresent()) {
+                oldBudgetOpt.get().addTotalBudget(-oldAmount);
+                oldBcOpt.get().addAmount(-oldAmount);
+            }
+            if (newBudgetOpt.isPresent() && newBcOpt.isPresent()) {
+                newBudgetOpt.get().addTotalBudget(request.amount());
+                newBcOpt.get().addAmount(request.amount());
+            }
+        } catch (ArithmeticException e) {
+            throw new GeneralException(GeneralErrorCode.BUDGET_OVERFLOW, e);
+        }
 
         return IncomeConverter.toIncomeResponse(income);
     }
@@ -108,8 +136,8 @@ public class IncomeService {
                 .findById(incomeId)
                 .orElseThrow(() -> new GeneralException(GeneralErrorCode.INCOME_NOT_FOUND));
 
-        validateOwnership(income, userId);
-        validateType(income, "INCOME");
+        income.validateOwnership(userId);
+        income.validateType("INCOME");
 
         // 예산에서 금액 차감: budget이 없으면 스킵
         LocalDate yearMonth = income.getDate().withDayOfMonth(1);
@@ -138,19 +166,7 @@ public class IncomeService {
             budget.addTotalBudget(amount);
             budgetCategoryOpt.get().addAmount(amount);
         } catch (ArithmeticException e) {
-            throw new GeneralException(GeneralErrorCode.BUDGET_OVERFLOW);
-        }
-    }
-
-    private void validateOwnership(Expense expense, Long userId) {
-        if (!expense.getUserId().equals(userId)) {
-            throw new GeneralException(GeneralErrorCode.FORBIDDEN);
-        }
-    }
-
-    private void validateType(Expense expense, String expectedType) {
-        if (!expectedType.equalsIgnoreCase(expense.getType())) {
-            throw new GeneralException(GeneralErrorCode.BAD_REQUEST);
+            throw new GeneralException(GeneralErrorCode.BUDGET_OVERFLOW, e);
         }
     }
 

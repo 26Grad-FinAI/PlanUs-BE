@@ -312,6 +312,174 @@ class IncomeServiceTest {
         }
 
         @Test
+        @DisplayName("카테고리가 변경되면 기존 카테고리에서 차감하고 새 카테고리에 추가한다")
+        void updateIncome_categoryChange_adjustsBothCategories() {
+            Expense existing = Expense.builder()
+                    .id(1L)
+                    .userId(1L)
+                    .type("INCOME")
+                    .amount(500000L)
+                    .title("월급")
+                    .expenseDate(LocalDateTime.of(2026, 8, 25, 9, 0))
+                    .categoryId(1)
+                    .recurring(false)
+                    .planned(false)
+                    .createdAt(LocalDateTime.of(2026, 8, 25, 9, 0))
+                    .build();
+            when(expenseRepository.findById(1L)).thenReturn(Optional.of(existing));
+
+            Budget budget = Budget.builder()
+                    .id(10L)
+                    .userId(1L)
+                    .yearMonth(LocalDate.of(2026, 8, 1))
+                    .totalBudget(1500000L)
+                    .build();
+            when(budgetRepository.findByUserIdAndYearMonth(1L, LocalDate.of(2026, 8, 1)))
+                    .thenReturn(Optional.of(budget));
+
+            BudgetCategory oldBc = BudgetCategory.builder()
+                    .id(100L)
+                    .budgetId(10L)
+                    .categoryId(1)
+                    .amount(700000L)
+                    .build();
+            when(budgetCategoryRepository.findByBudgetIdAndCategoryId(10L, 1)).thenReturn(Optional.of(oldBc));
+
+            BudgetCategory newBc = BudgetCategory.builder()
+                    .id(101L)
+                    .budgetId(10L)
+                    .categoryId(3)
+                    .amount(100000L)
+                    .build();
+            when(budgetCategoryRepository.findByBudgetIdAndCategoryId(10L, 3)).thenReturn(Optional.of(newBc));
+
+            IncomeRequest updateRequest =
+                    new IncomeRequest(600000L, "보너스", LocalDateTime.of(2026, 8, 25, 9, 0), 3, null);
+
+            incomeService.updateIncome(1L, 1L, updateRequest);
+
+            // 기존 카테고리: 700000 - 500000 = 200000
+            assertThat(oldBc.getAmount()).isEqualTo(200000L);
+            // 새 카테고리: 100000 + 600000 = 700000
+            assertThat(newBc.getAmount()).isEqualTo(700000L);
+            // 총 예산: 1500000 - 500000 + 600000 = 1600000
+            assertThat(budget.getTotalBudget()).isEqualTo(1600000L);
+        }
+
+        @Test
+        @DisplayName("연월이 변경되면 기존 월에서 차감하고 새 월에 추가한다")
+        void updateIncome_yearMonthChange_adjustsBothMonths() {
+            Expense existing = Expense.builder()
+                    .id(1L)
+                    .userId(1L)
+                    .type("INCOME")
+                    .amount(500000L)
+                    .title("월급")
+                    .expenseDate(LocalDateTime.of(2026, 8, 25, 9, 0))
+                    .categoryId(1)
+                    .recurring(false)
+                    .planned(false)
+                    .createdAt(LocalDateTime.of(2026, 8, 25, 9, 0))
+                    .build();
+            when(expenseRepository.findById(1L)).thenReturn(Optional.of(existing));
+
+            Budget oldBudget = Budget.builder()
+                    .id(10L)
+                    .userId(1L)
+                    .yearMonth(LocalDate.of(2026, 8, 1))
+                    .totalBudget(1500000L)
+                    .build();
+            when(budgetRepository.findByUserIdAndYearMonth(1L, LocalDate.of(2026, 8, 1)))
+                    .thenReturn(Optional.of(oldBudget));
+
+            BudgetCategory oldBc = BudgetCategory.builder()
+                    .id(100L)
+                    .budgetId(10L)
+                    .categoryId(1)
+                    .amount(700000L)
+                    .build();
+            when(budgetCategoryRepository.findByBudgetIdAndCategoryId(10L, 1)).thenReturn(Optional.of(oldBc));
+
+            Budget newBudget = Budget.builder()
+                    .id(20L)
+                    .userId(1L)
+                    .yearMonth(LocalDate.of(2026, 9, 1))
+                    .totalBudget(1000000L)
+                    .build();
+            when(budgetRepository.findByUserIdAndYearMonth(1L, LocalDate.of(2026, 9, 1)))
+                    .thenReturn(Optional.of(newBudget));
+
+            BudgetCategory newBc = BudgetCategory.builder()
+                    .id(200L)
+                    .budgetId(20L)
+                    .categoryId(1)
+                    .amount(300000L)
+                    .build();
+            when(budgetCategoryRepository.findByBudgetIdAndCategoryId(20L, 1)).thenReturn(Optional.of(newBc));
+
+            IncomeRequest updateRequest =
+                    new IncomeRequest(600000L, "월급 수정", LocalDateTime.of(2026, 9, 25, 9, 0), 1, null);
+
+            incomeService.updateIncome(1L, 1L, updateRequest);
+
+            // 기존 8월 예산: 1500000 - 500000 = 1000000
+            assertThat(oldBudget.getTotalBudget()).isEqualTo(1000000L);
+            assertThat(oldBc.getAmount()).isEqualTo(200000L);
+            // 새 9월 예산: 1000000 + 600000 = 1600000
+            assertThat(newBudget.getTotalBudget()).isEqualTo(1600000L);
+            assertThat(newBc.getAmount()).isEqualTo(900000L);
+        }
+
+        @Test
+        @DisplayName("기존 월에 예산이 없고 새 월에만 예산이 있으면 새 월만 조정한다")
+        void updateIncome_oldBudgetMissing_adjustsOnlyNew() {
+            Expense existing = Expense.builder()
+                    .id(1L)
+                    .userId(1L)
+                    .type("INCOME")
+                    .amount(500000L)
+                    .title("월급")
+                    .expenseDate(LocalDateTime.of(2026, 7, 25, 9, 0))
+                    .categoryId(1)
+                    .recurring(false)
+                    .planned(false)
+                    .createdAt(LocalDateTime.of(2026, 7, 25, 9, 0))
+                    .build();
+            when(expenseRepository.findById(1L)).thenReturn(Optional.of(existing));
+
+            // 7월 예산 없음
+            when(budgetRepository.findByUserIdAndYearMonth(1L, LocalDate.of(2026, 7, 1)))
+                    .thenReturn(Optional.empty());
+
+            // 8월 예산 있음
+            Budget newBudget = Budget.builder()
+                    .id(20L)
+                    .userId(1L)
+                    .yearMonth(LocalDate.of(2026, 8, 1))
+                    .totalBudget(1000000L)
+                    .build();
+            when(budgetRepository.findByUserIdAndYearMonth(1L, LocalDate.of(2026, 8, 1)))
+                    .thenReturn(Optional.of(newBudget));
+
+            BudgetCategory newBc = BudgetCategory.builder()
+                    .id(200L)
+                    .budgetId(20L)
+                    .categoryId(1)
+                    .amount(300000L)
+                    .build();
+            when(budgetCategoryRepository.findByBudgetIdAndCategoryId(20L, 1)).thenReturn(Optional.of(newBc));
+
+            IncomeRequest updateRequest =
+                    new IncomeRequest(600000L, "월급 수정", LocalDateTime.of(2026, 8, 25, 9, 0), 1, null);
+
+            incomeService.updateIncome(1L, 1L, updateRequest);
+
+            // 새 8월만 조정: 1000000 + 600000 = 1600000
+            assertThat(newBudget.getTotalBudget()).isEqualTo(1600000L);
+            assertThat(newBc.getAmount()).isEqualTo(900000L);
+        }
+
+        @Test
         @DisplayName("예산이 없으면 예산 조정을 스킵하고 수입만 수정한다")
         void updateIncome_noBudget_skipsAdjustment() {
             Expense existing = Expense.builder()
