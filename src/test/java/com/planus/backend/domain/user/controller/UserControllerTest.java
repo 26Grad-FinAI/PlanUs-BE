@@ -113,6 +113,7 @@ class UserControllerTest {
                 SecurityContextHolder.getContext().setAuthentication(new UsernamePasswordAuthenticationToken(1L, null));
 
                 UserProfileRequest requestWithBlankHobby = new UserProfileRequest(
+                        "김스펜드",
                         30,
                         "MALE",
                         "서울",
@@ -138,7 +139,17 @@ class UserControllerTest {
                 SecurityContextHolder.getContext().setAuthentication(new UsernamePasswordAuthenticationToken(1L, null));
 
                 UserProfileRequest requestWithWhitespaceHobby = new UserProfileRequest(
-                        30, "MALE", "서울", 3_000_000L, 1_000_000L, 500_000L, List.of("   "), "SAVING", true, false);
+                        "김스펜드",
+                        30,
+                        "MALE",
+                        "서울",
+                        3_000_000L,
+                        1_000_000L,
+                        500_000L,
+                        List.of("   "),
+                        "SAVING",
+                        true,
+                        false);
 
                 mockMvc.perform(post("/api/users/me/profile")
                                 .contentType(MediaType.APPLICATION_JSON)
@@ -330,6 +341,16 @@ class UserControllerTest {
 
     private UserProfileRequest validRequest() {
         return new UserProfileRequest(
-                30, "MALE", "서울", 3_000_000L, 1_000_000L, 500_000L, List.of("DINING", "TRAVEL"), "SAVING", true, false);
+                "김스펜드",
+                30,
+                "MALE",
+                "서울",
+                3_000_000L,
+                1_000_000L,
+                500_000L,
+                List.of("DINING", "TRAVEL"),
+                "SAVING",
+                true,
+                false);
     }
 }

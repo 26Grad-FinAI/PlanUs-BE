@@ -61,4 +61,33 @@ public class Expense {
     public boolean isVariable() {
         return isExpense() && !recurring && !planned;
     }
+
+    /** 지출 정보를 수정한다. */
+    public void updateExpense(
+            long amount,
+            String title,
+            LocalDateTime expenseDate,
+            Integer categoryId,
+            String memo,
+            String emotion,
+            boolean recurring,
+            boolean planned) {
+        this.amount = amount;
+        this.title = title;
+        this.expenseDate = expenseDate;
+        this.categoryId = categoryId;
+        this.memo = memo;
+        this.emotion = emotion;
+        this.recurring = recurring;
+        this.planned = planned;
+    }
+
+    /** 수입 정보를 수정한다. */
+    public void updateIncome(long amount, String title, LocalDateTime expenseDate, Integer categoryId, String memo) {
+        this.amount = amount;
+        this.title = title;
+        this.expenseDate = expenseDate;
+        this.categoryId = categoryId;
+        this.memo = memo;
+    }
 }

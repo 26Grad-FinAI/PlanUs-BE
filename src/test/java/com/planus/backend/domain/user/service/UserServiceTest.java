@@ -81,6 +81,7 @@ class UserServiceTest {
 
             verify(user)
                     .updateProfile(
+                            "김스펜드",
                             30,
                             "MALE",
                             "서울",
@@ -146,6 +147,7 @@ class UserServiceTest {
 
             verify(user)
                     .updateProfile(
+                            "김스펜드",
                             30,
                             "MALE",
                             "서울",
@@ -227,6 +229,16 @@ class UserServiceTest {
 
     private UserProfileRequest validRequest() {
         return new UserProfileRequest(
-                30, "MALE", "서울", 3_000_000L, 1_000_000L, 500_000L, List.of("DINING", "TRAVEL"), "SAVING", true, false);
+                "김스펜드",
+                30,
+                "MALE",
+                "서울",
+                3_000_000L,
+                1_000_000L,
+                500_000L,
+                List.of("DINING", "TRAVEL"),
+                "SAVING",
+                true,
+                false);
     }
 }

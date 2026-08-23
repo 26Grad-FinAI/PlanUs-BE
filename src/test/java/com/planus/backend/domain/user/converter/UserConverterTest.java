@@ -47,7 +47,7 @@ class UserConverterTest {
 
             UserProfileResponse response = UserConverter.toProfileResponse(user);
 
-            assertThat(response.message()).isEqualTo("프로필 저장 완료. AI 예산 산출이 시작됩니다.");
+            assertThat(response.message()).isEqualTo("프로필 저장 완료.");
         }
 
         @Test

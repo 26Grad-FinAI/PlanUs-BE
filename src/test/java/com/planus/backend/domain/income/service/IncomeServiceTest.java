@@ -4,6 +4,7 @@ import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.Mockito.mock;
+import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
@@ -254,6 +255,311 @@ class IncomeServiceTest {
                     .isInstanceOf(GeneralException.class)
                     .satisfies(ex -> assertThat(((GeneralException) ex).getErrorCode())
                             .isEqualTo(GeneralErrorCode.BUDGET_OVERFLOW));
+        }
+    }
+
+    @Nested
+    @DisplayName("updateIncome 성공")
+    class UpdateIncomeSuccess {
+
+        @Test
+        @DisplayName("올바른 요청 시 수입을 수정하고 예산을 조정한다")
+        void updateIncome_success_returnsResponse() {
+            Expense existing = Expense.builder()
+                    .id(1L)
+                    .userId(1L)
+                    .type("INCOME")
+                    .amount(500000L)
+                    .title("월급")
+                    .expenseDate(LocalDateTime.of(2026, 8, 25, 9, 0))
+                    .categoryId(1)
+                    .memo("8월 급여")
+                    .recurring(false)
+                    .planned(false)
+                    .createdAt(LocalDateTime.of(2026, 8, 25, 9, 0))
+                    .build();
+            when(expenseRepository.findById(1L)).thenReturn(Optional.of(existing));
+
+            Budget budget = Budget.builder()
+                    .id(10L)
+                    .userId(1L)
+                    .yearMonth(LocalDate.of(2026, 8, 1))
+                    .totalBudget(1500000L)
+                    .build();
+            when(budgetRepository.findByUserIdAndYearMonth(1L, LocalDate.of(2026, 8, 1)))
+                    .thenReturn(Optional.of(budget));
+
+            BudgetCategory budgetCategory = BudgetCategory.builder()
+                    .id(100L)
+                    .budgetId(10L)
+                    .categoryId(1)
+                    .amount(700000L)
+                    .build();
+            when(budgetCategoryRepository.findByBudgetIdAndCategoryId(10L, 1)).thenReturn(Optional.of(budgetCategory));
+
+            IncomeRequest updateRequest =
+                    new IncomeRequest(600000L, "월급 수정", LocalDateTime.of(2026, 8, 25, 9, 0), 1, "수정된 메모");
+
+            IncomeResponse response = incomeService.updateIncome(1L, 1L, updateRequest);
+
+            assertThat(response.amount()).isEqualTo(600000L);
+            assertThat(response.title()).isEqualTo("월급 수정");
+            assertThat(response.memo()).isEqualTo("수정된 메모");
+            // 예산: 1500000 - 500000(기존) + 600000(새) = 1600000
+            assertThat(budget.getTotalBudget()).isEqualTo(1600000L);
+            // 카테고리 예산: 700000 - 500000(기존) + 600000(새) = 800000
+            assertThat(budgetCategory.getAmount()).isEqualTo(800000L);
+        }
+
+        @Test
+        @DisplayName("예산이 없으면 예산 조정을 스킵하고 수입만 수정한다")
+        void updateIncome_noBudget_skipsAdjustment() {
+            Expense existing = Expense.builder()
+                    .id(1L)
+                    .userId(1L)
+                    .type("INCOME")
+                    .amount(500000L)
+                    .title("월급")
+                    .expenseDate(LocalDateTime.of(2026, 8, 25, 9, 0))
+                    .categoryId(1)
+                    .recurring(false)
+                    .planned(false)
+                    .createdAt(LocalDateTime.of(2026, 8, 25, 9, 0))
+                    .build();
+            when(expenseRepository.findById(1L)).thenReturn(Optional.of(existing));
+            when(budgetRepository.findByUserIdAndYearMonth(1L, LocalDate.of(2026, 8, 1)))
+                    .thenReturn(Optional.empty());
+
+            IncomeRequest updateRequest =
+                    new IncomeRequest(600000L, "월급 수정", LocalDateTime.of(2026, 8, 25, 9, 0), 1, null);
+
+            IncomeResponse response = incomeService.updateIncome(1L, 1L, updateRequest);
+
+            assertThat(response.amount()).isEqualTo(600000L);
+            assertThat(response.title()).isEqualTo("월급 수정");
+        }
+    }
+
+    @Nested
+    @DisplayName("updateIncome 실패")
+    class UpdateIncomeFailure {
+
+        @Test
+        @DisplayName("존재하지 않는 수입이면 INCOME_NOT_FOUND 예외가 발생한다")
+        void updateIncome_notFound_throwsIncomeNotFound() {
+            when(expenseRepository.findById(999L)).thenReturn(Optional.empty());
+
+            assertThatThrownBy(() -> incomeService.updateIncome(1L, 999L, validRequest()))
+                    .isInstanceOf(GeneralException.class)
+                    .satisfies(ex -> assertThat(((GeneralException) ex).getErrorCode())
+                            .isEqualTo(GeneralErrorCode.INCOME_NOT_FOUND));
+        }
+
+        @Test
+        @DisplayName("다른 사용자의 수입이면 FORBIDDEN 예외가 발생한다")
+        void updateIncome_otherUser_throwsForbidden() {
+            Expense existing = Expense.builder()
+                    .id(1L)
+                    .userId(2L)
+                    .type("INCOME")
+                    .amount(500000L)
+                    .title("월급")
+                    .expenseDate(LocalDateTime.of(2026, 8, 25, 9, 0))
+                    .categoryId(1)
+                    .recurring(false)
+                    .planned(false)
+                    .createdAt(LocalDateTime.of(2026, 8, 25, 9, 0))
+                    .build();
+            when(expenseRepository.findById(1L)).thenReturn(Optional.of(existing));
+
+            assertThatThrownBy(() -> incomeService.updateIncome(1L, 1L, validRequest()))
+                    .isInstanceOf(GeneralException.class)
+                    .satisfies(ex ->
+                            assertThat(((GeneralException) ex).getErrorCode()).isEqualTo(GeneralErrorCode.FORBIDDEN));
+        }
+
+        @Test
+        @DisplayName("EXPENSE 타입을 수입 API로 수정하면 BAD_REQUEST 예외가 발생한다")
+        void updateIncome_expenseType_throwsBadRequest() {
+            Expense existing = Expense.builder()
+                    .id(1L)
+                    .userId(1L)
+                    .type("EXPENSE")
+                    .amount(15000L)
+                    .title("스타벅스")
+                    .expenseDate(LocalDateTime.of(2026, 8, 19, 12, 0))
+                    .categoryId(2)
+                    .recurring(false)
+                    .planned(false)
+                    .createdAt(LocalDateTime.of(2026, 8, 19, 12, 0))
+                    .build();
+            when(expenseRepository.findById(1L)).thenReturn(Optional.of(existing));
+
+            assertThatThrownBy(() -> incomeService.updateIncome(1L, 1L, validRequest()))
+                    .isInstanceOf(GeneralException.class)
+                    .satisfies(ex ->
+                            assertThat(((GeneralException) ex).getErrorCode()).isEqualTo(GeneralErrorCode.BAD_REQUEST));
+        }
+
+        @Test
+        @DisplayName("카테고리 ID가 범위 밖이면 INVALID_CATEGORY 예외가 발생한다")
+        void updateIncome_invalidCategory_throwsInvalidCategory() {
+            Expense existing = Expense.builder()
+                    .id(1L)
+                    .userId(1L)
+                    .type("INCOME")
+                    .amount(500000L)
+                    .title("월급")
+                    .expenseDate(LocalDateTime.of(2026, 8, 25, 9, 0))
+                    .categoryId(1)
+                    .recurring(false)
+                    .planned(false)
+                    .createdAt(LocalDateTime.of(2026, 8, 25, 9, 0))
+                    .build();
+            when(expenseRepository.findById(1L)).thenReturn(Optional.of(existing));
+
+            IncomeRequest request = new IncomeRequest(100000L, "테스트", LocalDateTime.now(), 99, null);
+
+            assertThatThrownBy(() -> incomeService.updateIncome(1L, 1L, request))
+                    .isInstanceOf(GeneralException.class)
+                    .satisfies(ex -> assertThat(((GeneralException) ex).getErrorCode())
+                            .isEqualTo(GeneralErrorCode.INVALID_CATEGORY));
+        }
+    }
+
+    @Nested
+    @DisplayName("deleteIncome 성공")
+    class DeleteIncomeSuccess {
+
+        @Test
+        @DisplayName("올바른 요청 시 수입을 삭제하고 예산에서 차감한다")
+        void deleteIncome_success_deletesAndAdjustsBudget() {
+            Expense existing = Expense.builder()
+                    .id(1L)
+                    .userId(1L)
+                    .type("INCOME")
+                    .amount(500000L)
+                    .title("월급")
+                    .expenseDate(LocalDateTime.of(2026, 8, 25, 9, 0))
+                    .categoryId(1)
+                    .recurring(false)
+                    .planned(false)
+                    .createdAt(LocalDateTime.of(2026, 8, 25, 9, 0))
+                    .build();
+            when(expenseRepository.findById(1L)).thenReturn(Optional.of(existing));
+
+            Budget budget = Budget.builder()
+                    .id(10L)
+                    .userId(1L)
+                    .yearMonth(LocalDate.of(2026, 8, 1))
+                    .totalBudget(1500000L)
+                    .build();
+            when(budgetRepository.findByUserIdAndYearMonth(1L, LocalDate.of(2026, 8, 1)))
+                    .thenReturn(Optional.of(budget));
+
+            BudgetCategory budgetCategory = BudgetCategory.builder()
+                    .id(100L)
+                    .budgetId(10L)
+                    .categoryId(1)
+                    .amount(700000L)
+                    .build();
+            when(budgetCategoryRepository.findByBudgetIdAndCategoryId(10L, 1)).thenReturn(Optional.of(budgetCategory));
+
+            incomeService.deleteIncome(1L, 1L);
+
+            verify(expenseRepository).delete(existing);
+            assertThat(budget.getTotalBudget()).isEqualTo(1000000L);
+            assertThat(budgetCategory.getAmount()).isEqualTo(200000L);
+        }
+
+        @Test
+        @DisplayName("예산이 없으면 예산 조정을 스킵하고 수입만 삭제한다")
+        void deleteIncome_noBudget_skipsAdjustment() {
+            Expense existing = Expense.builder()
+                    .id(1L)
+                    .userId(1L)
+                    .type("INCOME")
+                    .amount(500000L)
+                    .title("월급")
+                    .expenseDate(LocalDateTime.of(2026, 8, 25, 9, 0))
+                    .categoryId(1)
+                    .recurring(false)
+                    .planned(false)
+                    .createdAt(LocalDateTime.of(2026, 8, 25, 9, 0))
+                    .build();
+            when(expenseRepository.findById(1L)).thenReturn(Optional.of(existing));
+            when(budgetRepository.findByUserIdAndYearMonth(1L, LocalDate.of(2026, 8, 1)))
+                    .thenReturn(Optional.empty());
+
+            incomeService.deleteIncome(1L, 1L);
+
+            verify(expenseRepository).delete(existing);
+        }
+    }
+
+    @Nested
+    @DisplayName("deleteIncome 실패")
+    class DeleteIncomeFailure {
+
+        @Test
+        @DisplayName("존재하지 않는 수입이면 INCOME_NOT_FOUND 예외가 발생한다")
+        void deleteIncome_notFound_throwsIncomeNotFound() {
+            when(expenseRepository.findById(999L)).thenReturn(Optional.empty());
+
+            assertThatThrownBy(() -> incomeService.deleteIncome(1L, 999L))
+                    .isInstanceOf(GeneralException.class)
+                    .satisfies(ex -> assertThat(((GeneralException) ex).getErrorCode())
+                            .isEqualTo(GeneralErrorCode.INCOME_NOT_FOUND));
+        }
+
+        @Test
+        @DisplayName("다른 사용자의 수입이면 FORBIDDEN 예외가 발생한다")
+        void deleteIncome_otherUser_throwsForbidden() {
+            Expense existing = Expense.builder()
+                    .id(1L)
+                    .userId(2L)
+                    .type("INCOME")
+                    .amount(500000L)
+                    .title("월급")
+                    .expenseDate(LocalDateTime.of(2026, 8, 25, 9, 0))
+                    .categoryId(1)
+                    .recurring(false)
+                    .planned(false)
+                    .createdAt(LocalDateTime.of(2026, 8, 25, 9, 0))
+                    .build();
+            when(expenseRepository.findById(1L)).thenReturn(Optional.of(existing));
+
+            assertThatThrownBy(() -> incomeService.deleteIncome(1L, 1L))
+                    .isInstanceOf(GeneralException.class)
+                    .satisfies(ex ->
+                            assertThat(((GeneralException) ex).getErrorCode()).isEqualTo(GeneralErrorCode.FORBIDDEN));
+
+            verify(expenseRepository, never()).delete(any());
+        }
+
+        @Test
+        @DisplayName("EXPENSE 타입을 수입 API로 삭제하면 BAD_REQUEST 예외가 발생한다")
+        void deleteIncome_expenseType_throwsBadRequest() {
+            Expense existing = Expense.builder()
+                    .id(1L)
+                    .userId(1L)
+                    .type("EXPENSE")
+                    .amount(15000L)
+                    .title("스타벅스")
+                    .expenseDate(LocalDateTime.of(2026, 8, 19, 12, 0))
+                    .categoryId(2)
+                    .recurring(false)
+                    .planned(false)
+                    .createdAt(LocalDateTime.of(2026, 8, 19, 12, 0))
+                    .build();
+            when(expenseRepository.findById(1L)).thenReturn(Optional.of(existing));
+
+            assertThatThrownBy(() -> incomeService.deleteIncome(1L, 1L))
+                    .isInstanceOf(GeneralException.class)
+                    .satisfies(ex ->
+                            assertThat(((GeneralException) ex).getErrorCode()).isEqualTo(GeneralErrorCode.BAD_REQUEST));
+
+            verify(expenseRepository, never()).delete(any());
         }
     }
 

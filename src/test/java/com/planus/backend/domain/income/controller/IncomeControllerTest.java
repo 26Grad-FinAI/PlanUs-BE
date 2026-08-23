@@ -2,10 +2,14 @@ package com.planus.backend.domain.income.controller;
 
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.eq;
+import static org.mockito.Mockito.doNothing;
+import static org.mockito.Mockito.doThrow;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.delete;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.put;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
@@ -216,6 +220,155 @@ class IncomeControllerTest {
                         .andExpect(status().isBadRequest())
                         .andExpect(jsonPath("$.isSuccess").value(false))
                         .andExpect(jsonPath("$.code").value("COMMON_400_002"));
+            }
+        }
+    }
+
+    @Nested
+    @DisplayName("PUT /api/incomes/{incomeId}")
+    class UpdateIncome {
+
+        @Nested
+        @DisplayName("성공")
+        class Success {
+
+            @Test
+            @DisplayName("올바른 요청 시 200과 수정된 수입 정보를 반환한다")
+            void updateIncome_success_returns200() throws Exception {
+                SecurityContextHolder.getContext().setAuthentication(new UsernamePasswordAuthenticationToken(1L, null));
+
+                IncomeResponse response = new IncomeResponse(
+                        1L,
+                        600000L,
+                        "월급 수정",
+                        LocalDateTime.of(2026, 8, 25, 9, 0),
+                        1,
+                        "수정된 메모",
+                        LocalDateTime.of(2026, 8, 25, 9, 0));
+                when(incomeService.updateIncome(eq(1L), eq(1L), any())).thenReturn(response);
+
+                IncomeRequest request =
+                        new IncomeRequest(600000L, "월급 수정", LocalDateTime.of(2026, 8, 25, 9, 0), 1, "수정된 메모");
+
+                mockMvc.perform(put("/api/incomes/1")
+                                .contentType(MediaType.APPLICATION_JSON)
+                                .content(objectMapper.writeValueAsString(request)))
+                        .andExpect(status().isOk())
+                        .andExpect(jsonPath("$.isSuccess").value(true))
+                        .andExpect(jsonPath("$.result.id").value(1L))
+                        .andExpect(jsonPath("$.result.amount").value(600000L))
+                        .andExpect(jsonPath("$.result.title").value("월급 수정"));
+
+                verify(incomeService).updateIncome(eq(1L), eq(1L), any());
+            }
+        }
+
+        @Nested
+        @DisplayName("실패")
+        class Failure {
+
+            @Test
+            @DisplayName("존재하지 않는 수입이면 404를 반환한다")
+            void updateIncome_notFound_returns404() throws Exception {
+                SecurityContextHolder.getContext().setAuthentication(new UsernamePasswordAuthenticationToken(1L, null));
+
+                when(incomeService.updateIncome(eq(1L), eq(999L), any()))
+                        .thenThrow(new GeneralException(GeneralErrorCode.INCOME_NOT_FOUND));
+
+                mockMvc.perform(put("/api/incomes/999")
+                                .contentType(MediaType.APPLICATION_JSON)
+                                .content(objectMapper.writeValueAsString(validRequest())))
+                        .andExpect(status().isNotFound())
+                        .andExpect(jsonPath("$.isSuccess").value(false))
+                        .andExpect(jsonPath("$.code").value("INCOME_404_003"));
+            }
+
+            @Test
+            @DisplayName("다른 사용자의 수입이면 403을 반환한다")
+            void updateIncome_forbidden_returns403() throws Exception {
+                SecurityContextHolder.getContext().setAuthentication(new UsernamePasswordAuthenticationToken(1L, null));
+
+                when(incomeService.updateIncome(eq(1L), eq(1L), any()))
+                        .thenThrow(new GeneralException(GeneralErrorCode.FORBIDDEN));
+
+                mockMvc.perform(put("/api/incomes/1")
+                                .contentType(MediaType.APPLICATION_JSON)
+                                .content(objectMapper.writeValueAsString(validRequest())))
+                        .andExpect(status().isForbidden())
+                        .andExpect(jsonPath("$.isSuccess").value(false))
+                        .andExpect(jsonPath("$.code").value("AUTH_403_001"));
+            }
+
+            @Test
+            @DisplayName("필수 필드 누락 시 400을 반환한다")
+            void updateIncome_missingField_returns400() throws Exception {
+                SecurityContextHolder.getContext().setAuthentication(new UsernamePasswordAuthenticationToken(1L, null));
+
+                mockMvc.perform(put("/api/incomes/1")
+                                .contentType(MediaType.APPLICATION_JSON)
+                                .content("{}"))
+                        .andExpect(status().isBadRequest())
+                        .andExpect(jsonPath("$.isSuccess").value(false))
+                        .andExpect(jsonPath("$.code").value("COMMON_400_002"));
+            }
+        }
+    }
+
+    @Nested
+    @DisplayName("DELETE /api/incomes/{incomeId}")
+    class DeleteIncome {
+
+        @Nested
+        @DisplayName("성공")
+        class Success {
+
+            @Test
+            @DisplayName("올바른 요청 시 200을 반환한다")
+            void deleteIncome_success_returns200() throws Exception {
+                SecurityContextHolder.getContext().setAuthentication(new UsernamePasswordAuthenticationToken(1L, null));
+
+                doNothing().when(incomeService).deleteIncome(1L, 1L);
+
+                mockMvc.perform(delete("/api/incomes/1"))
+                        .andExpect(status().isOk())
+                        .andExpect(jsonPath("$.isSuccess").value(true));
+
+                verify(incomeService).deleteIncome(1L, 1L);
+            }
+        }
+
+        @Nested
+        @DisplayName("실패")
+        class Failure {
+
+            @Test
+            @DisplayName("존재하지 않는 수입이면 404를 반환한다")
+            void deleteIncome_notFound_returns404() throws Exception {
+                SecurityContextHolder.getContext().setAuthentication(new UsernamePasswordAuthenticationToken(1L, null));
+
+                doThrow(new GeneralException(GeneralErrorCode.INCOME_NOT_FOUND))
+                        .when(incomeService)
+                        .deleteIncome(1L, 999L);
+
+                mockMvc.perform(delete("/api/incomes/999"))
+                        .andExpect(status().isNotFound())
+                        .andExpect(jsonPath("$.isSuccess").value(false))
+                        .andExpect(jsonPath("$.code").value("INCOME_404_003"));
+            }
+
+            @Test
+            @DisplayName("다른 사용자의 수입이면 403을 반환한다")
+            void deleteIncome_forbidden_returns403() throws Exception {
+                SecurityContextHolder.getContext().setAuthentication(new UsernamePasswordAuthenticationToken(1L, null));
+
+                doThrow(new GeneralException(GeneralErrorCode.FORBIDDEN))
+                        .when(incomeService)
+                        .deleteIncome(1L, 1L);
+
+                mockMvc.perform(delete("/api/incomes/1"))
+                        .andExpect(status().isForbidden())
+                        .andExpect(jsonPath("$.isSuccess").value(false))
+                        .andExpect(jsonPath("$.code").value("AUTH_403_001"));
             }
         }
     }

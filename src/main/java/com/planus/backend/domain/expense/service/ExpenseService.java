@@ -12,7 +12,7 @@ import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
-/** 지출 등록 서비스. */
+/** 지출 등록·수정·삭제 서비스. */
 @Service
 @RequiredArgsConstructor
 public class ExpenseService {
@@ -41,6 +41,68 @@ public class ExpenseService {
         Expense expense = ExpenseConverter.toExpense(userId, request);
         Expense saved = expenseRepository.save(expense);
         return ExpenseConverter.toExpenseResponse(saved);
+    }
+
+    /**
+     * 지출을 수정한다.
+     *
+     * @param userId    인증된 사용자 ID
+     * @param expenseId 수정할 지출 ID
+     * @param request   지출 수정 요청
+     * @return 수정된 지출 정보
+     */
+    @Transactional
+    public ExpenseResponse updateExpense(Long userId, Long expenseId, ExpenseRequest request) {
+        Expense expense = expenseRepository
+                .findById(expenseId)
+                .orElseThrow(() -> new GeneralException(GeneralErrorCode.EXPENSE_NOT_FOUND));
+
+        validateOwnership(expense, userId);
+        validateType(expense, "EXPENSE");
+        validateCategoryId(request.categoryId());
+        validateEmotion(request.emotion());
+
+        expense.updateExpense(
+                request.amount(),
+                request.title(),
+                request.expenseDate(),
+                request.categoryId(),
+                request.memo(),
+                request.emotion(),
+                Boolean.TRUE.equals(request.isRecurring()),
+                Boolean.TRUE.equals(request.isPlanned()));
+
+        return ExpenseConverter.toExpenseResponse(expense);
+    }
+
+    /**
+     * 지출을 삭제한다.
+     *
+     * @param userId    인증된 사용자 ID
+     * @param expenseId 삭제할 지출 ID
+     */
+    @Transactional
+    public void deleteExpense(Long userId, Long expenseId) {
+        Expense expense = expenseRepository
+                .findById(expenseId)
+                .orElseThrow(() -> new GeneralException(GeneralErrorCode.EXPENSE_NOT_FOUND));
+
+        validateOwnership(expense, userId);
+        validateType(expense, "EXPENSE");
+
+        expenseRepository.delete(expense);
+    }
+
+    private void validateOwnership(Expense expense, Long userId) {
+        if (!expense.getUserId().equals(userId)) {
+            throw new GeneralException(GeneralErrorCode.FORBIDDEN);
+        }
+    }
+
+    private void validateType(Expense expense, String expectedType) {
+        if (!expectedType.equalsIgnoreCase(expense.getType())) {
+            throw new GeneralException(GeneralErrorCode.BAD_REQUEST);
+        }
     }
 
     private void validateCategoryId(Integer categoryId) {

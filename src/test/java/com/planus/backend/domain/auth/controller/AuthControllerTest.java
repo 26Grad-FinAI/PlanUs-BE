@@ -54,7 +54,7 @@ class AuthControllerTest {
     }
 
     private SignUpRequest validRequest() {
-        return new SignUpRequest("user@example.com", "pass1234", "pass1234", "닉네임", true);
+        return new SignUpRequest("user@example.com", "pass1234", "pass1234", true);
     }
 
     @Nested
