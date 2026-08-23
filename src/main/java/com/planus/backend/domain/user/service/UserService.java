@@ -34,6 +34,7 @@ public class UserService {
                 .orElseThrow(() -> new GeneralException(GeneralErrorCode.NOT_FOUND));
 
         user.updateProfile(
+                request.nickname(),
                 request.age(),
                 request.gender(),
                 request.residence(),
@@ -65,6 +66,7 @@ public class UserService {
                 .orElseThrow(() -> new GeneralException(GeneralErrorCode.NOT_FOUND));
 
         user.updateProfile(
+                request.nickname(),
                 request.age(),
                 request.gender(),
                 request.residence(),

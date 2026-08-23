@@ -19,11 +19,7 @@ public class UserConverter {
      */
     public static UserProfileResponse toProfileResponse(UserAccount user) {
         return new UserProfileResponse(
-                user.getId(),
-                user.getNickname(),
-                user.availableBudget(),
-                user.isProfileCompleted(),
-                "프로필 저장 완료. AI 예산 산출이 시작됩니다.");
+                user.getId(), user.getNickname(), user.availableBudget(), user.isProfileCompleted(), "프로필 저장 완료.");
     }
 
     /**

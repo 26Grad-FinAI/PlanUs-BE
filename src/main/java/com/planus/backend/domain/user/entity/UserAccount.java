@@ -106,6 +106,7 @@ public class UserAccount {
 
     /** 사용자 프로필 정보를 최초 저장하거나 갱신한다. */
     public void updateProfile(
+            String nickname,
             Integer age,
             String gender,
             String residence,
@@ -116,6 +117,7 @@ public class UserAccount {
             String spendingHabit,
             Boolean employmentStatus,
             Boolean homeOwnership) {
+        this.nickname = nickname;
         this.age = age;
         this.gender = gender;
         this.residence = residence;

@@ -9,6 +9,7 @@ import java.util.List;
 /**
  * 사용자 프로필 저장 요청 DTO.
  *
+ * @param nickname             닉네임
  * @param age                  나이 (양수)
  * @param gender               성별
  * @param residence            거주지
@@ -21,6 +22,7 @@ import java.util.List;
  * @param homeOwnership        자가 보유 여부
  */
 public record UserProfileRequest(
+        @NotBlank String nickname,
         @NotNull @Positive Integer age,
         @NotBlank String gender,
         @NotBlank String residence,

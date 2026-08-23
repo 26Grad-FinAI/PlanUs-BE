@@ -22,7 +22,6 @@ public class AuthConverter {
     public static UserAccount toUserAccount(SignUpRequest request, String encodedPassword) {
         return UserAccount.builder()
                 .email(request.email())
-                .nickname(request.nickname())
                 .password(encodedPassword)
                 .provider(AuthProvider.LOCAL)
                 .build();
