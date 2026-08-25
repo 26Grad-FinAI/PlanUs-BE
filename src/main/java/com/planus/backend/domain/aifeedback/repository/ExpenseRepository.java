@@ -78,4 +78,33 @@ public interface ExpenseRepository extends JpaRepository<Expense, Long> {
     @Query(
             "SELECT COUNT(e) FROM Expense e WHERE e.userId = :userId AND e.type = 'EXPENSE' AND e.expenseDate BETWEEN :from AND :to")
     long countByUserIdAndPeriod(Long userId, LocalDateTime from, LocalDateTime to);
+
+    /**
+     * 특정 기간 내 카테고리별 지출 합계를 조회한다.
+     *
+     * @param userId 사용자 ID
+     * @param from   조회 시작 일시 (포함)
+     * @param to     조회 종료 일시 (포함)
+     * @return [categoryId(Integer), sum(Long)] 형태의 배열 목록
+     */
+    @Query("SELECT e.categoryId, COALESCE(SUM(e.amount), 0) FROM Expense e"
+            + " WHERE e.userId = :userId AND e.type = 'EXPENSE'"
+            + " AND e.expenseDate BETWEEN :from AND :to"
+            + " GROUP BY e.categoryId")
+    List<Object[]> sumExpensesGroupByCategory(Long userId, LocalDateTime from, LocalDateTime to);
+
+    /**
+     * 특정 기간 내 월별 지출 합계를 조회한다.
+     *
+     * @param userId 사용자 ID
+     * @param from   조회 시작 일시 (포함)
+     * @param to     조회 종료 일시 (포함)
+     * @return [year(Integer), month(Integer), sum(Long)] 형태의 배열 목록
+     */
+    @Query("SELECT YEAR(e.expenseDate), MONTH(e.expenseDate), COALESCE(SUM(e.amount), 0)"
+            + " FROM Expense e WHERE e.userId = :userId AND e.type = 'EXPENSE'"
+            + " AND e.expenseDate BETWEEN :from AND :to"
+            + " GROUP BY YEAR(e.expenseDate), MONTH(e.expenseDate)"
+            + " ORDER BY YEAR(e.expenseDate), MONTH(e.expenseDate)")
+    List<Object[]> sumExpensesGroupByMonth(Long userId, LocalDateTime from, LocalDateTime to);
 }
