@@ -13,7 +13,7 @@ permissions:
 
 concurrency:
   group: dev-ci-${{ github.workflow }}-${{ github.ref }}
-  cancel-in-progress: true
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 
 env:
   AWS_REGION: ap-northeast-2
@@ -32,6 +32,8 @@ jobs:
     steps:
       - name: 소스 코드 내려받기
         uses: actions/checkout@v4
+        with:
+          persist-credentials: false
 
       - name: JDK 21 설정
         uses: actions/setup-java@v4
@@ -53,15 +55,6 @@ jobs:
           check_name: "DEV 테스트 결과"
           comment_title: "DEV 테스트 결과"
           comment_mode: always
-
-      - name: 테스트 결과 파일 보관
-        if: ${{ always() }}
-        uses: actions/upload-artifact@v4
-        with:
-          name: dev-test-results-${{ github.run_id }}
-          path: build/test-results/test/TEST-*.xml
-          if-no-files-found: warn
-          retention-days: 7
 
       - name: 코드 스타일 검사
         if: ${{ !cancelled() }}
@@ -89,6 +82,8 @@ jobs:
     steps:
       - name: 소스 코드 내려받기
         uses: actions/checkout@v4
+        with:
+          persist-credentials: false
 
       - name: ARM64 빌더 설정
         uses: docker/setup-qemu-action@v3
@@ -122,6 +117,8 @@ jobs:
     steps:
       - name: 소스 코드 내려받기
         uses: actions/checkout@v4
+        with:
+          persist-credentials: false
 
       - name: ECR 권한 변수 확인
         env:

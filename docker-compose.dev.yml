@@ -18,6 +18,11 @@ services:
       KAKAO_ALLOWED_REDIRECT_URIS:
     expose:
       - "8080"
+    logging:
+      driver: json-file
+      options:
+        max-size: "10m"
+        max-file: "3"
     restart: unless-stopped
     networks:
       - planus-dev-network
@@ -31,6 +36,11 @@ services:
       - "80:80"
     volumes:
       - ./infra/nginx/planus-dev.conf:/etc/nginx/conf.d/default.conf:ro
+    logging:
+      driver: json-file
+      options:
+        max-size: "10m"
+        max-file: "3"
     restart: unless-stopped
     networks:
       - planus-dev-network
