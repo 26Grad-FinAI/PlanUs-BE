@@ -1,7 +1,4 @@
 spring:
-  autoconfigure:
-    exclude:
-      - org.springframework.ai.vectorstore.pgvector.autoconfigure.PgVectorStoreAutoConfiguration
   jpa:
     hibernate:
       ddl-auto: none          # 스키마는 Flyway가 담당
