@@ -8,7 +8,7 @@ spring:
       region:
         static: ap-northeast-2
   datasource:
-    url: jdbc:postgresql://${rds.host}:${rds.port}/${rds.dbname}
+    url: jdbc:postgresql://${rds.host}:${rds.port}/planus?sslmode=require
     username: ${rds.username}
     password: ${rds.password}
     driver-class-name: org.postgresql.Driver
