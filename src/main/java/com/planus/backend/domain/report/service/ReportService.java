@@ -59,19 +59,15 @@ public class ReportService {
         // 2. 이번달 총 예산 (Budget 없으면 UserAccount.availableBudget() 폴백)
         LocalDate yearMonthDate = yearMonth.atDay(1);
         Optional<Budget> budgetOpt = budgetRepository.findByUserIdAndYearMonth(userId, yearMonthDate);
-        long totalBudget = budgetOpt
-                .map(Budget::getTotalBudget)
-                .orElseGet(() -> userAccountRepository
-                        .findById(userId)
-                        .orElseThrow(() -> new GeneralException(GeneralErrorCode.NOT_FOUND))
-                        .availableBudget());
+        long totalBudget = budgetOpt.map(Budget::getTotalBudget).orElseGet(() -> userAccountRepository
+                .findById(userId)
+                .orElseThrow(() -> new GeneralException(GeneralErrorCode.NOT_FOUND))
+                .availableBudget());
 
         // 3. 카테고리별 지출 집계
         List<Object[]> categoryRows = expenseRepository.sumExpensesGroupByCategory(userId, from, to);
         Map<Integer, Long> categoryExpenseMap = categoryRows.stream()
-                .collect(Collectors.toMap(
-                        row -> (Integer) row[0],
-                        row -> ((Number) row[1]).longValue()));
+                .collect(Collectors.toMap(row -> (Integer) row[0], row -> ((Number) row[1]).longValue()));
 
         // 4. 카테고리별 소비 비중 (지출 큰 순 정렬)
         List<CategoryRatio> categoryRatios = categoryExpenseMap.entrySet().stream()
@@ -82,11 +78,7 @@ public class ReportService {
                                     .divide(BigDecimal.valueOf(totalExpense), 1, RoundingMode.HALF_UP)
                                     .doubleValue()
                             : 0.0;
-                    return new CategoryRatio(
-                            entry.getKey(),
-                            Categories.name(entry.getKey()),
-                            entry.getValue(),
-                            ratio);
+                    return new CategoryRatio(entry.getKey(), Categories.name(entry.getKey()), entry.getValue(), ratio);
                 })
                 .sorted(Comparator.comparingDouble(CategoryRatio::ratio).reversed())
                 .toList();
@@ -103,12 +95,7 @@ public class ReportService {
         List<CategoryBudgetStatus> categoryBudgets = buildCategoryBudgets(budgetCategories, categoryExpenseMap);
 
         return new MonthlyReportResponse(
-                yearMonth.toString(),
-                totalExpense,
-                totalBudget,
-                categoryRatios,
-                monthlyTrends,
-                categoryBudgets);
+                yearMonth.toString(), totalExpense, totalBudget, categoryRatios, monthlyTrends, categoryBudgets);
     }
 
     private List<MonthlyTrend> buildMonthlyTrends(YearMonth target, List<Object[]> rows) {
@@ -126,9 +113,8 @@ public class ReportService {
     private List<CategoryBudgetStatus> buildCategoryBudgets(
             List<BudgetCategory> budgetCategories, Map<Integer, Long> categoryExpenseMap) {
 
-        Set<Integer> budgetedIds = budgetCategories.stream()
-                .map(BudgetCategory::getCategoryId)
-                .collect(Collectors.toSet());
+        Set<Integer> budgetedIds =
+                budgetCategories.stream().map(BudgetCategory::getCategoryId).collect(Collectors.toSet());
 
         List<CategoryBudgetStatus> result = new ArrayList<>();
 
@@ -142,11 +128,8 @@ public class ReportService {
         // 예산 없이 지출만 있는 카테고리 (budget=0)
         categoryExpenseMap.entrySet().stream()
                 .filter(e -> !budgetedIds.contains(e.getKey()))
-                .forEach(e -> result.add(new CategoryBudgetStatus(
-                        e.getKey(),
-                        Categories.name(e.getKey()),
-                        0L,
-                        e.getValue())));
+                .forEach(e -> result.add(
+                        new CategoryBudgetStatus(e.getKey(), Categories.name(e.getKey()), 0L, e.getValue())));
 
         result.sort(Comparator.comparingInt(CategoryBudgetStatus::categoryId));
         return result;
