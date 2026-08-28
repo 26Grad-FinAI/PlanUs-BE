@@ -1,0 +1,32 @@
+spring:
+  config:
+    import:
+      - "aws-secretsmanager:${PLANUS_RDS_SECRET_ARN}?prefix=rds."
+      - "aws-parameterstore:/planus/dev/app/"
+  cloud:
+    aws:
+      region:
+        static: ap-northeast-2
+  datasource:
+    url: jdbc:postgresql://${rds.host}:${rds.port}/${rds.dbname}
+    username: ${rds.username}
+    password: ${rds.password}
+    driver-class-name: org.postgresql.Driver
+  flyway:
+    enabled: true
+    locations: classpath:db/migration
+    baseline-on-migrate: ${FLYWAY_BASELINE_ON_MIGRATE:false}
+
+planus:
+  ai:
+    llm:
+      api-key: ${ANTHROPIC_API_KEY}
+
+management:
+  endpoint:
+    health:
+      show-details: never
+  endpoints:
+    web:
+      exposure:
+        include: health
