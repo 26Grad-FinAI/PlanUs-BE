@@ -32,7 +32,6 @@ public class ReportController {
     public ApiResponse<MonthlyReportResponse> getMonthlyReport(
             @AuthenticationPrincipal Long userId,
             @RequestParam @DateTimeFormat(pattern = "yyyy-MM") YearMonth yearMonth) {
-        return ApiResponse.onSuccess(
-                GeneralSuccessCode.OK, reportService.getMonthlyReport(userId, yearMonth));
+        return ApiResponse.onSuccess(GeneralSuccessCode.OK, reportService.getMonthlyReport(userId, yearMonth));
     }
 }

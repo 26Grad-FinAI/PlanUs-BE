@@ -1,0 +1,171 @@
+name: DEV CI
+
+on:
+  pull_request:
+    branches:
+      - develop
+  push:
+    branches:
+      - develop
+
+permissions:
+  contents: read
+
+concurrency:
+  group: dev-ci-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
+env:
+  AWS_REGION: ap-northeast-2
+  ECR_REPOSITORY: planus-backend
+
+jobs:
+  verify:
+    name: 코드 및 테스트 검증
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    permissions:
+      contents: read
+      issues: read
+      checks: write
+      pull-requests: write
+    steps:
+      - name: 소스 코드 내려받기
+        uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+
+      - name: JDK 21 설정
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: "21"
+
+      - name: Gradle 캐시 설정
+        uses: gradle/actions/setup-gradle@v4
+
+      - name: 테스트 실행
+        run: ./gradlew test --no-daemon
+
+      - name: 테스트 결과 PR 코멘트 및 검사 게시
+        if: ${{ github.event_name == 'pull_request' && !cancelled() }}
+        uses: EnricoMi/publish-unit-test-result-action@v2
+        with:
+          files: "build/test-results/test/TEST-*.xml"
+          check_name: "DEV 테스트 결과"
+          comment_title: "DEV 테스트 결과"
+          comment_mode: always
+
+      - name: 코드 스타일 검사
+        if: ${{ !cancelled() }}
+        run: ./gradlew spotlessCheck --no-daemon
+
+      - name: 실행 JAR 생성
+        run: ./gradlew bootJar --no-daemon
+
+      - name: 배포용 JAR 보관
+        uses: actions/upload-artifact@v4
+        with:
+          name: planus-dev-app-jar
+          path: build/libs/app.jar
+          if-no-files-found: error
+          retention-days: 1
+
+  validate-image:
+    name: ARM64 이미지 Build 검증
+    needs: verify
+    if: ${{ github.event_name == 'pull_request' }}
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    permissions:
+      contents: read
+    steps:
+      - name: 소스 코드 내려받기
+        uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+
+      - name: ARM64 빌더 설정
+        uses: docker/setup-qemu-action@v3
+
+      - name: Docker Buildx 설정
+        uses: docker/setup-buildx-action@v3
+
+      - name: 배포용 JAR 내려받기
+        uses: actions/download-artifact@v4
+        with:
+          name: planus-dev-app-jar
+          path: build/libs
+
+      - name: ARM64 Docker 이미지 생성 확인
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          platforms: linux/arm64
+          push: false
+          tags: planus-backend:pr-${{ github.event.pull_request.number }}
+
+  publish:
+    name: ARM64 이미지 생성 및 ECR 업로드
+    needs: verify
+    if: ${{ github.event_name == 'push' && github.ref == 'refs/heads/develop' }}
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    permissions:
+      contents: read
+      id-token: write
+    steps:
+      - name: 소스 코드 내려받기
+        uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+
+      - name: ECR 권한 변수 확인
+        env:
+          AWS_DEV_CI_ROLE_ARN: ${{ vars.AWS_DEV_CI_ROLE_ARN }}
+        run: |
+          test -n "$AWS_DEV_CI_ROLE_ARN" || {
+            echo "GitHub 변수 AWS_DEV_CI_ROLE_ARN이 필요합니다." >&2
+            exit 1
+          }
+
+      - name: AWS OIDC 자격 증명 설정
+        uses: aws-actions/configure-aws-credentials@v6
+        with:
+          role-to-assume: ${{ vars.AWS_DEV_CI_ROLE_ARN }}
+          aws-region: ${{ env.AWS_REGION }}
+
+      - name: ECR 로그인
+        id: ecr-login
+        uses: aws-actions/amazon-ecr-login@v2
+
+      - name: ARM64 빌더 설정
+        uses: docker/setup-qemu-action@v3
+
+      - name: Docker Buildx 설정
+        uses: docker/setup-buildx-action@v3
+
+      - name: 배포용 JAR 내려받기
+        uses: actions/download-artifact@v4
+        with:
+          name: planus-dev-app-jar
+          path: build/libs
+
+      - name: ARM64 Docker 이미지 생성 및 ECR 업로드
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          platforms: linux/arm64
+          push: true
+          tags: ${{ steps.ecr-login.outputs.registry }}/${{ env.ECR_REPOSITORY }}:${{ github.sha }}
+
+  deploy:
+    name: DEV EC2 배포 요청
+    needs: publish
+    if: ${{ github.event_name == 'push' && github.ref == 'refs/heads/develop' }}
+    uses: ./.github/workflows/cd-dev.yml
+    with:
+      image_tag: ${{ github.sha }}
+    permissions:
+      contents: read
+      id-token: write

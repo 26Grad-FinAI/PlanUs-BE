@@ -991,7 +991,8 @@ public class AiFeedbackService {
             base = switch (pacing.bandWidth()) {
                 case WIDE -> Confidence.LOW;
                 case MEDIUM -> Confidence.MEDIUM;
-                case NARROW -> Confidence.HIGH;};
+                case NARROW -> Confidence.HIGH;
+            };
         } else {
             base = Confidence.LOW;
         }

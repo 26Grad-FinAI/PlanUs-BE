@@ -19,9 +19,9 @@ import com.planus.backend.domain.report.service.ReportService;
 import com.planus.backend.global.apiPayload.code.GeneralErrorCode;
 import com.planus.backend.global.apiPayload.exception.GeneralException;
 import com.planus.backend.global.apiPayload.handler.GeneralExceptionAdvice;
-import java.util.List;
-import java.util.Collections;
 import java.time.YearMonth;
+import java.util.Collections;
+import java.util.List;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
@@ -71,8 +71,7 @@ class ReportControllerTest {
             @Test
             @DisplayName("올바른 요청 시 200과 월간 리포트를 반환한다")
             void getMonthlyReport_success_returns200() throws Exception {
-                SecurityContextHolder.getContext().setAuthentication(
-                        new UsernamePasswordAuthenticationToken(1L, null));
+                SecurityContextHolder.getContext().setAuthentication(new UsernamePasswordAuthenticationToken(1L, null));
 
                 MonthlyReportResponse response = new MonthlyReportResponse(
                         "2026-08",
@@ -103,21 +102,30 @@ class ReportControllerTest {
                         .andExpect(jsonPath("$.result.totalBudget").value(800000))
                         .andExpect(jsonPath("$.result.categoryRatios").isArray())
                         .andExpect(jsonPath("$.result.categoryRatios.length()").value(2))
-                        .andExpect(jsonPath("$.result.categoryRatios[0].categoryId").value(1))
-                        .andExpect(jsonPath("$.result.categoryRatios[0].categoryName").value("식료품"))
+                        .andExpect(jsonPath("$.result.categoryRatios[0].categoryId")
+                                .value(1))
+                        .andExpect(jsonPath("$.result.categoryRatios[0].categoryName")
+                                .value("식료품"))
                         .andExpect(jsonPath("$.result.categoryRatios[0].amount").value(300000))
                         .andExpect(jsonPath("$.result.categoryRatios[0].ratio").value(57.7))
                         .andExpect(jsonPath("$.result.monthlyTrends").isArray())
                         .andExpect(jsonPath("$.result.monthlyTrends.length()").value(6))
-                        .andExpect(jsonPath("$.result.monthlyTrends[0].yearMonth").value("2026-03"))
-                        .andExpect(jsonPath("$.result.monthlyTrends[0].totalExpense").value(0))
-                        .andExpect(jsonPath("$.result.monthlyTrends[5].yearMonth").value("2026-08"))
-                        .andExpect(jsonPath("$.result.monthlyTrends[5].totalExpense").value(520000))
+                        .andExpect(
+                                jsonPath("$.result.monthlyTrends[0].yearMonth").value("2026-03"))
+                        .andExpect(jsonPath("$.result.monthlyTrends[0].totalExpense")
+                                .value(0))
+                        .andExpect(
+                                jsonPath("$.result.monthlyTrends[5].yearMonth").value("2026-08"))
+                        .andExpect(jsonPath("$.result.monthlyTrends[5].totalExpense")
+                                .value(520000))
                         .andExpect(jsonPath("$.result.categoryBudgets").isArray())
                         .andExpect(jsonPath("$.result.categoryBudgets.length()").value(2))
-                        .andExpect(jsonPath("$.result.categoryBudgets[0].categoryId").value(1))
-                        .andExpect(jsonPath("$.result.categoryBudgets[0].budget").value(400000))
-                        .andExpect(jsonPath("$.result.categoryBudgets[0].expense").value(300000));
+                        .andExpect(jsonPath("$.result.categoryBudgets[0].categoryId")
+                                .value(1))
+                        .andExpect(
+                                jsonPath("$.result.categoryBudgets[0].budget").value(400000))
+                        .andExpect(
+                                jsonPath("$.result.categoryBudgets[0].expense").value(300000));
 
                 verify(reportService).getMonthlyReport(eq(1L), eq(YearMonth.of(2026, 8)));
             }
@@ -125,8 +133,7 @@ class ReportControllerTest {
             @Test
             @DisplayName("지출과 예산이 없어도 200과 빈 목록을 반환한다")
             void getMonthlyReport_noData_returns200WithEmptyLists() throws Exception {
-                SecurityContextHolder.getContext().setAuthentication(
-                        new UsernamePasswordAuthenticationToken(1L, null));
+                SecurityContextHolder.getContext().setAuthentication(new UsernamePasswordAuthenticationToken(1L, null));
 
                 MonthlyReportResponse response = new MonthlyReportResponse(
                         "2026-08",
@@ -161,18 +168,15 @@ class ReportControllerTest {
             @Test
             @DisplayName("yearMonth 파라미터가 없으면 400을 반환한다")
             void getMonthlyReport_missingYearMonth_returns400() throws Exception {
-                SecurityContextHolder.getContext().setAuthentication(
-                        new UsernamePasswordAuthenticationToken(1L, null));
+                SecurityContextHolder.getContext().setAuthentication(new UsernamePasswordAuthenticationToken(1L, null));
 
-                mockMvc.perform(get("/api/report/monthly"))
-                        .andExpect(status().isBadRequest());
+                mockMvc.perform(get("/api/report/monthly")).andExpect(status().isBadRequest());
             }
 
             @Test
             @DisplayName("yearMonth 형식이 잘못되면 400을 반환한다")
             void getMonthlyReport_invalidYearMonthFormat_returns400() throws Exception {
-                SecurityContextHolder.getContext().setAuthentication(
-                        new UsernamePasswordAuthenticationToken(1L, null));
+                SecurityContextHolder.getContext().setAuthentication(new UsernamePasswordAuthenticationToken(1L, null));
 
                 mockMvc.perform(get("/api/report/monthly").param("yearMonth", "2026-08-01"))
                         .andExpect(status().isBadRequest());
@@ -181,8 +185,7 @@ class ReportControllerTest {
             @Test
             @DisplayName("사용자를 찾을 수 없으면 404를 반환한다")
             void getMonthlyReport_userNotFound_returns404() throws Exception {
-                SecurityContextHolder.getContext().setAuthentication(
-                        new UsernamePasswordAuthenticationToken(1L, null));
+                SecurityContextHolder.getContext().setAuthentication(new UsernamePasswordAuthenticationToken(1L, null));
 
                 when(reportService.getMonthlyReport(eq(1L), eq(YearMonth.of(2026, 8))))
                         .thenThrow(new GeneralException(GeneralErrorCode.NOT_FOUND));

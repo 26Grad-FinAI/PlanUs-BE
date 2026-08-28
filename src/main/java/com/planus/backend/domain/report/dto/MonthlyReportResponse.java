@@ -12,21 +12,11 @@ public record MonthlyReportResponse(
         List<CategoryBudgetStatus> categoryBudgets) {
 
     /** 카테고리별 소비 금액과 전체 지출 대비 비중. */
-    public record CategoryRatio(
-            int categoryId,
-            String categoryName,
-            long amount,
-            double ratio) {}
+    public record CategoryRatio(int categoryId, String categoryName, long amount, double ratio) {}
 
     /** 최근 6개월 월별 총 지출 추이. */
-    public record MonthlyTrend(
-            String yearMonth,
-            long totalExpense) {}
+    public record MonthlyTrend(String yearMonth, long totalExpense) {}
 
     /** 카테고리별 예산 대비 지출 현황. */
-    public record CategoryBudgetStatus(
-            int categoryId,
-            String categoryName,
-            long budget,
-            long expense) {}
+    public record CategoryBudgetStatus(int categoryId, String categoryName, long budget, long expense) {}
 }

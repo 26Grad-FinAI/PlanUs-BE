@@ -47,8 +47,8 @@ class ReportServiceTest {
         budgetRepository = mock(BudgetRepository.class);
         budgetCategoryRepository = mock(BudgetCategoryRepository.class);
         userAccountRepository = mock(UserAccountRepository.class);
-        reportService = new ReportService(
-                expenseRepository, budgetRepository, budgetCategoryRepository, userAccountRepository);
+        reportService =
+                new ReportService(expenseRepository, budgetRepository, budgetCategoryRepository, userAccountRepository);
     }
 
     @Nested
@@ -65,16 +65,27 @@ class ReportServiceTest {
                     .totalBudget(800_000L)
                     .build();
             List<BudgetCategory> budgetCategories = List.of(
-                    BudgetCategory.builder().id(1L).budgetId(1L).categoryId(1).amount(400_000L).build(),
-                    BudgetCategory.builder().id(2L).budgetId(1L).categoryId(10).amount(300_000L).build());
+                    BudgetCategory.builder()
+                            .id(1L)
+                            .budgetId(1L)
+                            .categoryId(1)
+                            .amount(400_000L)
+                            .build(),
+                    BudgetCategory.builder()
+                            .id(2L)
+                            .budgetId(1L)
+                            .categoryId(10)
+                            .amount(300_000L)
+                            .build());
 
-            when(expenseRepository.sumExpensesByPeriod(eq(USER_ID), any(), any())).thenReturn(520_000L);
+            when(expenseRepository.sumExpensesByPeriod(eq(USER_ID), any(), any()))
+                    .thenReturn(520_000L);
             when(budgetRepository.findByUserIdAndYearMonth(USER_ID, YEAR_MONTH_DATE))
                     .thenReturn(Optional.of(budget));
             when(expenseRepository.sumExpensesGroupByCategory(eq(USER_ID), any(), any()))
-                    .thenReturn(List.<Object[]>of(new Object[]{1, 300_000L}, new Object[]{10, 220_000L}));
+                    .thenReturn(List.<Object[]>of(new Object[] {1, 300_000L}, new Object[] {10, 220_000L}));
             when(expenseRepository.sumExpensesGroupByMonth(eq(USER_ID), any(), any()))
-                    .thenReturn(List.<Object[]>of(new Object[]{2026, 8, 520_000L}));
+                    .thenReturn(List.<Object[]>of(new Object[] {2026, 8, 520_000L}));
             when(budgetCategoryRepository.findByBudgetId(1L)).thenReturn(budgetCategories);
 
             MonthlyReportResponse response = reportService.getMonthlyReport(USER_ID, YEAR_MONTH);
@@ -95,12 +106,13 @@ class ReportServiceTest {
                     .monthlySavingsGoal(500_000L)
                     .build();
 
-            when(expenseRepository.sumExpensesByPeriod(eq(USER_ID), any(), any())).thenReturn(200_000L);
+            when(expenseRepository.sumExpensesByPeriod(eq(USER_ID), any(), any()))
+                    .thenReturn(200_000L);
             when(budgetRepository.findByUserIdAndYearMonth(USER_ID, YEAR_MONTH_DATE))
                     .thenReturn(Optional.empty());
             when(userAccountRepository.findById(USER_ID)).thenReturn(Optional.of(user));
             when(expenseRepository.sumExpensesGroupByCategory(eq(USER_ID), any(), any()))
-                    .thenReturn(List.<Object[]>of(new Object[]{1, 200_000L}));
+                    .thenReturn(List.<Object[]>of(new Object[] {1, 200_000L}));
             when(expenseRepository.sumExpensesGroupByMonth(eq(USER_ID), any(), any()))
                     .thenReturn(Collections.emptyList());
 
@@ -115,16 +127,21 @@ class ReportServiceTest {
         @DisplayName("카테고리별 비중은 전체 지출 대비 퍼센테이지로 계산된다")
         void getMonthlyReport_categoryRatios_calculatedCorrectly() {
             Budget budget = Budget.builder()
-                    .id(1L).userId(USER_ID).yearMonth(YEAR_MONTH_DATE).totalBudget(1_000_000L).build();
+                    .id(1L)
+                    .userId(USER_ID)
+                    .yearMonth(YEAR_MONTH_DATE)
+                    .totalBudget(1_000_000L)
+                    .build();
 
-            when(expenseRepository.sumExpensesByPeriod(eq(USER_ID), any(), any())).thenReturn(400_000L);
+            when(expenseRepository.sumExpensesByPeriod(eq(USER_ID), any(), any()))
+                    .thenReturn(400_000L);
             when(budgetRepository.findByUserIdAndYearMonth(USER_ID, YEAR_MONTH_DATE))
                     .thenReturn(Optional.of(budget));
             when(expenseRepository.sumExpensesGroupByCategory(eq(USER_ID), any(), any()))
                     .thenReturn(List.<Object[]>of(
-                            new Object[]{1, 200_000L},  // 50%
-                            new Object[]{6, 100_000L},  // 25%
-                            new Object[]{8, 100_000L})); // 25%
+                            new Object[] {1, 200_000L}, // 50%
+                            new Object[] {6, 100_000L}, // 25%
+                            new Object[] {8, 100_000L})); // 25%
             when(expenseRepository.sumExpensesGroupByMonth(eq(USER_ID), any(), any()))
                     .thenReturn(Collections.emptyList());
             when(budgetCategoryRepository.findByBudgetId(1L)).thenReturn(Collections.emptyList());
@@ -143,11 +160,20 @@ class ReportServiceTest {
         @DisplayName("지출이 없으면 카테고리 비중은 빈 목록을 반환한다")
         void getMonthlyReport_noExpense_emptyCategoryRatios() {
             Budget budget = Budget.builder()
-                    .id(1L).userId(USER_ID).yearMonth(YEAR_MONTH_DATE).totalBudget(1_000_000L).build();
-            List<BudgetCategory> budgetCategories = List.of(
-                    BudgetCategory.builder().id(1L).budgetId(1L).categoryId(1).amount(500_000L).build());
+                    .id(1L)
+                    .userId(USER_ID)
+                    .yearMonth(YEAR_MONTH_DATE)
+                    .totalBudget(1_000_000L)
+                    .build();
+            List<BudgetCategory> budgetCategories = List.of(BudgetCategory.builder()
+                    .id(1L)
+                    .budgetId(1L)
+                    .categoryId(1)
+                    .amount(500_000L)
+                    .build());
 
-            when(expenseRepository.sumExpensesByPeriod(eq(USER_ID), any(), any())).thenReturn(0L);
+            when(expenseRepository.sumExpensesByPeriod(eq(USER_ID), any(), any()))
+                    .thenReturn(0L);
             when(budgetRepository.findByUserIdAndYearMonth(USER_ID, YEAR_MONTH_DATE))
                     .thenReturn(Optional.of(budget));
             when(expenseRepository.sumExpensesGroupByCategory(eq(USER_ID), any(), any()))
@@ -169,25 +195,28 @@ class ReportServiceTest {
         @DisplayName("최근 6개월 추이는 지출 없는 달을 0으로 채워 6개를 반환한다")
         void getMonthlyReport_monthlyTrends_alwaysReturns6Months() {
             Budget budget = Budget.builder()
-                    .id(1L).userId(USER_ID).yearMonth(YEAR_MONTH_DATE).totalBudget(1_000_000L).build();
+                    .id(1L)
+                    .userId(USER_ID)
+                    .yearMonth(YEAR_MONTH_DATE)
+                    .totalBudget(1_000_000L)
+                    .build();
 
-            when(expenseRepository.sumExpensesByPeriod(eq(USER_ID), any(), any())).thenReturn(0L);
+            when(expenseRepository.sumExpensesByPeriod(eq(USER_ID), any(), any()))
+                    .thenReturn(0L);
             when(budgetRepository.findByUserIdAndYearMonth(USER_ID, YEAR_MONTH_DATE))
                     .thenReturn(Optional.of(budget));
             when(expenseRepository.sumExpensesGroupByCategory(eq(USER_ID), any(), any()))
                     .thenReturn(Collections.emptyList());
             // 2026-06, 2026-08 두 달만 지출 있음
             when(expenseRepository.sumExpensesGroupByMonth(eq(USER_ID), any(), any()))
-                    .thenReturn(List.<Object[]>of(
-                            new Object[]{2026, 6, 300_000L},
-                            new Object[]{2026, 8, 520_000L}));
+                    .thenReturn(List.<Object[]>of(new Object[] {2026, 6, 300_000L}, new Object[] {2026, 8, 520_000L}));
             when(budgetCategoryRepository.findByBudgetId(1L)).thenReturn(Collections.emptyList());
 
             MonthlyReportResponse response = reportService.getMonthlyReport(USER_ID, YEAR_MONTH);
 
             assertThat(response.monthlyTrends()).hasSize(6);
             assertThat(response.monthlyTrends().get(0).yearMonth()).isEqualTo("2026-03");
-            assertThat(response.monthlyTrends().get(0).totalExpense()).isZero();  // 지출 없는 달
+            assertThat(response.monthlyTrends().get(0).totalExpense()).isZero(); // 지출 없는 달
             assertThat(response.monthlyTrends().get(3).yearMonth()).isEqualTo("2026-06");
             assertThat(response.monthlyTrends().get(3).totalExpense()).isEqualTo(300_000L);
             assertThat(response.monthlyTrends().get(5).yearMonth()).isEqualTo("2026-08");
@@ -198,17 +227,26 @@ class ReportServiceTest {
         @DisplayName("예산 없는 카테고리에 지출이 있으면 budget=0으로 categoryBudgets에 포함된다")
         void getMonthlyReport_expenseWithoutBudgetCategory_includedWithZeroBudget() {
             Budget budget = Budget.builder()
-                    .id(1L).userId(USER_ID).yearMonth(YEAR_MONTH_DATE).totalBudget(500_000L).build();
+                    .id(1L)
+                    .userId(USER_ID)
+                    .yearMonth(YEAR_MONTH_DATE)
+                    .totalBudget(500_000L)
+                    .build();
             // 카테고리 1만 예산 설정
-            List<BudgetCategory> budgetCategories = List.of(
-                    BudgetCategory.builder().id(1L).budgetId(1L).categoryId(1).amount(300_000L).build());
+            List<BudgetCategory> budgetCategories = List.of(BudgetCategory.builder()
+                    .id(1L)
+                    .budgetId(1L)
+                    .categoryId(1)
+                    .amount(300_000L)
+                    .build());
 
-            when(expenseRepository.sumExpensesByPeriod(eq(USER_ID), any(), any())).thenReturn(350_000L);
+            when(expenseRepository.sumExpensesByPeriod(eq(USER_ID), any(), any()))
+                    .thenReturn(350_000L);
             when(budgetRepository.findByUserIdAndYearMonth(USER_ID, YEAR_MONTH_DATE))
                     .thenReturn(Optional.of(budget));
             // 카테고리 1, 8 지출 (카테고리 8은 예산 없음)
             when(expenseRepository.sumExpensesGroupByCategory(eq(USER_ID), any(), any()))
-                    .thenReturn(List.<Object[]>of(new Object[]{1, 300_000L}, new Object[]{8, 50_000L}));
+                    .thenReturn(List.<Object[]>of(new Object[] {1, 300_000L}, new Object[] {8, 50_000L}));
             when(expenseRepository.sumExpensesGroupByMonth(eq(USER_ID), any(), any()))
                     .thenReturn(Collections.emptyList());
             when(budgetCategoryRepository.findByBudgetId(1L)).thenReturn(budgetCategories);
@@ -229,13 +267,18 @@ class ReportServiceTest {
         @DisplayName("카테고리 이름이 올바르게 매핑된다")
         void getMonthlyReport_categoryName_mappedCorrectly() {
             Budget budget = Budget.builder()
-                    .id(1L).userId(USER_ID).yearMonth(YEAR_MONTH_DATE).totalBudget(500_000L).build();
+                    .id(1L)
+                    .userId(USER_ID)
+                    .yearMonth(YEAR_MONTH_DATE)
+                    .totalBudget(500_000L)
+                    .build();
 
-            when(expenseRepository.sumExpensesByPeriod(eq(USER_ID), any(), any())).thenReturn(100_000L);
+            when(expenseRepository.sumExpensesByPeriod(eq(USER_ID), any(), any()))
+                    .thenReturn(100_000L);
             when(budgetRepository.findByUserIdAndYearMonth(USER_ID, YEAR_MONTH_DATE))
                     .thenReturn(Optional.of(budget));
             when(expenseRepository.sumExpensesGroupByCategory(eq(USER_ID), any(), any()))
-                    .thenReturn(List.<Object[]>of(new Object[]{1, 100_000L}));
+                    .thenReturn(List.<Object[]>of(new Object[] {1, 100_000L}));
             when(expenseRepository.sumExpensesGroupByMonth(eq(USER_ID), any(), any()))
                     .thenReturn(Collections.emptyList());
             when(budgetCategoryRepository.findByBudgetId(1L)).thenReturn(Collections.emptyList());
@@ -253,7 +296,8 @@ class ReportServiceTest {
         @Test
         @DisplayName("Budget이 없고 사용자도 없으면 NOT_FOUND 예외가 발생한다")
         void getMonthlyReport_noBudgetNoUser_throwsNotFound() {
-            when(expenseRepository.sumExpensesByPeriod(eq(USER_ID), any(), any())).thenReturn(0L);
+            when(expenseRepository.sumExpensesByPeriod(eq(USER_ID), any(), any()))
+                    .thenReturn(0L);
             when(budgetRepository.findByUserIdAndYearMonth(USER_ID, YEAR_MONTH_DATE))
                     .thenReturn(Optional.empty());
             when(userAccountRepository.findById(USER_ID)).thenReturn(Optional.empty());
@@ -261,8 +305,7 @@ class ReportServiceTest {
             assertThatThrownBy(() -> reportService.getMonthlyReport(USER_ID, YEAR_MONTH))
                     .isInstanceOf(GeneralException.class)
                     .satisfies(ex ->
-                            assertThat(((GeneralException) ex).getErrorCode())
-                                    .isEqualTo(GeneralErrorCode.NOT_FOUND));
+                            assertThat(((GeneralException) ex).getErrorCode()).isEqualTo(GeneralErrorCode.NOT_FOUND));
         }
     }
 }
