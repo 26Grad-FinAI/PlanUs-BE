@@ -1,0 +1,40 @@
+services:
+  app:
+    image: ${PLANUS_APP_IMAGE}
+    environment:
+      SPRING_PROFILES_ACTIVE: dev
+      DB_HOST:
+      DB_PORT:
+      DB_NAME:
+      DB_USERNAME:
+      DB_PASSWORD:
+      JWT_SECRET:
+      ANTHROPIC_API_KEY:
+      GOOGLE_CLIENT_ID:
+      GOOGLE_CLIENT_SECRET:
+      GOOGLE_ALLOWED_REDIRECT_URIS:
+      KAKAO_CLIENT_ID:
+      KAKAO_CLIENT_SECRET:
+      KAKAO_ALLOWED_REDIRECT_URIS:
+    expose:
+      - "8080"
+    restart: unless-stopped
+    networks:
+      - planus-dev-network
+
+  nginx:
+    image: nginx:1.27-alpine
+    depends_on:
+      app:
+        condition: service_started
+    ports:
+      - "80:80"
+    volumes:
+      - ./infra/nginx/planus-dev.conf:/etc/nginx/conf.d/default.conf:ro
+    restart: unless-stopped
+    networks:
+      - planus-dev-network
+
+networks:
+  planus-dev-network:
+    name: planus-dev-network
