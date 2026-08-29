@@ -57,9 +57,10 @@ rollback_deployment() {
     PLANUS_APP_IMAGE="$previous_image" \
       docker compose -f "$COMPOSE_FILE" up -d --no-deps app || rollback_failed=true
 
-    docker compose -f "$COMPOSE_FILE" run --rm --no-deps nginx nginx -t || rollback_failed=true
-    docker compose -f "$COMPOSE_FILE" up -d nginx || rollback_failed=true
-    docker compose -f "$COMPOSE_FILE" exec -T nginx nginx -s reload || rollback_failed=true
+    docker compose -f "$COMPOSE_FILE" run --rm --no-deps --entrypoint nginx nginx -t \
+      || rollback_failed=true
+    docker compose -f "$COMPOSE_FILE" up -d --no-deps --force-recreate nginx \
+      || rollback_failed=true
 
     if ! wait_for_health 60; then
       rollback_failed=true
@@ -92,7 +93,7 @@ handle_exit() {
 
 trap handle_exit EXIT
 
-echo "[1/8] 배포 실행 조건을 확인합니다."
+echo "[1/9] 배포 실행 조건을 확인합니다."
 for command_name in aws jq base64 docker curl; do
   command -v "$command_name" >/dev/null 2>&1 || {
     echo "필수 명령어가 설치되어 있지 않습니다: $command_name" >&2
@@ -109,7 +110,7 @@ docker compose version >/dev/null
   exit 1
 }
 
-echo "[2/8] Parameter Store에서 DEV 설정을 불러옵니다."
+echo "[2/9] Parameter Store에서 DEV 설정을 불러옵니다."
 parameter_response="$(aws ssm get-parameters-by-path \
   --path "${PARAMETER_PATH%/}/" \
   --no-recursive \
@@ -167,7 +168,7 @@ for parameter_name in "${required_parameters[@]}"; do
 done
 unset required_parameters parameter_name
 
-echo "[3/8] 현재 배포 상태와 새 구성을 확인합니다."
+echo "[3/9] 현재 배포 상태와 새 구성을 확인합니다."
 cd "$BASE_DIR"
 docker compose -f "$COMPOSE_FILE" config -q
 
@@ -180,23 +181,24 @@ else
 fi
 unset previous_container_id
 
-echo "[4/8] ECR에 로그인하고 배포 이미지를 내려받습니다."
+echo "[4/9] ECR에 로그인하고 배포 이미지를 내려받습니다."
 aws ecr get-login-password --region "$AWS_REGION" \
   | docker login --username AWS --password-stdin "$ECR_REGISTRY" >/dev/null
 docker compose -f "$COMPOSE_FILE" pull app nginx
 
-echo "[5/8] 애플리케이션과 Nginx 구성을 적용합니다."
-docker compose -f "$COMPOSE_FILE" run --rm --no-deps nginx nginx -t
+echo "[5/9] 애플리케이션 컨테이너를 시작합니다."
 deployment_started=true
 docker compose -f "$COMPOSE_FILE" up -d --no-deps app
-docker compose -f "$COMPOSE_FILE" up -d nginx
-docker compose -f "$COMPOSE_FILE" exec -T nginx nginx -s reload
 
-echo "[6/8] 애플리케이션 Health Check를 수행합니다."
+echo "[6/9] Nginx 설정을 검증하고 적용합니다."
+docker compose -f "$COMPOSE_FILE" run --rm --no-deps --entrypoint nginx nginx -t
+docker compose -f "$COMPOSE_FILE" up -d --no-deps --force-recreate nginx
+
+echo "[7/9] 애플리케이션 Health Check를 수행합니다."
 wait_for_health 120
 echo "애플리케이션 Health Check에 성공했습니다."
 
-echo "[7/8] EC2의 이전 PlanUs 이미지를 정리합니다."
+echo "[8/9] EC2의 이전 PlanUs 이미지를 정리합니다."
 removed_image_count=0
 while IFS= read -r image_ref; do
   [[ -n "$image_ref" ]] || continue
@@ -211,7 +213,7 @@ done < <(docker image ls "$IMAGE_REPOSITORY" --format '{{.Repository}}:{{.Tag}}'
 docker image prune -f >/dev/null || echo "사용하지 않는 이미지 레이어 정리에 실패했습니다." >&2
 echo "사용하지 않는 이전 PlanUs 이미지 ${removed_image_count}개를 정리했습니다."
 
-echo "[8/8] DEV 배포를 완료했습니다."
+echo "[9/9] DEV 배포를 완료했습니다."
 docker compose -f "$COMPOSE_FILE" ps
 docker logout "$ECR_REGISTRY" >/dev/null 2>&1 || true
 rm -f "$COMPOSE_BACKUP" "$NGINX_BACKUP"
