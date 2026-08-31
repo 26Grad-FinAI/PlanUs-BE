@@ -36,6 +36,7 @@ services:
       - "80:80"
     volumes:
       - ./infra/nginx/planus-dev.conf:/etc/nginx/conf.d/default.conf:ro
+      - /var/www/certbot:/var/www/certbot:ro
     logging:
       driver: json-file
       options:

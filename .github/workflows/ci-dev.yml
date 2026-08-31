@@ -1,4 +1,4 @@
-name: DEV CI
+name: DEV CI/CD
 
 on:
   pull_request:
