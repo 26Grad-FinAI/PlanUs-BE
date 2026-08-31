@@ -11,6 +11,7 @@ readonly NGINX_CONFIG="${BASE_DIR}/infra/nginx/planus-dev.conf"
 readonly NGINX_BACKUP="${NGINX_CONFIG}.previous"
 readonly ECR_REGISTRY="${APP_IMAGE%%/*}"
 readonly IMAGE_REPOSITORY="${APP_IMAGE%:*}"
+readonly HEALTH_CHECK_HOST="planus-dev.p-e.kr"
 
 previous_image=""
 deployment_started=false
@@ -23,7 +24,8 @@ wait_for_health() {
 
   while (( SECONDS < deadline )); do
     if curl --fail --silent --show-error --connect-timeout 2 --max-time 5 \
-      http://127.0.0.1/actuator/health >/dev/null; then
+      --resolve "${HEALTH_CHECK_HOST}:443:127.0.0.1" \
+      "https://${HEALTH_CHECK_HOST}/actuator/health" >/dev/null; then
       return 0
     fi
 
@@ -194,9 +196,9 @@ echo "[6/9] Nginx 설정을 검증하고 적용합니다."
 docker compose -f "$COMPOSE_FILE" run --rm --no-deps --entrypoint nginx nginx -t
 docker compose -f "$COMPOSE_FILE" up -d --no-deps --force-recreate nginx
 
-echo "[7/9] 애플리케이션 Health Check를 수행합니다."
+echo "[7/9] HTTPS 서비스 Health Check를 수행합니다."
 wait_for_health 120
-echo "애플리케이션 Health Check에 성공했습니다."
+echo "HTTPS 서비스 Health Check에 성공했습니다."
 
 echo "[8/9] EC2의 이전 PlanUs 이미지를 정리합니다."
 removed_image_count=0
