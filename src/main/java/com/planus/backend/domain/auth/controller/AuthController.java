@@ -56,9 +56,9 @@ public class AuthController {
     }
 
     /**
-     * Google 인가코드로 소셜 로그인하고 JWT 액세스/리프레시 토큰을 발급한다.
+     * Google SDK가 발급한 id_token으로 소셜 로그인하고 JWT 액세스/리프레시 토큰을 발급한다.
      *
-     * @param request 인가코드, 리다이렉트 URI
+     * @param request 클라이언트 SDK가 발급한 id_token
      * @return 200 OK, userId·email·토큰·프로필 완료 여부
      */
     @PostMapping("/oauth2/google")
@@ -67,9 +67,9 @@ public class AuthController {
     }
 
     /**
-     * Kakao 인가코드로 소셜 로그인하고 JWT 액세스/리프레시 토큰을 발급한다.
+     * Kakao SDK가 발급한 access_token으로 소셜 로그인하고 JWT 액세스/리프레시 토큰을 발급한다.
      *
-     * @param request 인가코드, 리다이렉트 URI
+     * @param request 클라이언트 SDK가 발급한 access_token (idToken 필드에 담김)
      * @return 200 OK, userId·email·토큰·프로필 완료 여부
      */
     @PostMapping("/oauth2/kakao")

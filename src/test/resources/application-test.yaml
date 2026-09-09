@@ -12,13 +12,5 @@ planus:
   oauth2:
     google:
       client-id: test-client-id
-      client-secret: test-client-secret
-      token-uri: https://oauth2.googleapis.com/token
-      userinfo-uri: https://www.googleapis.com/oauth2/v3/userinfo
-      allowed-redirect-uris: http://localhost/callback
     kakao:
-      client-id: test-client-id
-      client-secret: test-client-secret
-      token-uri: https://kauth.kakao.com/oauth/token
       userinfo-uri: https://kapi.kakao.com/v2/user/me
-      allowed-redirect-uris: http://localhost/callback

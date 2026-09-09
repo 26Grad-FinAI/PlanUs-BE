@@ -224,8 +224,7 @@ class AuthControllerTest {
 
             mockMvc.perform(post("/api/auth/oauth2/google")
                             .contentType(MediaType.APPLICATION_JSON)
-                            .content(objectMapper.writeValueAsString(
-                                    new SocialLoginRequest("auth-code", "http://localhost/callback"))))
+                            .content(objectMapper.writeValueAsString(new SocialLoginRequest("test-id-token"))))
                     .andExpect(status().isOk())
                     .andExpect(jsonPath("$.isSuccess").value(true))
                     .andExpect(jsonPath("$.result.userId").value(1L))
@@ -255,8 +254,7 @@ class AuthControllerTest {
 
             mockMvc.perform(post("/api/auth/oauth2/google")
                             .contentType(MediaType.APPLICATION_JSON)
-                            .content(objectMapper.writeValueAsString(
-                                    new SocialLoginRequest("bad-code", "http://localhost/callback"))))
+                            .content(objectMapper.writeValueAsString(new SocialLoginRequest("bad-id-token"))))
                     .andExpect(status().isUnauthorized())
                     .andExpect(jsonPath("$.isSuccess").value(false))
                     .andExpect(jsonPath("$.code").value("AUTH_401_002"));
@@ -275,8 +273,7 @@ class AuthControllerTest {
 
             mockMvc.perform(post("/api/auth/oauth2/kakao")
                             .contentType(MediaType.APPLICATION_JSON)
-                            .content(objectMapper.writeValueAsString(
-                                    new SocialLoginRequest("auth-code", "http://localhost/callback"))))
+                            .content(objectMapper.writeValueAsString(new SocialLoginRequest("test-id-token"))))
                     .andExpect(status().isOk())
                     .andExpect(jsonPath("$.isSuccess").value(true))
                     .andExpect(jsonPath("$.result.userId").value(1L))
@@ -306,8 +303,7 @@ class AuthControllerTest {
 
             mockMvc.perform(post("/api/auth/oauth2/kakao")
                             .contentType(MediaType.APPLICATION_JSON)
-                            .content(objectMapper.writeValueAsString(
-                                    new SocialLoginRequest("bad-code", "http://localhost/callback"))))
+                            .content(objectMapper.writeValueAsString(new SocialLoginRequest("bad-id-token"))))
                     .andExpect(status().isUnauthorized())
                     .andExpect(jsonPath("$.isSuccess").value(false))
                     .andExpect(jsonPath("$.code").value("AUTH_401_002"));

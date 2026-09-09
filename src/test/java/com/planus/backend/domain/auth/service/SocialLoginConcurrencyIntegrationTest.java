@@ -2,7 +2,6 @@ package com.planus.backend.domain.auth.service;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.mockito.ArgumentMatchers.any;
-import static org.mockito.ArgumentMatchers.anyString;
 import static org.mockito.Mockito.doAnswer;
 import static org.mockito.Mockito.doReturn;
 
@@ -52,8 +51,7 @@ class SocialLoginConcurrencyIntegrationTest {
                 new KakaoOAuthService.KakaoAccount(
                         "concurrent@kakao.com", true, true, new KakaoOAuthService.KakaoProfile("홍길동")));
 
-        doReturn("kakao-token").when(kakaoOAuthService).fetchAccessToken(anyString(), anyString());
-        doReturn(userInfo).when(kakaoOAuthService).fetchUserInfo("kakao-token");
+        doReturn(userInfo).when(kakaoOAuthService).fetchUserInfo("kakao-access-token");
 
         // 두 스레드가 동시에 saveAndFlush에 진입하도록 barrier 설정
         CyclicBarrier barrier = new CyclicBarrier(2);
@@ -64,7 +62,7 @@ class SocialLoginConcurrencyIntegrationTest {
                 .when(userAccountPersister)
                 .saveAndFlush(any(UserAccount.class));
 
-        SocialLoginRequest request = new SocialLoginRequest("auth-code", "http://localhost/callback");
+        SocialLoginRequest request = new SocialLoginRequest("kakao-access-token");
 
         CountDownLatch startLatch = new CountDownLatch(1);
         List<Exception> errors = new ArrayList<>();
