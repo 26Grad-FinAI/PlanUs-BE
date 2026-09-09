@@ -2,10 +2,7 @@ package com.planus.backend.domain.auth.service;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
-import static org.hamcrest.Matchers.allOf;
-import static org.hamcrest.Matchers.containsString;
 import static org.mockito.Mockito.mock;
-import static org.springframework.test.web.client.match.MockRestRequestMatchers.content;
 import static org.springframework.test.web.client.match.MockRestRequestMatchers.header;
 import static org.springframework.test.web.client.match.MockRestRequestMatchers.method;
 import static org.springframework.test.web.client.match.MockRestRequestMatchers.requestTo;
@@ -18,7 +15,6 @@ import com.planus.backend.domain.user.repository.UserAccountRepository;
 import com.planus.backend.global.apiPayload.code.GeneralErrorCode;
 import com.planus.backend.global.apiPayload.exception.GeneralException;
 import com.planus.backend.global.security.JwtProvider;
-import java.util.List;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
@@ -31,7 +27,6 @@ import org.springframework.web.client.RestTemplate;
 
 class KakaoOAuthServiceHttpContractTest {
 
-    private static final String TOKEN_URI = "https://kauth.kakao.com/oauth/token";
     private static final String USERINFO_URI = "https://kapi.kakao.com/v2/user/me";
 
     private MockRestServiceServer mockServer;
@@ -47,33 +42,9 @@ class KakaoOAuthServiceHttpContractTest {
                 mock(UserAccountPersister.class),
                 mock(JwtProvider.class),
                 restClient,
-                "test-client-id",
-                "test-client-secret",
-                TOKEN_URI,
                 USERINFO_URI,
-                List.of("http://localhost/callback"));
-    }
-
-    @Test
-    @DisplayName("fetchAccessToken은 올바른 form 파라미터를 Kakao token endpoint로 전송한다")
-    void fetchAccessToken_sendsCorrectFormParams() {
-        mockServer
-                .expect(requestTo(TOKEN_URI))
-                .andExpect(method(HttpMethod.POST))
-                .andExpect(content().contentType(MediaType.APPLICATION_FORM_URLENCODED))
-                .andExpect(content()
-                        .string(allOf(
-                                containsString("code=auth-code"),
-                                containsString("client_id=test-client-id"),
-                                containsString("client_secret=test-client-secret"),
-                                containsString("redirect_uri=http%3A%2F%2Flocalhost%2Fcallback"),
-                                containsString("grant_type=authorization_code"))))
-                .andRespond(withSuccess("{\"access_token\":\"kakao-access-token\"}", MediaType.APPLICATION_JSON));
-
-        String token = kakaoOAuthService.fetchAccessToken("auth-code", "http://localhost/callback");
-
-        assertThat(token).isEqualTo("kakao-access-token");
-        mockServer.verify();
+                "https://kapi.kakao.com/v1/user/access_token_info",
+                12345L);
     }
 
     @Test
@@ -102,11 +73,11 @@ class KakaoOAuthServiceHttpContractTest {
     }
 
     @Test
-    @DisplayName("Kakao token endpoint가 4xx를 반환하면 INVALID_CREDENTIALS 예외가 발생한다")
-    void fetchAccessToken_kakaoReturns4xx_throwsInvalidCredentials() {
-        mockServer.expect(requestTo(TOKEN_URI)).andRespond(withStatus(HttpStatus.BAD_REQUEST));
+    @DisplayName("Kakao userinfo endpoint가 4xx를 반환하면 INVALID_CREDENTIALS 예외가 발생한다")
+    void fetchUserInfo_kakaoReturns4xx_throwsInvalidCredentials() {
+        mockServer.expect(requestTo(USERINFO_URI)).andRespond(withStatus(HttpStatus.BAD_REQUEST));
 
-        assertThatThrownBy(() -> kakaoOAuthService.fetchAccessToken("bad-code", "http://localhost/callback"))
+        assertThatThrownBy(() -> kakaoOAuthService.fetchUserInfo("bad-token"))
                 .isInstanceOf(GeneralException.class)
                 .satisfies(ex -> assertThat(((GeneralException) ex).getErrorCode())
                         .isEqualTo(GeneralErrorCode.INVALID_CREDENTIALS));
@@ -114,11 +85,11 @@ class KakaoOAuthServiceHttpContractTest {
     }
 
     @Test
-    @DisplayName("Kakao token endpoint가 5xx를 반환하면 SOCIAL_LOGIN_UNAVAILABLE 예외가 발생한다")
-    void fetchAccessToken_kakaoReturns5xx_throwsSocialLoginUnavailable() {
-        mockServer.expect(requestTo(TOKEN_URI)).andRespond(withServerError());
+    @DisplayName("Kakao userinfo endpoint가 5xx를 반환하면 SOCIAL_LOGIN_UNAVAILABLE 예외가 발생한다")
+    void fetchUserInfo_kakaoReturns5xx_throwsSocialLoginUnavailable() {
+        mockServer.expect(requestTo(USERINFO_URI)).andRespond(withServerError());
 
-        assertThatThrownBy(() -> kakaoOAuthService.fetchAccessToken("code", "http://localhost/callback"))
+        assertThatThrownBy(() -> kakaoOAuthService.fetchUserInfo("token"))
                 .isInstanceOf(GeneralException.class)
                 .satisfies(ex -> assertThat(((GeneralException) ex).getErrorCode())
                         .isEqualTo(GeneralErrorCode.SOCIAL_LOGIN_UNAVAILABLE));

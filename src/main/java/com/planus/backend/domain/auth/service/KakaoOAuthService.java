@@ -11,22 +11,18 @@ import com.planus.backend.domain.user.repository.UserAccountRepository;
 import com.planus.backend.global.apiPayload.code.GeneralErrorCode;
 import com.planus.backend.global.apiPayload.exception.GeneralException;
 import com.planus.backend.global.security.JwtProvider;
-import java.util.List;
 import java.util.Optional;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.dao.DataIntegrityViolationException;
-import org.springframework.http.MediaType;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
-import org.springframework.util.LinkedMultiValueMap;
-import org.springframework.util.MultiValueMap;
 import org.springframework.web.client.HttpClientErrorException;
 import org.springframework.web.client.HttpServerErrorException;
 import org.springframework.web.client.ResourceAccessException;
 import org.springframework.web.client.RestClient;
 
-/** Kakao OAuth2 인가코드 방식 소셜 로그인 서비스. */
+/** Kakao OAuth2 SDK(access_token 검증) 방식 소셜 로그인 서비스. */
 @Slf4j
 @Service
 public class KakaoOAuthService {
@@ -35,49 +31,40 @@ public class KakaoOAuthService {
     private final UserAccountPersister userAccountPersister;
     private final JwtProvider jwtProvider;
     private final RestClient restClient;
-    private final String clientId;
-    private final String clientSecret;
-    private final String tokenUri;
     private final String userinfoUri;
-    private final List<String> allowedRedirectUris;
+    private final String tokenInfoUri;
+    private final Long appId;
 
     public KakaoOAuthService(
             UserAccountRepository userAccountRepository,
             UserAccountPersister userAccountPersister,
             JwtProvider jwtProvider,
             RestClient restClient,
-            @Value("${planus.oauth2.kakao.client-id}") String clientId,
-            @Value("${planus.oauth2.kakao.client-secret}") String clientSecret,
-            @Value("${planus.oauth2.kakao.token-uri}") String tokenUri,
             @Value("${planus.oauth2.kakao.userinfo-uri}") String userinfoUri,
-            @Value("${planus.oauth2.kakao.allowed-redirect-uris}") List<String> allowedRedirectUris) {
+            @Value("${planus.oauth2.kakao.token-info-uri}") String tokenInfoUri,
+            @Value("${planus.oauth2.kakao.app-id}") Long appId) {
         this.userAccountRepository = userAccountRepository;
         this.userAccountPersister = userAccountPersister;
         this.jwtProvider = jwtProvider;
         this.restClient = restClient;
-        this.clientId = clientId;
-        this.clientSecret = clientSecret;
-        this.tokenUri = tokenUri;
         this.userinfoUri = userinfoUri;
-        this.allowedRedirectUris = allowedRedirectUris;
+        this.tokenInfoUri = tokenInfoUri;
+        this.appId = appId;
     }
 
     /**
-     * Kakao 인가코드로 로그인을 처리한다.
+     * Kakao SDK가 발급한 access_token으로 로그인을 처리한다.
      *
-     * <p>인가코드로 Kakao access_token을 교환하고 사용자 정보를 조회한 뒤,
+     * <p>access_token의 앱 ID를 검증한 뒤, Kakao userinfo API를 호출해 사용자 정보를 조회하고,
      * 신규 사용자면 가입 처리하고 기존 사용자면 로그인 처리하여 JWT를 발급한다.</p>
      *
-     * @param request 인가코드, 리다이렉트 URI
+     * @param request 클라이언트 SDK가 발급한 access_token (idToken 필드에 담김)
      * @return 사용자 정보 및 JWT 토큰
      */
     @Transactional
     public LoginResponse login(SocialLoginRequest request) {
-        if (!allowedRedirectUris.contains(request.redirectUri())) {
-            throw new GeneralException(GeneralErrorCode.INVALID_REDIRECT_URI);
-        }
-        String accessToken = fetchAccessToken(request.code(), request.redirectUri());
-        KakaoUserInfo userInfo = fetchUserInfo(accessToken);
+        verifyTokenAppId(request.idToken());
+        KakaoUserInfo userInfo = fetchUserInfo(request.idToken());
         UserAccount user = findOrCreateUser(userInfo);
 
         String jwtAccessToken = jwtProvider.generateAccessToken(user.getId());
@@ -88,39 +75,34 @@ public class KakaoOAuthService {
     }
 
     /**
-     * Kakao token endpoint에 인가코드를 전송해 access_token을 교환한다.
+     * Kakao access_token_info endpoint를 호출해 토큰이 우리 앱에서 발급된 것인지 검증한다.
      *
-     * @throws GeneralException 4xx 응답이면 INVALID_CREDENTIALS, 5xx·타임아웃이면 SOCIAL_LOGIN_UNAVAILABLE
+     * @throws GeneralException app_id 불일치 또는 4xx 시 INVALID_CREDENTIALS, 5xx·타임아웃 시 SOCIAL_LOGIN_UNAVAILABLE
      */
-    protected String fetchAccessToken(String code, String redirectUri) {
-        MultiValueMap<String, String> params = new LinkedMultiValueMap<>();
-        params.add("code", code);
-        params.add("client_id", clientId);
-        params.add("client_secret", clientSecret);
-        params.add("redirect_uri", redirectUri);
-        params.add("grant_type", "authorization_code");
-
+    void verifyTokenAppId(String accessToken) {
         try {
-            KakaoTokenResponse response = restClient
-                    .post()
-                    .uri(tokenUri)
-                    .contentType(MediaType.APPLICATION_FORM_URLENCODED)
-                    .body(params)
+            KakaoTokenInfo tokenInfo = restClient
+                    .get()
+                    .uri(tokenInfoUri)
+                    .header("Authorization", "Bearer " + accessToken)
                     .retrieve()
-                    .body(KakaoTokenResponse.class);
+                    .body(KakaoTokenInfo.class);
 
-            if (response == null || response.accessToken() == null) {
+            if (tokenInfo == null || !appId.equals(tokenInfo.appId())) {
+                log.warn(
+                        "[KakaoOAuth] app_id mismatch. expected={}, actual={}",
+                        appId,
+                        tokenInfo != null ? tokenInfo.appId() : null);
                 throw new GeneralException(GeneralErrorCode.INVALID_CREDENTIALS);
             }
-            return response.accessToken();
         } catch (HttpClientErrorException e) {
             log.warn(
-                    "[KakaoOAuth] fetchAccessToken failed. status={}, body={}",
+                    "[KakaoOAuth] verifyTokenAppId failed. status={}, body={}",
                     e.getStatusCode(),
                     e.getResponseBodyAsString());
             throw new GeneralException(GeneralErrorCode.INVALID_CREDENTIALS, e);
         } catch (HttpServerErrorException | ResourceAccessException e) {
-            log.warn("[KakaoOAuth] fetchAccessToken failed. cause={}", e.getMessage());
+            log.warn("[KakaoOAuth] verifyTokenAppId failed. cause={}", e.getMessage());
             throw new GeneralException(GeneralErrorCode.SOCIAL_LOGIN_UNAVAILABLE, e);
         }
     }
@@ -130,7 +112,7 @@ public class KakaoOAuthService {
      *
      * @throws GeneralException 4xx 응답이면 INVALID_CREDENTIALS, 5xx·타임아웃이면 SOCIAL_LOGIN_UNAVAILABLE
      */
-    protected KakaoUserInfo fetchUserInfo(String accessToken) {
+    KakaoUserInfo fetchUserInfo(String accessToken) {
         try {
             KakaoUserInfo userInfo = restClient
                     .get()
@@ -200,7 +182,7 @@ public class KakaoOAuthService {
                 .orElseThrow(() -> new GeneralException(GeneralErrorCode.INTERNAL_SERVER_ERROR));
     }
 
-    record KakaoTokenResponse(@JsonProperty("access_token") String accessToken) {}
+    record KakaoTokenInfo(@JsonProperty("app_id") Long appId) {}
 
     record KakaoUserInfo(Long id, @JsonProperty("kakao_account") KakaoAccount kakaoAccount) {}
 

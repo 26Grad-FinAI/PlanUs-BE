@@ -14,13 +14,7 @@ planus:
   oauth2:
     google:
       client-id: ${GOOGLE_CLIENT_ID}
-      client-secret: ${GOOGLE_CLIENT_SECRET}
-      token-uri: https://oauth2.googleapis.com/token
-      userinfo-uri: https://www.googleapis.com/oauth2/v3/userinfo
-      allowed-redirect-uris: ${GOOGLE_ALLOWED_REDIRECT_URIS}
     kakao:
-      client-id: ${KAKAO_CLIENT_ID}
-      client-secret: ${KAKAO_CLIENT_SECRET}
-      token-uri: https://kauth.kakao.com/oauth/token
       userinfo-uri: https://kapi.kakao.com/v2/user/me
-      allowed-redirect-uris: ${KAKAO_ALLOWED_REDIRECT_URIS}
+      token-info-uri: https://kapi.kakao.com/v1/user/access_token_info
+      app-id: ${KAKAO_APP_ID}
