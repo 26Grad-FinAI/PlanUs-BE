@@ -16,3 +16,5 @@ planus:
       client-id: ${GOOGLE_CLIENT_ID}
     kakao:
       userinfo-uri: https://kapi.kakao.com/v2/user/me
+      token-info-uri: https://kapi.kakao.com/v1/user/access_token_info
+      app-id: ${KAKAO_APP_ID}

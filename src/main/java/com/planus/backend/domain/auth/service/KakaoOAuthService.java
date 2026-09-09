@@ -32,24 +32,30 @@ public class KakaoOAuthService {
     private final JwtProvider jwtProvider;
     private final RestClient restClient;
     private final String userinfoUri;
+    private final String tokenInfoUri;
+    private final Long appId;
 
     public KakaoOAuthService(
             UserAccountRepository userAccountRepository,
             UserAccountPersister userAccountPersister,
             JwtProvider jwtProvider,
             RestClient restClient,
-            @Value("${planus.oauth2.kakao.userinfo-uri}") String userinfoUri) {
+            @Value("${planus.oauth2.kakao.userinfo-uri}") String userinfoUri,
+            @Value("${planus.oauth2.kakao.token-info-uri}") String tokenInfoUri,
+            @Value("${planus.oauth2.kakao.app-id}") Long appId) {
         this.userAccountRepository = userAccountRepository;
         this.userAccountPersister = userAccountPersister;
         this.jwtProvider = jwtProvider;
         this.restClient = restClient;
         this.userinfoUri = userinfoUri;
+        this.tokenInfoUri = tokenInfoUri;
+        this.appId = appId;
     }
 
     /**
      * Kakao SDK가 발급한 access_token으로 로그인을 처리한다.
      *
-     * <p>access_token으로 Kakao userinfo API를 호출해 사용자 정보를 조회한 뒤,
+     * <p>access_token의 앱 ID를 검증한 뒤, Kakao userinfo API를 호출해 사용자 정보를 조회하고,
      * 신규 사용자면 가입 처리하고 기존 사용자면 로그인 처리하여 JWT를 발급한다.</p>
      *
      * @param request 클라이언트 SDK가 발급한 access_token (idToken 필드에 담김)
@@ -57,6 +63,7 @@ public class KakaoOAuthService {
      */
     @Transactional
     public LoginResponse login(SocialLoginRequest request) {
+        verifyTokenAppId(request.idToken());
         KakaoUserInfo userInfo = fetchUserInfo(request.idToken());
         UserAccount user = findOrCreateUser(userInfo);
 
@@ -65,6 +72,39 @@ public class KakaoOAuthService {
         user.updateRefreshToken(jwtProvider.hashToken(jwtRefreshToken));
 
         return AuthConverter.toLoginResponse(user, jwtAccessToken, jwtRefreshToken);
+    }
+
+    /**
+     * Kakao access_token_info endpoint를 호출해 토큰이 우리 앱에서 발급된 것인지 검증한다.
+     *
+     * @throws GeneralException app_id 불일치 또는 4xx 시 INVALID_CREDENTIALS, 5xx·타임아웃 시 SOCIAL_LOGIN_UNAVAILABLE
+     */
+    void verifyTokenAppId(String accessToken) {
+        try {
+            KakaoTokenInfo tokenInfo = restClient
+                    .get()
+                    .uri(tokenInfoUri)
+                    .header("Authorization", "Bearer " + accessToken)
+                    .retrieve()
+                    .body(KakaoTokenInfo.class);
+
+            if (tokenInfo == null || !appId.equals(tokenInfo.appId())) {
+                log.warn(
+                        "[KakaoOAuth] app_id mismatch. expected={}, actual={}",
+                        appId,
+                        tokenInfo != null ? tokenInfo.appId() : null);
+                throw new GeneralException(GeneralErrorCode.INVALID_CREDENTIALS);
+            }
+        } catch (HttpClientErrorException e) {
+            log.warn(
+                    "[KakaoOAuth] verifyTokenAppId failed. status={}, body={}",
+                    e.getStatusCode(),
+                    e.getResponseBodyAsString());
+            throw new GeneralException(GeneralErrorCode.INVALID_CREDENTIALS, e);
+        } catch (HttpServerErrorException | ResourceAccessException e) {
+            log.warn("[KakaoOAuth] verifyTokenAppId failed. cause={}", e.getMessage());
+            throw new GeneralException(GeneralErrorCode.SOCIAL_LOGIN_UNAVAILABLE, e);
+        }
     }
 
     /**
@@ -141,6 +181,8 @@ public class KakaoOAuthService {
                 .findByProviderAndProviderId(AuthProvider.KAKAO, providerId)
                 .orElseThrow(() -> new GeneralException(GeneralErrorCode.INTERNAL_SERVER_ERROR));
     }
+
+    record KakaoTokenInfo(@JsonProperty("app_id") Long appId) {}
 
     record KakaoUserInfo(Long id, @JsonProperty("kakao_account") KakaoAccount kakaoAccount) {}
 

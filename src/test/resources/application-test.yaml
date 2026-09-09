@@ -14,3 +14,5 @@ planus:
       client-id: test-client-id
     kakao:
       userinfo-uri: https://kapi.kakao.com/v2/user/me
+      token-info-uri: https://kapi.kakao.com/v1/user/access_token_info
+      app-id: 12345

@@ -42,7 +42,9 @@ class KakaoOAuthServiceHttpContractTest {
                 mock(UserAccountPersister.class),
                 mock(JwtProvider.class),
                 restClient,
-                USERINFO_URI);
+                USERINFO_URI,
+                "https://kapi.kakao.com/v1/user/access_token_info",
+                12345L);
     }
 
     @Test

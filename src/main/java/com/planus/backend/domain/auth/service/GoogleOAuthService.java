@@ -79,7 +79,8 @@ public class GoogleOAuthService {
     /**
      * Google id_token을 검증하고 payload를 반환한다.
      *
-     * @throws GeneralException 서명·만료·audience 검증 실패 시 INVALID_ID_TOKEN
+     * @throws GeneralException 서명·만료·audience 검증 실패 시 INVALID_ID_TOKEN,
+     *                          공개키 조회 실패 시 SOCIAL_LOGIN_UNAVAILABLE
      */
     GoogleIdToken.Payload verifyIdToken(String idTokenString) {
         try {
@@ -88,9 +89,12 @@ public class GoogleOAuthService {
                 throw new GeneralException(GeneralErrorCode.INVALID_ID_TOKEN);
             }
             return idToken.getPayload();
-        } catch (GeneralSecurityException | IOException e) {
+        } catch (GeneralSecurityException | IllegalArgumentException e) {
             log.warn("[GoogleOAuth] id_token verification failed. cause={}", e.getMessage());
             throw new GeneralException(GeneralErrorCode.INVALID_ID_TOKEN, e);
+        } catch (IOException e) {
+            log.warn("[GoogleOAuth] Google public key fetch failed. cause={}", e.getMessage());
+            throw new GeneralException(GeneralErrorCode.SOCIAL_LOGIN_UNAVAILABLE, e);
         }
     }
 

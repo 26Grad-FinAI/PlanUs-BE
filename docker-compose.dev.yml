@@ -11,6 +11,7 @@ services:
       JWT_SECRET:
       ANTHROPIC_API_KEY:
       GOOGLE_CLIENT_ID:
+      KAKAO_APP_ID:
     expose:
       - "8080"
     logging:
