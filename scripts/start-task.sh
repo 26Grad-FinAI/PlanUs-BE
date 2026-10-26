@@ -62,7 +62,17 @@ while IFS= read -r line; do
 "
 done
 
-# 4. 작업 내용 입력
+# 4. 필요 이유 입력
+echo ""
+echo -e "${YELLOW}필요 이유를 입력해라 (빈 줄 입력 시 종료):${NC}"
+REASON=""
+while IFS= read -r line; do
+  [[ -z "$line" ]] && break
+  REASON="${REASON}${line}
+"
+done
+
+# 5. 작업 내용 입력
 echo ""
 echo -e "${YELLOW}작업 내용을 입력해라 (체크리스트 항목, 빈 줄 입력 시 종료):${NC}"
 echo -e "  예: API 설계"
@@ -89,7 +99,7 @@ ${DESCRIPTION:-작업 설명 없음}
 
 ## 필요 이유
 
-${TITLE} 기능이 필요하다.
+${REASON:-${TITLE} 기능이 필요하다.}
 
 ## 작업 내용
 
