@@ -1,7 +1,16 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-GH="/c/Program Files/GitHub CLI/gh.exe"
+GH="${PLANUS_GH:-$(command -v gh 2>/dev/null || echo "")}"
+if [[ -z "$GH" || ! -x "$GH" ]]; then
+  if [[ -x "/c/Program Files/GitHub CLI/gh.exe" ]]; then
+    GH="/c/Program Files/GitHub CLI/gh.exe"
+  else
+    echo "gh CLI를 찾을 수 없다. PATH에 추가하거나 PLANUS_GH 환경변수를 설정해라." >&2
+    exit 1
+  fi
+fi
+
 REPO="26Grad-FinAI/PlanUs-BE"
 BASE_BRANCH="develop"
 
@@ -49,7 +58,8 @@ echo -e "${YELLOW}작업 설명을 입력해라 (빈 줄 입력 시 종료):${NC
 DESCRIPTION=""
 while IFS= read -r line; do
   [[ -z "$line" ]] && break
-  DESCRIPTION="${DESCRIPTION}${line}\n"
+  DESCRIPTION="${DESCRIPTION}${line}
+"
 done
 
 # 4. 이슈 본문 생성
@@ -149,9 +159,11 @@ BRANCH="feature/#${ISSUE_NUMBER}-${SLUG}"
 echo ""
 echo -e "${CYAN}브랜치 생성 중: ${BRANCH}${NC}"
 
-git checkout "$BASE_BRANCH" 2>/dev/null
-git pull origin "$BASE_BRANCH" 2>/dev/null || true
-git checkout -b "$BRANCH"
+git fetch origin "$BASE_BRANCH" || {
+  echo -e "${RED}origin/${BASE_BRANCH}를 가져올 수 없다. 네트워크 상태를 확인해라.${NC}"
+  exit 1
+}
+git checkout -b "$BRANCH" "origin/${BASE_BRANCH}"
 
 echo ""
 echo -e "${GREEN}=== 작업 준비 완료 ===${NC}"

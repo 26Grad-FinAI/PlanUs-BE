@@ -1,7 +1,16 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-GH="/c/Program Files/GitHub CLI/gh.exe"
+GH="${PLANUS_GH:-$(command -v gh 2>/dev/null || echo "")}"
+if [[ -z "$GH" || ! -x "$GH" ]]; then
+  if [[ -x "/c/Program Files/GitHub CLI/gh.exe" ]]; then
+    GH="/c/Program Files/GitHub CLI/gh.exe"
+  else
+    echo "gh CLI를 찾을 수 없다. PATH에 추가하거나 PLANUS_GH 환경변수를 설정해라." >&2
+    exit 1
+  fi
+fi
+
 BASE_BRANCH="develop"
 
 # 색상 정의
@@ -25,6 +34,14 @@ fi
 
 ISSUE_NUMBER="${BASH_REMATCH[1]}"
 
+# 작업 트리 상태 확인 (무관한 파일이 커밋에 섞이는 것을 방지)
+DIRTY_FILES=$(git status --short)
+if [[ -n "$DIRTY_FILES" ]]; then
+  echo -e "${RED}작업 트리에 변경사항이 있다. 리뷰 반영 전에 커밋하거나 stash해라.${NC}"
+  echo "$DIRTY_FILES"
+  exit 1
+fi
+
 # 2. PR 번호 조회
 PR_NUMBER=$("$GH" pr view "$CURRENT_BRANCH" --json number --jq '.number' 2>/dev/null || echo "")
 
@@ -44,12 +61,18 @@ echo -e "${CYAN}코드 레빗 리뷰 코멘트를 수집 중...${NC}"
 echo ""
 
 # PR 리뷰 코멘트 (파일별 인라인 코멘트) 중 봇이 남긴 것만 필터링
-COMMENTS=$("$GH" api "repos/{owner}/{repo}/pulls/${PR_NUMBER}/comments" \
-  --jq '.[] | select(.user.type == "Bot") | {id: .id, path: .path, line: .line, body: .body, created_at: .created_at}' 2>/dev/null || echo "")
+COMMENTS=$("$GH" api "repos/{owner}/{repo}/pulls/${PR_NUMBER}/comments" --paginate \
+  --jq '.[] | select(.user.type == "Bot") | {id: .id, path: .path, line: .line, body: .body, created_at: .created_at}') || {
+  echo -e "${RED}PR 리뷰 코멘트 조회에 실패했다. 네트워크 또는 인증을 확인해라.${NC}" >&2
+  exit 1
+}
 
 # PR 리뷰 (일반 리뷰 코멘트)에서 봇 리뷰도 수집
-REVIEW_COMMENTS=$("$GH" api "repos/{owner}/{repo}/pulls/${PR_NUMBER}/reviews" \
-  --jq '.[] | select(.user.type == "Bot" and .body != "") | {id: .id, body: .body, state: .state}' 2>/dev/null || echo "")
+REVIEW_COMMENTS=$("$GH" api "repos/{owner}/{repo}/pulls/${PR_NUMBER}/reviews" --paginate \
+  --jq '.[] | select(.user.type == "Bot" and .body != "") | {id: .id, body: .body, state: .state}') || {
+  echo -e "${RED}PR 리뷰 조회에 실패했다. 네트워크 또는 인증을 확인해라.${NC}" >&2
+  exit 1
+}
 
 if [[ -z "$COMMENTS" && -z "$REVIEW_COMMENTS" ]]; then
   echo -e "${GREEN}코드 레빗 리뷰 코멘트가 없다. 리뷰를 기다리거나 PR을 확인해라.${NC}"
@@ -73,11 +96,10 @@ if [[ -n "$COMMENTS" ]]; then
 
     TOTAL=$((TOTAL + 1))
 
-    # JSON에서 필드 추출
-    FILE_PATH=$(echo "$comment_json" | "$GH" api --input - --method GET --jq '.path' 2>/dev/null || \
-      echo "$comment_json" | grep -oP '"path"\s*:\s*"\K[^"]+' 2>/dev/null || echo "unknown")
-    LINE=$(echo "$comment_json" | grep -oP '"line"\s*:\s*\K[0-9]+' 2>/dev/null || echo "?")
-    BODY=$(echo "$comment_json" | grep -oP '"body"\s*:\s*"\K[^"]+' 2>/dev/null || echo "$comment_json")
+    # JSON에서 필드 추출 (jq로 안전하게 파싱)
+    FILE_PATH=$(echo "$comment_json" | "$GH" api --input - --method GET --jq '.path' 2>/dev/null || echo "unknown")
+    LINE=$(echo "$comment_json" | "$GH" api --input - --method GET --jq '.line // "?"' 2>/dev/null || echo "?")
+    BODY=$(echo "$comment_json" | "$GH" api --input - --method GET --jq '.body' 2>/dev/null || echo "$comment_json")
 
     echo -e "${YELLOW}───────────────────────────────────────${NC}"
     echo -e "${BOLD}[${TOTAL}] ${CYAN}${FILE_PATH}:${LINE}${NC}"
@@ -95,7 +117,7 @@ if [[ -n "$COMMENTS" ]]; then
       echo -e "${RED}→ 건너뜀${NC}"
     fi
     echo ""
-  done < <("$GH" api "repos/{owner}/{repo}/pulls/${PR_NUMBER}/comments" \
+  done < <("$GH" api "repos/{owner}/{repo}/pulls/${PR_NUMBER}/comments" --paginate \
     --jq '.[] | select(.user.type == "Bot") | @json' 2>/dev/null)
 fi
 
@@ -109,7 +131,7 @@ if [[ -n "$REVIEW_COMMENTS" ]]; then
 
     TOTAL=$((TOTAL + 1))
 
-    BODY=$(echo "$review_json" | grep -oP '"body"\s*:\s*"\K[^"]+' 2>/dev/null || echo "$review_json")
+    BODY=$(echo "$review_json" | "$GH" api --input - --method GET --jq '.body' 2>/dev/null || echo "$review_json")
 
     echo -e "${YELLOW}───────────────────────────────────────${NC}"
     echo -e "${BOLD}[${TOTAL}] 일반 리뷰${NC}"
@@ -127,7 +149,7 @@ if [[ -n "$REVIEW_COMMENTS" ]]; then
       echo -e "${RED}→ 건너뜀${NC}"
     fi
     echo ""
-  done < <("$GH" api "repos/{owner}/{repo}/pulls/${PR_NUMBER}/reviews" \
+  done < <("$GH" api "repos/{owner}/{repo}/pulls/${PR_NUMBER}/reviews" --paginate \
     --jq '.[] | select(.user.type == "Bot" and .body != "") | @json' 2>/dev/null)
 fi
 

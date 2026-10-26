@@ -1,7 +1,16 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-GH="/c/Program Files/GitHub CLI/gh.exe"
+GH="${PLANUS_GH:-$(command -v gh 2>/dev/null || echo "")}"
+if [[ -z "$GH" || ! -x "$GH" ]]; then
+  if [[ -x "/c/Program Files/GitHub CLI/gh.exe" ]]; then
+    GH="/c/Program Files/GitHub CLI/gh.exe"
+  else
+    echo "gh CLI를 찾을 수 없다. PATH에 추가하거나 PLANUS_GH 환경변수를 설정해라." >&2
+    exit 1
+  fi
+fi
+
 BASE_BRANCH="develop"
 
 # 색상 정의
@@ -28,7 +37,10 @@ echo -e "이슈 번호: ${CYAN}#${ISSUE_NUMBER}${NC}"
 echo -e "브랜치:    ${CYAN}${CURRENT_BRANCH}${NC}"
 
 # 2. 커밋 프리픽스 결정
-ISSUE_LABELS=$("$GH" issue view "$ISSUE_NUMBER" --json labels --jq '.labels[].name' 2>/dev/null || echo "")
+ISSUE_LABELS=$("$GH" issue view "$ISSUE_NUMBER" --json labels --jq '.labels[].name') || {
+  echo -e "${RED}이슈 #${ISSUE_NUMBER} 조회에 실패했다. 네트워크 또는 인증을 확인해라.${NC}" >&2
+  exit 1
+}
 
 if echo "$ISSUE_LABELS" | grep -q "feat"; then
   PREFIX="[Feat]"
@@ -53,7 +65,7 @@ if [[ -z "$CHANGED_FILES" ]]; then
   echo -e "${YELLOW}변경된 파일이 없다. 커밋할 내용이 있는지 확인해라.${NC}"
 
   # 이미 커밋이 있는지 확인
-  COMMIT_COUNT=$(git rev-list --count "${BASE_BRANCH}..HEAD" 2>/dev/null || echo "0")
+  COMMIT_COUNT=$(git rev-list --count "origin/${BASE_BRANCH}..HEAD" 2>/dev/null || echo "0")
   if [[ "$COMMIT_COUNT" -eq 0 ]]; then
     echo -e "${RED}커밋도 없다. 작업 후 다시 실행해라.${NC}"
     exit 1
@@ -90,7 +102,7 @@ git push -u origin "$CURRENT_BRANCH"
 ISSUE_TITLE=$("$GH" issue view "$ISSUE_NUMBER" --json title --jq '.title' 2>/dev/null || echo "")
 
 # develop와의 커밋 목록으로 변경 사항 생성
-CHANGES=$(git log --oneline "${BASE_BRANCH}..HEAD" 2>/dev/null | sed 's/^/- /' || echo "- 작업 내용 확인 필요")
+CHANGES=$(git log --oneline "origin/${BASE_BRANCH}..HEAD" 2>/dev/null | sed 's/^/- /' || echo "- 작업 내용 확인 필요")
 
 PR_BODY=$(cat <<EOF
 ## 작업 내용
