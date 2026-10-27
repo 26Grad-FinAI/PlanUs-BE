@@ -1,6 +1,8 @@
 package com.planus.backend.domain.auth.dto;
 
+import io.swagger.v3.oas.annotations.media.Schema;
 import jakarta.validation.constraints.NotBlank;
 
-/** 토큰 재발급 요청 DTO. 클라이언트가 보유한 리프레시 토큰을 담는다. */
-public record ReissueRequest(@NotBlank String refreshToken) {}
+@Schema(description = "토큰 재발급 요청")
+public record ReissueRequest(
+        @Schema(description = "리프레시 토큰", example = "eyJhbGciOiJIUzI1NiJ9...") @NotBlank String refreshToken) {}

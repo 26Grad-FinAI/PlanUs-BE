@@ -1,44 +1,25 @@
 package com.planus.backend.domain.user.dto;
 
+import io.swagger.v3.oas.annotations.media.Schema;
 import java.time.LocalDateTime;
 import java.util.List;
 
-/**
- * 사용자 프로필 조회 응답 DTO.
- *
- * @param userId               사용자 ID
- * @param email                이메일
- * @param nickname             닉네임
- * @param age                  나이
- * @param gender               성별
- * @param residence            거주지
- * @param monthlyIncome        월 소득
- * @param monthlyFixedExpenses 월 고정지출
- * @param monthlySavingsGoal   월 저축 목표
- * @param availableBudget      가용예산 (소득 − 고정지출 − 저축목표)
- * @param hobbies              취미 목록
- * @param spendingHabit        소비 습관
- * @param employmentStatus     재직 여부
- * @param homeOwnership        자가 보유 여부
- * @param profileCompleted     프로필 입력 완료 여부
- * @param createdAt            계정 생성일시
- * @param updatedAt            마지막 수정일시
- */
+@Schema(description = "프로필 조회 응답")
 public record UserProfileGetResponse(
-        Long userId,
-        String email,
-        String nickname,
-        Integer age,
-        String gender,
-        String residence,
-        long monthlyIncome,
-        long monthlyFixedExpenses,
-        long monthlySavingsGoal,
-        long availableBudget,
-        List<String> hobbies,
-        String spendingHabit,
-        Boolean employmentStatus,
-        Boolean homeOwnership,
-        boolean profileCompleted,
-        LocalDateTime createdAt,
-        LocalDateTime updatedAt) {}
+        @Schema(description = "사용자 ID", example = "1") Long userId,
+        @Schema(description = "이메일", example = "user@example.com") String email,
+        @Schema(description = "닉네임", example = "홍길동") String nickname,
+        @Schema(description = "나이", example = "25") Integer age,
+        @Schema(description = "성별", example = "MALE") String gender,
+        @Schema(description = "거주지", example = "서울") String residence,
+        @Schema(description = "월 소득 (원)", example = "3000000") long monthlyIncome,
+        @Schema(description = "월 고정지출 (원)", example = "1000000") long monthlyFixedExpenses,
+        @Schema(description = "월 저축 목표 (원)", example = "500000") long monthlySavingsGoal,
+        @Schema(description = "가용예산 (소득-고정지출-저축목표)", example = "1500000") long availableBudget,
+        @Schema(description = "취미 목록", example = "[\"독서\", \"운동\"]") List<String> hobbies,
+        @Schema(description = "소비 습관 (SAVING / BALANCED / SPENDING)", example = "BALANCED") String spendingHabit,
+        @Schema(description = "재직 여부", example = "true") Boolean employmentStatus,
+        @Schema(description = "자가 보유 여부", example = "false") Boolean homeOwnership,
+        @Schema(description = "프로필 입력 완료 여부", example = "true") boolean profileCompleted,
+        @Schema(description = "계정 생성일시") LocalDateTime createdAt,
+        @Schema(description = "마지막 수정일시") LocalDateTime updatedAt) {}

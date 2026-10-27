@@ -1,35 +1,22 @@
 package com.planus.backend.domain.user.dto;
 
+import io.swagger.v3.oas.annotations.media.Schema;
 import jakarta.validation.constraints.NotBlank;
 import jakarta.validation.constraints.NotEmpty;
 import jakarta.validation.constraints.NotNull;
 import jakarta.validation.constraints.Positive;
 import java.util.List;
 
-/**
- * 사용자 프로필 저장 요청 DTO.
- *
- * @param nickname             닉네임
- * @param age                  나이 (양수)
- * @param gender               성별
- * @param residence            거주지
- * @param monthlyIncome        월 소득
- * @param monthlyFixedExpenses 월 고정지출
- * @param monthlySavingsGoal   월 저축 목표
- * @param hobbies              취미 목록 (1개 이상, 각 요소는 공백 불가)
- * @param spendingHabit        소비 습관 (SAVING / BALANCED / SPENDING)
- * @param employmentStatus     재직 여부
- * @param homeOwnership        자가 보유 여부
- */
+@Schema(description = "사용자 프로필 저장/수정 요청")
 public record UserProfileRequest(
-        @NotBlank String nickname,
-        @NotNull @Positive Integer age,
-        @NotBlank String gender,
-        @NotBlank String residence,
-        @NotNull Long monthlyIncome,
-        @NotNull Long monthlyFixedExpenses,
-        @NotNull Long monthlySavingsGoal,
-        @NotEmpty List<@NotBlank String> hobbies,
-        @NotBlank String spendingHabit,
-        @NotNull Boolean employmentStatus,
-        @NotNull Boolean homeOwnership) {}
+        @Schema(description = "닉네임", example = "홍길동") @NotBlank String nickname,
+        @Schema(description = "나이", example = "25") @NotNull @Positive Integer age,
+        @Schema(description = "성별", example = "MALE") @NotBlank String gender,
+        @Schema(description = "거주지", example = "서울") @NotBlank String residence,
+        @Schema(description = "월 소득 (원)", example = "3000000") @NotNull Long monthlyIncome,
+        @Schema(description = "월 고정지출 (원)", example = "1000000") @NotNull Long monthlyFixedExpenses,
+        @Schema(description = "월 저축 목표 (원)", example = "500000") @NotNull Long monthlySavingsGoal,
+        @Schema(description = "취미 목록", example = "[\"독서\", \"운동\"]") @NotEmpty List<@NotBlank String> hobbies,
+        @Schema(description = "소비 습관 (SAVING / BALANCED / SPENDING)", example = "BALANCED") @NotBlank String spendingHabit,
+        @Schema(description = "재직 여부", example = "true") @NotNull Boolean employmentStatus,
+        @Schema(description = "자가 보유 여부", example = "false") @NotNull Boolean homeOwnership) {}
