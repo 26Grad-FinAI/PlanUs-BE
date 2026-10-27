@@ -37,7 +37,8 @@ public class AuthController {
 
     @Operation(
             summary = "회원가입",
-            description = """
+            description =
+                    """
                     이메일·비밀번호로 신규 회원을 등록하고 JWT 토큰을 발급한다.
 
                     **비밀번호 정책:** 8자 이상, 영문+숫자 필수 포함
@@ -47,7 +48,9 @@ public class AuthController {
                     - 소셜 로그인으로 이미 가입된 이메일은 사용할 수 없다.""")
     @ApiResponses({
         @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "201", description = "회원가입 성공"),
-        @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "400", description = "입력값 검증 실패 (이메일 형식, 비밀번호 정책, 약관 미동의 등)"),
+        @io.swagger.v3.oas.annotations.responses.ApiResponse(
+                responseCode = "400",
+                description = "입력값 검증 실패 (이메일 형식, 비밀번호 정책, 약관 미동의 등)"),
         @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "409", description = "이미 사용 중인 이메일")
     })
     @PostMapping("/signup")
@@ -59,7 +62,8 @@ public class AuthController {
 
     @Operation(
             summary = "로그인",
-            description = """
+            description =
+                    """
                     이메일·비밀번호로 로그인하고 JWT 토큰을 발급한다.
 
                     **주의사항:**
@@ -77,7 +81,8 @@ public class AuthController {
 
     @Operation(
             summary = "Google 소셜 로그인",
-            description = """
+            description =
+                    """
                     Google SDK가 발급한 id_token으로 소셜 로그인하고 JWT 토큰을 발급한다.
                     신규 사용자는 자동 회원가입 처리된다.
 
@@ -87,7 +92,9 @@ public class AuthController {
                     - 다른 방식(일반/카카오)으로 이미 가입된 이메일은 409 응답.""")
     @ApiResponses({
         @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "200", description = "소셜 로그인 성공"),
-        @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "401", description = "유효하지 않은 id_token 또는 이메일 미인증"),
+        @io.swagger.v3.oas.annotations.responses.ApiResponse(
+                responseCode = "401",
+                description = "유효하지 않은 id_token 또는 이메일 미인증"),
         @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "409", description = "다른 방식으로 가입된 이메일"),
         @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "503", description = "Google 인증 서비스 일시 불가")
     })
@@ -98,7 +105,8 @@ public class AuthController {
 
     @Operation(
             summary = "Kakao 소셜 로그인",
-            description = """
+            description =
+                    """
                     Kakao SDK가 발급한 access_token으로 소셜 로그인하고 JWT 토큰을 발급한다.
                     신규 사용자는 자동 회원가입 처리된다.
 
@@ -107,7 +115,9 @@ public class AuthController {
                     - 다른 방식(일반/구글)으로 이미 가입된 이메일은 409 응답.""")
     @ApiResponses({
         @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "200", description = "소셜 로그인 성공"),
-        @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "401", description = "유효하지 않은 access_token"),
+        @io.swagger.v3.oas.annotations.responses.ApiResponse(
+                responseCode = "401",
+                description = "유효하지 않은 access_token"),
         @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "409", description = "다른 방식으로 가입된 이메일"),
         @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "503", description = "Kakao 인증 서비스 일시 불가")
     })
@@ -118,7 +128,8 @@ public class AuthController {
 
     @Operation(
             summary = "토큰 재발급",
-            description = """
+            description =
+                    """
                     리프레시 토큰을 검증하고 새 액세스·리프레시 토큰을 발급한다.
 
                     **주의사항:**
@@ -135,7 +146,8 @@ public class AuthController {
 
     @Operation(
             summary = "로그아웃",
-            description = """
+            description =
+                    """
                     로그아웃하고 서버에 저장된 리프레시 토큰을 삭제한다.
 
                     **인증:** Authorization 헤더에 Bearer 액세스 토큰 필요.""")

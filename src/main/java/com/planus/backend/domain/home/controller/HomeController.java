@@ -31,7 +31,8 @@ public class HomeController {
 
     @Operation(
             summary = "월간 재정 요약 조회",
-            description = """
+            description =
+                    """
                     해당 월의 총 지출·예산·소진율·남은 예산을 조회한다.
 
                     **인증:** Authorization 헤더에 Bearer 액세스 토큰 필요.
@@ -48,13 +49,16 @@ public class HomeController {
     public ApiResponse<HomeSummaryResponse> getSummary(
             @AuthenticationPrincipal Long userId,
             @Parameter(description = "조회 월 (yyyy-MM)", example = "2026-10")
-            @RequestParam @DateTimeFormat(pattern = "yyyy-MM") YearMonth yearMonth) {
+                    @RequestParam
+                    @DateTimeFormat(pattern = "yyyy-MM")
+                    YearMonth yearMonth) {
         return ApiResponse.onSuccess(GeneralSuccessCode.OK, homeService.getSummary(userId, yearMonth));
     }
 
     @Operation(
             summary = "캘린더 뷰 조회",
-            description = """
+            description =
+                    """
                     해당 월의 날짜별 지출·수입 합계를 조회한다.
 
                     **인증:** Authorization 헤더에 Bearer 액세스 토큰 필요.
@@ -70,13 +74,16 @@ public class HomeController {
     public ApiResponse<HomeCalendarResponse> getCalendar(
             @AuthenticationPrincipal Long userId,
             @Parameter(description = "조회 월 (yyyy-MM)", example = "2026-10")
-            @RequestParam @DateTimeFormat(pattern = "yyyy-MM") YearMonth yearMonth) {
+                    @RequestParam
+                    @DateTimeFormat(pattern = "yyyy-MM")
+                    YearMonth yearMonth) {
         return ApiResponse.onSuccess(GeneralSuccessCode.OK, homeService.getCalendar(userId, yearMonth));
     }
 
     @Operation(
             summary = "일별 상세 내역 조회",
-            description = """
+            description =
+                    """
                     특정 날짜의 지출·수입 거래 상세 내역을 조회한다.
 
                     **인증:** Authorization 헤더에 Bearer 액세스 토큰 필요.
@@ -92,7 +99,9 @@ public class HomeController {
     public ApiResponse<HomeDailyResponse> getDailyDetail(
             @AuthenticationPrincipal Long userId,
             @Parameter(description = "조회 날짜 (yyyy-MM-dd)", example = "2026-10-27")
-            @RequestParam @DateTimeFormat(pattern = "yyyy-MM-dd") LocalDate date) {
+                    @RequestParam
+                    @DateTimeFormat(pattern = "yyyy-MM-dd")
+                    LocalDate date) {
         return ApiResponse.onSuccess(GeneralSuccessCode.OK, homeService.getDailyDetail(userId, date));
     }
 }

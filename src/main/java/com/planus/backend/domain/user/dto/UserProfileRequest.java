@@ -17,6 +17,7 @@ public record UserProfileRequest(
         @Schema(description = "월 고정지출 (원)", example = "1000000") @NotNull Long monthlyFixedExpenses,
         @Schema(description = "월 저축 목표 (원)", example = "500000") @NotNull Long monthlySavingsGoal,
         @Schema(description = "취미 목록", example = "[\"독서\", \"운동\"]") @NotEmpty List<@NotBlank String> hobbies,
-        @Schema(description = "소비 습관 (SAVING / BALANCED / SPENDING)", example = "BALANCED") @NotBlank String spendingHabit,
+        @Schema(description = "소비 습관 (SAVING / BALANCED / SPENDING)", example = "BALANCED") @NotBlank
+                String spendingHabit,
         @Schema(description = "재직 여부", example = "true") @NotNull Boolean employmentStatus,
         @Schema(description = "자가 보유 여부", example = "false") @NotNull Boolean homeOwnership) {}

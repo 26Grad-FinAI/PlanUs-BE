@@ -38,7 +38,8 @@ public class AiFeedbackDevController {
 
     @Operation(
             summary = "주간 피드백 수동 실행",
-            description = """
+            description =
+                    """
                     주간 AI 피드백 생성을 수동으로 실행한다. 스케줄러를 기다리지 않고 검증할 때 사용한다.
 
                     **weekEnd 형식:** yyyy-MM-dd (예: 2026-10-25)
@@ -50,7 +51,10 @@ public class AiFeedbackDevController {
     @GetMapping("/run-weekly")
     public Map<String, Object> runWeekly(
             @Parameter(description = "대상 사용자 ID", example = "1") @RequestParam Long userId,
-            @Parameter(description = "주간 종료일", example = "2026-10-25") @RequestParam @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate weekEnd) {
+            @Parameter(description = "주간 종료일", example = "2026-10-25")
+                    @RequestParam
+                    @DateTimeFormat(iso = DateTimeFormat.ISO.DATE)
+                    LocalDate weekEnd) {
         try {
             return feedbackService
                     .generateWeekly(userId, weekEnd)

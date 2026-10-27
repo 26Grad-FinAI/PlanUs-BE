@@ -26,7 +26,8 @@ public class ExpenseController {
 
     @Operation(
             summary = "지출 등록",
-            description = """
+            description =
+                    """
                     새로운 지출을 등록한다.
 
                     **인증:** Authorization 헤더에 Bearer 액세스 토큰 필요.
@@ -35,7 +36,9 @@ public class ExpenseController {
                     **emotion (선택):** NECESSARY / SATISFIED / IMPULSE / STRESS_RELIEF / REGRET 중 하나. null 허용.""")
     @ApiResponses({
         @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "201", description = "등록 성공"),
-        @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "400", description = "입력값 검증 실패 (카테고리 범위 초과, 잘못된 감정 태그 등)"),
+        @io.swagger.v3.oas.annotations.responses.ApiResponse(
+                responseCode = "400",
+                description = "입력값 검증 실패 (카테고리 범위 초과, 잘못된 감정 태그 등)"),
         @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "401", description = "인증되지 않은 사용자")
     })
     @PostMapping
@@ -47,7 +50,8 @@ public class ExpenseController {
 
     @Operation(
             summary = "지출 수정",
-            description = """
+            description =
+                    """
                     기존 지출 내역을 수정한다.
 
                     **인증:** Authorization 헤더에 Bearer 액세스 토큰 필요.
@@ -56,7 +60,9 @@ public class ExpenseController {
                     - 수입 내역을 이 API로 수정할 수 없다 (400 응답).""")
     @ApiResponses({
         @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "200", description = "수정 성공"),
-        @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "400", description = "입력값 검증 실패 또는 수입 내역에 대한 잘못된 요청"),
+        @io.swagger.v3.oas.annotations.responses.ApiResponse(
+                responseCode = "400",
+                description = "입력값 검증 실패 또는 수입 내역에 대한 잘못된 요청"),
         @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "401", description = "인증되지 않은 사용자"),
         @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "403", description = "본인의 지출이 아님"),
         @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "404", description = "지출 내역을 찾을 수 없음")
@@ -71,7 +77,8 @@ public class ExpenseController {
 
     @Operation(
             summary = "지출 삭제",
-            description = """
+            description =
+                    """
                     지출 내역을 삭제한다.
 
                     **인증:** Authorization 헤더에 Bearer 액세스 토큰 필요.

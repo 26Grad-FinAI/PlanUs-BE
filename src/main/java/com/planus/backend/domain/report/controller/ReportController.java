@@ -28,7 +28,8 @@ public class ReportController {
 
     @Operation(
             summary = "월간 리포트 조회",
-            description = """
+            description =
+                    """
                     해당 월의 종합 소비 리포트를 조회한다.
 
                     **인증:** Authorization 헤더에 Bearer 액세스 토큰 필요.
@@ -45,7 +46,9 @@ public class ReportController {
     public ApiResponse<MonthlyReportResponse> getMonthlyReport(
             @AuthenticationPrincipal Long userId,
             @Parameter(description = "조회 월 (yyyy-MM)", example = "2026-10")
-            @RequestParam @DateTimeFormat(pattern = "yyyy-MM") YearMonth yearMonth) {
+                    @RequestParam
+                    @DateTimeFormat(pattern = "yyyy-MM")
+                    YearMonth yearMonth) {
         return ApiResponse.onSuccess(GeneralSuccessCode.OK, reportService.getMonthlyReport(userId, yearMonth));
     }
 }

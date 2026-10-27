@@ -26,7 +26,8 @@ public class IncomeController {
 
     @Operation(
             summary = "수입 등록",
-            description = """
+            description =
+                    """
                     새로운 수입을 등록한다. 등록 시 해당 월의 예산이 자동으로 증가한다.
 
                     **인증:** Authorization 헤더에 Bearer 액세스 토큰 필요.
@@ -37,9 +38,13 @@ public class IncomeController {
                     - 해당 카테고리의 BudgetCategory도 존재해야 한다 (없으면 404 응답).""")
     @ApiResponses({
         @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "201", description = "등록 성공"),
-        @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "400", description = "입력값 검증 실패 또는 예산 한도 초과"),
+        @io.swagger.v3.oas.annotations.responses.ApiResponse(
+                responseCode = "400",
+                description = "입력값 검증 실패 또는 예산 한도 초과"),
         @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "401", description = "인증되지 않은 사용자"),
-        @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "404", description = "해당 월 예산 또는 카테고리 예산 미설정")
+        @io.swagger.v3.oas.annotations.responses.ApiResponse(
+                responseCode = "404",
+                description = "해당 월 예산 또는 카테고리 예산 미설정")
     })
     @PostMapping
     @ResponseStatus(HttpStatus.CREATED)
@@ -50,7 +55,8 @@ public class IncomeController {
 
     @Operation(
             summary = "수입 수정",
-            description = """
+            description =
+                    """
                     기존 수입 내역을 수정한다. 금액·카테고리·월이 변경되면 예산도 자동 조정된다.
 
                     **인증:** Authorization 헤더에 Bearer 액세스 토큰 필요.
@@ -59,7 +65,9 @@ public class IncomeController {
                     - 지출 내역을 이 API로 수정할 수 없다 (400 응답).""")
     @ApiResponses({
         @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "200", description = "수정 성공"),
-        @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "400", description = "입력값 검증 실패 또는 지출 내역에 대한 잘못된 요청"),
+        @io.swagger.v3.oas.annotations.responses.ApiResponse(
+                responseCode = "400",
+                description = "입력값 검증 실패 또는 지출 내역에 대한 잘못된 요청"),
         @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "401", description = "인증되지 않은 사용자"),
         @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "403", description = "본인의 수입이 아님"),
         @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "404", description = "수입 내역을 찾을 수 없음")
@@ -74,7 +82,8 @@ public class IncomeController {
 
     @Operation(
             summary = "수입 삭제",
-            description = """
+            description =
+                    """
                     수입 내역을 삭제한다. 삭제 시 해당 월의 예산이 자동으로 감소한다.
 
                     **인증:** Authorization 헤더에 Bearer 액세스 토큰 필요.
@@ -83,7 +92,9 @@ public class IncomeController {
                     - 지출 내역을 이 API로 삭제할 수 없다 (400 응답).""")
     @ApiResponses({
         @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "200", description = "삭제 성공"),
-        @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "400", description = "지출 내역에 대한 잘못된 요청 또는 예산 한도 초과"),
+        @io.swagger.v3.oas.annotations.responses.ApiResponse(
+                responseCode = "400",
+                description = "지출 내역에 대한 잘못된 요청 또는 예산 한도 초과"),
         @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "401", description = "인증되지 않은 사용자"),
         @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "403", description = "본인의 수입이 아님"),
         @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "404", description = "수입 내역을 찾을 수 없음")

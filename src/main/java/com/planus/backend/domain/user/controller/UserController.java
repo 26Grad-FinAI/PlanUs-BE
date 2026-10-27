@@ -36,7 +36,8 @@ public class UserController {
 
     @Operation(
             summary = "프로필 최초 저장",
-            description = """
+            description =
+                    """
                     회원가입 후 사용자 프로필을 최초 저장한다.
                     가용예산(monthlyIncome - monthlyFixedExpenses - monthlySavingsGoal)이 자동 계산되어 반환된다.
 
@@ -60,7 +61,8 @@ public class UserController {
 
     @Operation(
             summary = "프로필 수정",
-            description = """
+            description =
+                    """
                     사용자 프로필을 수정하고 갱신된 가용예산과 수정일시를 반환한다.
 
                     **인증:** Authorization 헤더에 Bearer 액세스 토큰 필요.
@@ -79,7 +81,8 @@ public class UserController {
 
     @Operation(
             summary = "프로필 조회",
-            description = """
+            description =
+                    """
                     사용자 프로필 전체 정보를 조회한다.
 
                     **인증:** Authorization 헤더에 Bearer 액세스 토큰 필요.
@@ -96,7 +99,8 @@ public class UserController {
 
     @Operation(
             summary = "회원 탈퇴",
-            description = """
+            description =
+                    """
                     회원 탈퇴를 처리하고 관련 데이터를 삭제한다.
 
                     **인증:** Authorization 헤더에 Bearer 액세스 토큰 필요.
