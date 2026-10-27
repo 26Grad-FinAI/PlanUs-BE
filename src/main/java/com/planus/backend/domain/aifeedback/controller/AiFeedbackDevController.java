@@ -1,6 +1,9 @@
 package com.planus.backend.domain.aifeedback.controller;
 
 import com.planus.backend.domain.aifeedback.service.AiFeedbackService;
+import io.swagger.v3.oas.annotations.Operation;
+import io.swagger.v3.oas.annotations.Parameter;
+import io.swagger.v3.oas.annotations.tags.Tag;
 import java.time.LocalDate;
 import java.util.HashMap;
 import java.util.Map;
@@ -16,6 +19,7 @@ import org.springframework.web.bind.annotation.RestController;
 /**
  * 개발·검증용 내부 엔드포인트. dev/local 프로필에서만 활성화.
  */
+@Tag(name = "AI Feedback (Dev)", description = "AI 피드백 개발·검증용 내부 API (dev/local 프로필 전용)")
 @RestController
 @Profile({"dev", "local"})
 @RequestMapping("/internal/aifeedback")
@@ -32,13 +36,25 @@ public class AiFeedbackDevController {
         this.feedbackService = feedbackService;
     }
 
-    /**
-     * 주간 피드백 생성을 수동 실행(스케줄러를 기다리지 않고 검증).
-     * 예: GET /internal/aifeedback/run-weekly?userId=1&weekEnd=2026-06-22
-     */
+    @Operation(
+            summary = "주간 피드백 수동 실행",
+            description =
+                    """
+                    주간 AI 피드백 생성을 수동으로 실행한다. 스케줄러를 기다리지 않고 검증할 때 사용한다.
+
+                    **weekEnd 형식:** yyyy-MM-dd (예: 2026-10-25)
+                    **응답 필드:**
+                    - created=true: 피드백 생성 성공. id, confidence, adviceType, feedback 포함.
+                    - created=false: generateWeekly가 Optional.empty를 반환한 경우 또는 오류 발생. reason 또는 error 필드에 상세 사유 포함.
+                    **주의사항:**
+                    - dev/local 프로필에서만 활성화된다. 운영 환경에서는 접근 불가.""")
     @GetMapping("/run-weekly")
     public Map<String, Object> runWeekly(
-            @RequestParam Long userId, @RequestParam @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate weekEnd) {
+            @Parameter(description = "대상 사용자 ID", example = "1") @RequestParam Long userId,
+            @Parameter(description = "주간 종료일", example = "2026-10-25")
+                    @RequestParam
+                    @DateTimeFormat(iso = DateTimeFormat.ISO.DATE)
+                    LocalDate weekEnd) {
         try {
             return feedbackService
                     .generateWeekly(userId, weekEnd)
