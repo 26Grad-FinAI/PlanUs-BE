@@ -6,6 +6,8 @@ import com.planus.backend.global.apiPayload.ApiResponse;
 import com.planus.backend.global.apiPayload.code.GeneralSuccessCode;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.Parameter;
+import io.swagger.v3.oas.annotations.media.Content;
+import io.swagger.v3.oas.annotations.media.Schema;
 import io.swagger.v3.oas.annotations.responses.ApiResponses;
 import io.swagger.v3.oas.annotations.tags.Tag;
 import java.time.YearMonth;
@@ -35,12 +37,15 @@ public class ReportController {
                     **인증:** Authorization 헤더에 Bearer 액세스 토큰 필요.
                     **yearMonth 형식:** yyyy-MM (예: 2026-10)
                     **응답 구성:**
-                    - categoryRatios: 카테고리별 지출 비중 (소비 금액 내림차순 정렬). 지출이 0이면 비율 0.0.
+                    - categoryRatios: 카테고리별 지출 비중 (비율 내림차순 정렬, 동률 시 순서 미보장). 지출이 0이면 비율 0.0.
                     - monthlyTrends: 조회 월 포함 최근 6개월 월별 총 지출 추이. 거래가 없는 월은 0.
                     - categoryBudgets: 카테고리별 예산 대비 지출 현황. 예산 미설정 카테고리는 budget이 0.""")
     @ApiResponses({
         @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "200", description = "조회 성공"),
-        @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "401", description = "인증되지 않은 사용자")
+        @io.swagger.v3.oas.annotations.responses.ApiResponse(
+                responseCode = "401",
+                description = "인증되지 않은 사용자",
+                content = @Content(schema = @Schema(implementation = ApiResponse.class)))
     })
     @GetMapping("/monthly")
     public ApiResponse<MonthlyReportResponse> getMonthlyReport(

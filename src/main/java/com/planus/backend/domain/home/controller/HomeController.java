@@ -8,6 +8,8 @@ import com.planus.backend.global.apiPayload.ApiResponse;
 import com.planus.backend.global.apiPayload.code.GeneralSuccessCode;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.Parameter;
+import io.swagger.v3.oas.annotations.media.Content;
+import io.swagger.v3.oas.annotations.media.Schema;
 import io.swagger.v3.oas.annotations.responses.ApiResponses;
 import io.swagger.v3.oas.annotations.tags.Tag;
 import java.time.LocalDate;
@@ -43,7 +45,10 @@ public class HomeController {
                     - 남은 예산(remainingBudget): 예산 - 총 지출 (음수 가능).""")
     @ApiResponses({
         @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "200", description = "조회 성공"),
-        @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "401", description = "인증되지 않은 사용자")
+        @io.swagger.v3.oas.annotations.responses.ApiResponse(
+                responseCode = "401",
+                description = "인증되지 않은 사용자",
+                content = @Content(schema = @Schema(implementation = ApiResponse.class)))
     })
     @GetMapping("/summary")
     public ApiResponse<HomeSummaryResponse> getSummary(
@@ -68,7 +73,10 @@ public class HomeController {
                     - 날짜 오름차순 정렬.""")
     @ApiResponses({
         @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "200", description = "조회 성공"),
-        @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "401", description = "인증되지 않은 사용자")
+        @io.swagger.v3.oas.annotations.responses.ApiResponse(
+                responseCode = "401",
+                description = "인증되지 않은 사용자",
+                content = @Content(schema = @Schema(implementation = ApiResponse.class)))
     })
     @GetMapping("/calendar")
     public ApiResponse<HomeCalendarResponse> getCalendar(
@@ -93,7 +101,10 @@ public class HomeController {
                     - type 필드는 "EXPENSE" 또는 "INCOME".""")
     @ApiResponses({
         @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "200", description = "조회 성공"),
-        @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "401", description = "인증되지 않은 사용자")
+        @io.swagger.v3.oas.annotations.responses.ApiResponse(
+                responseCode = "401",
+                description = "인증되지 않은 사용자",
+                content = @Content(schema = @Schema(implementation = ApiResponse.class)))
     })
     @GetMapping("/daily")
     public ApiResponse<HomeDailyResponse> getDailyDetail(

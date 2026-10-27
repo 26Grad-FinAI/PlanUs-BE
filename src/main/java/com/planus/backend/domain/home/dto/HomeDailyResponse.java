@@ -20,7 +20,7 @@ public record HomeDailyResponse(
             @Schema(description = "거래 내역", example = "점심 식사") String title,
             @Schema(description = "카테고리 ID", example = "1") int categoryId,
             @Schema(description = "메모", example = "회사 근처 식당") String memo,
-            @Schema(description = "감정 태그", example = "만족") String emotion,
+            @Schema(description = "감정 태그", example = "SATISFIED") String emotion,
             @Schema(description = "고정지출 여부", example = "false") boolean isRecurring,
             @Schema(description = "계획지출 여부", example = "true") boolean isPlanned,
             @Schema(description = "거래 시각", example = "12:30:00") LocalTime time) {}

@@ -9,6 +9,8 @@ import com.planus.backend.domain.user.service.UserService;
 import com.planus.backend.global.apiPayload.ApiResponse;
 import com.planus.backend.global.apiPayload.code.GeneralSuccessCode;
 import io.swagger.v3.oas.annotations.Operation;
+import io.swagger.v3.oas.annotations.media.Content;
+import io.swagger.v3.oas.annotations.media.Schema;
 import io.swagger.v3.oas.annotations.responses.ApiResponses;
 import io.swagger.v3.oas.annotations.tags.Tag;
 import jakarta.validation.Valid;
@@ -38,19 +40,22 @@ public class UserController {
             summary = "프로필 최초 저장",
             description =
                     """
-                    회원가입 후 사용자 프로필을 최초 저장한다.
+                    사용자 프로필을 저장한다. 이미 프로필이 존재하면 덮어쓴다.
                     가용예산(monthlyIncome - monthlyFixedExpenses - monthlySavingsGoal)이 자동 계산되어 반환된다.
 
                     **인증:** Authorization 헤더에 Bearer 액세스 토큰 필요.
-                    **spendingHabit:** SAVING / BALANCED / SPENDING 중 하나.
-                    **hobbies:** 1개 이상 필수, 각 항목은 공백 불가.
-                    **주의사항:**
-                    - 이미 프로필이 저장된 상태에서 호출하면 409 응답.""")
+                    **spendingHabit:** 서버에서 별도 값 검증을 하지 않으며 자유 문자열로 저장된다. 권장값: SAVING / BALANCED / SPENDING.
+                    **hobbies:** 1개 이상 필수, 각 항목은 공백 불가.""")
     @ApiResponses({
         @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "201", description = "프로필 저장 성공"),
-        @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "400", description = "입력값 검증 실패"),
-        @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "401", description = "인증되지 않은 사용자"),
-        @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "409", description = "이미 프로필이 존재함")
+        @io.swagger.v3.oas.annotations.responses.ApiResponse(
+                responseCode = "400",
+                description = "입력값 검증 실패",
+                content = @Content(schema = @Schema(implementation = ApiResponse.class))),
+        @io.swagger.v3.oas.annotations.responses.ApiResponse(
+                responseCode = "401",
+                description = "인증되지 않은 사용자",
+                content = @Content(schema = @Schema(implementation = ApiResponse.class)))
     })
     @PostMapping("/me/profile")
     @ResponseStatus(HttpStatus.CREATED)
@@ -70,8 +75,14 @@ public class UserController {
                     - 전체 필드를 다시 전달해야 한다 (부분 수정 불가).""")
     @ApiResponses({
         @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "200", description = "프로필 수정 성공"),
-        @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "400", description = "입력값 검증 실패"),
-        @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "401", description = "인증되지 않은 사용자")
+        @io.swagger.v3.oas.annotations.responses.ApiResponse(
+                responseCode = "400",
+                description = "입력값 검증 실패",
+                content = @Content(schema = @Schema(implementation = ApiResponse.class))),
+        @io.swagger.v3.oas.annotations.responses.ApiResponse(
+                responseCode = "401",
+                description = "인증되지 않은 사용자",
+                content = @Content(schema = @Schema(implementation = ApiResponse.class)))
     })
     @PutMapping("/me/profile")
     public ApiResponse<UserProfileUpdateResponse> updateProfile(
@@ -87,10 +98,13 @@ public class UserController {
 
                     **인증:** Authorization 헤더에 Bearer 액세스 토큰 필요.
                     **주의사항:**
-                    - 프로필 미저장 시 profileCompleted가 false이고, 프로필 필드들은 null로 반환된다.""")
+                    - 프로필 미저장 시 profileCompleted=false이며, 문자열·객체 필드(nickname, gender, residence, hobbies 등)는 null, 숫자 필드(monthlyIncome, monthlyFixedExpenses 등)는 0으로 반환된다. userId, email, createdAt은 프로필 저장 여부와 무관하게 항상 반환된다.""")
     @ApiResponses({
         @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "200", description = "프로필 조회 성공"),
-        @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "401", description = "인증되지 않은 사용자")
+        @io.swagger.v3.oas.annotations.responses.ApiResponse(
+                responseCode = "401",
+                description = "인증되지 않은 사용자",
+                content = @Content(schema = @Schema(implementation = ApiResponse.class)))
     })
     @GetMapping("/me/profile")
     public ApiResponse<UserProfileGetResponse> getProfile(@AuthenticationPrincipal Long userId) {
@@ -108,7 +122,10 @@ public class UserController {
                     - 탈퇴 후 데이터 복구가 불가능하다.""")
     @ApiResponses({
         @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "200", description = "탈퇴 성공"),
-        @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "401", description = "인증되지 않은 사용자")
+        @io.swagger.v3.oas.annotations.responses.ApiResponse(
+                responseCode = "401",
+                description = "인증되지 않은 사용자",
+                content = @Content(schema = @Schema(implementation = ApiResponse.class)))
     })
     @DeleteMapping("/me")
     public ApiResponse<Void> withdraw(@AuthenticationPrincipal Long userId) {

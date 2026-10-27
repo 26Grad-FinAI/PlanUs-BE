@@ -12,6 +12,8 @@ import com.planus.backend.domain.auth.service.KakaoOAuthService;
 import com.planus.backend.global.apiPayload.ApiResponse;
 import com.planus.backend.global.apiPayload.code.GeneralSuccessCode;
 import io.swagger.v3.oas.annotations.Operation;
+import io.swagger.v3.oas.annotations.media.Content;
+import io.swagger.v3.oas.annotations.media.Schema;
 import io.swagger.v3.oas.annotations.responses.ApiResponses;
 import io.swagger.v3.oas.annotations.tags.Tag;
 import jakarta.validation.Valid;
@@ -50,8 +52,12 @@ public class AuthController {
         @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "201", description = "회원가입 성공"),
         @io.swagger.v3.oas.annotations.responses.ApiResponse(
                 responseCode = "400",
-                description = "입력값 검증 실패 (이메일 형식, 비밀번호 정책, 약관 미동의 등)"),
-        @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "409", description = "이미 사용 중인 이메일")
+                description = "입력값 검증 실패 (이메일 형식, 비밀번호 정책, 약관 미동의 등)",
+                content = @Content(schema = @Schema(implementation = ApiResponse.class))),
+        @io.swagger.v3.oas.annotations.responses.ApiResponse(
+                responseCode = "409",
+                description = "이미 사용 중인 이메일",
+                content = @Content(schema = @Schema(implementation = ApiResponse.class)))
     })
     @PostMapping("/signup")
     @ResponseStatus(HttpStatus.CREATED)
@@ -71,8 +77,14 @@ public class AuthController {
                     - profileCompleted가 false이면 프로필 저장 API를 먼저 호출해야 한다.""")
     @ApiResponses({
         @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "200", description = "로그인 성공"),
-        @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "401", description = "이메일 또는 비밀번호 불일치"),
-        @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "409", description = "소셜 로그인으로 가입된 이메일")
+        @io.swagger.v3.oas.annotations.responses.ApiResponse(
+                responseCode = "401",
+                description = "이메일 또는 비밀번호 불일치",
+                content = @Content(schema = @Schema(implementation = ApiResponse.class))),
+        @io.swagger.v3.oas.annotations.responses.ApiResponse(
+                responseCode = "409",
+                description = "소셜 로그인으로 가입된 이메일",
+                content = @Content(schema = @Schema(implementation = ApiResponse.class)))
     })
     @PostMapping("/login")
     public ApiResponse<LoginResponse> login(@Valid @RequestBody LoginRequest request) {
@@ -94,9 +106,16 @@ public class AuthController {
         @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "200", description = "소셜 로그인 성공"),
         @io.swagger.v3.oas.annotations.responses.ApiResponse(
                 responseCode = "401",
-                description = "유효하지 않은 id_token 또는 이메일 미인증"),
-        @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "409", description = "다른 방식으로 가입된 이메일"),
-        @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "503", description = "Google 인증 서비스 일시 불가")
+                description = "유효하지 않은 id_token 또는 이메일 미인증",
+                content = @Content(schema = @Schema(implementation = ApiResponse.class))),
+        @io.swagger.v3.oas.annotations.responses.ApiResponse(
+                responseCode = "409",
+                description = "다른 방식으로 가입된 이메일",
+                content = @Content(schema = @Schema(implementation = ApiResponse.class))),
+        @io.swagger.v3.oas.annotations.responses.ApiResponse(
+                responseCode = "503",
+                description = "Google 인증 서비스 일시 불가",
+                content = @Content(schema = @Schema(implementation = ApiResponse.class)))
     })
     @PostMapping("/oauth2/google")
     public ApiResponse<LoginResponse> googleLogin(@Valid @RequestBody SocialLoginRequest request) {
@@ -117,9 +136,16 @@ public class AuthController {
         @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "200", description = "소셜 로그인 성공"),
         @io.swagger.v3.oas.annotations.responses.ApiResponse(
                 responseCode = "401",
-                description = "유효하지 않은 access_token"),
-        @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "409", description = "다른 방식으로 가입된 이메일"),
-        @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "503", description = "Kakao 인증 서비스 일시 불가")
+                description = "유효하지 않은 access_token",
+                content = @Content(schema = @Schema(implementation = ApiResponse.class))),
+        @io.swagger.v3.oas.annotations.responses.ApiResponse(
+                responseCode = "409",
+                description = "다른 방식으로 가입된 이메일",
+                content = @Content(schema = @Schema(implementation = ApiResponse.class))),
+        @io.swagger.v3.oas.annotations.responses.ApiResponse(
+                responseCode = "503",
+                description = "Kakao 인증 서비스 일시 불가",
+                content = @Content(schema = @Schema(implementation = ApiResponse.class)))
     })
     @PostMapping("/oauth2/kakao")
     public ApiResponse<LoginResponse> kakaoLogin(@Valid @RequestBody SocialLoginRequest request) {
@@ -137,7 +163,10 @@ public class AuthController {
                     - 동일 리프레시 토큰으로 중복 요청 시 401 응답.""")
     @ApiResponses({
         @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "200", description = "토큰 재발급 성공"),
-        @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "401", description = "유효하지 않거나 만료된 리프레시 토큰")
+        @io.swagger.v3.oas.annotations.responses.ApiResponse(
+                responseCode = "401",
+                description = "유효하지 않거나 만료된 리프레시 토큰",
+                content = @Content(schema = @Schema(implementation = ApiResponse.class)))
     })
     @PostMapping("/reissue")
     public ApiResponse<LoginResponse> reissue(@Valid @RequestBody ReissueRequest request) {
@@ -153,7 +182,10 @@ public class AuthController {
                     **인증:** Authorization 헤더에 Bearer 액세스 토큰 필요.""")
     @ApiResponses({
         @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "200", description = "로그아웃 성공"),
-        @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "401", description = "인증되지 않은 사용자")
+        @io.swagger.v3.oas.annotations.responses.ApiResponse(
+                responseCode = "401",
+                description = "인증되지 않은 사용자",
+                content = @Content(schema = @Schema(implementation = ApiResponse.class)))
     })
     @PostMapping("/logout")
     public ApiResponse<Void> logout(@AuthenticationPrincipal Long userId) {

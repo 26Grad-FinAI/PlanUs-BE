@@ -7,6 +7,8 @@ import com.planus.backend.global.apiPayload.ApiResponse;
 import com.planus.backend.global.apiPayload.code.GeneralSuccessCode;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.Parameter;
+import io.swagger.v3.oas.annotations.media.Content;
+import io.swagger.v3.oas.annotations.media.Schema;
 import io.swagger.v3.oas.annotations.responses.ApiResponses;
 import io.swagger.v3.oas.annotations.tags.Tag;
 import jakarta.validation.Valid;
@@ -38,8 +40,12 @@ public class ExpenseController {
         @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "201", description = "등록 성공"),
         @io.swagger.v3.oas.annotations.responses.ApiResponse(
                 responseCode = "400",
-                description = "입력값 검증 실패 (카테고리 범위 초과, 잘못된 감정 태그 등)"),
-        @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "401", description = "인증되지 않은 사용자")
+                description = "입력값 검증 실패 (카테고리 범위 초과, 잘못된 감정 태그 등)",
+                content = @Content(schema = @Schema(implementation = ApiResponse.class))),
+        @io.swagger.v3.oas.annotations.responses.ApiResponse(
+                responseCode = "401",
+                description = "인증되지 않은 사용자",
+                content = @Content(schema = @Schema(implementation = ApiResponse.class)))
     })
     @PostMapping
     @ResponseStatus(HttpStatus.CREATED)
@@ -62,10 +68,20 @@ public class ExpenseController {
         @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "200", description = "수정 성공"),
         @io.swagger.v3.oas.annotations.responses.ApiResponse(
                 responseCode = "400",
-                description = "입력값 검증 실패 또는 수입 내역에 대한 잘못된 요청"),
-        @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "401", description = "인증되지 않은 사용자"),
-        @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "403", description = "본인의 지출이 아님"),
-        @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "404", description = "지출 내역을 찾을 수 없음")
+                description = "입력값 검증 실패 또는 수입 내역에 대한 잘못된 요청",
+                content = @Content(schema = @Schema(implementation = ApiResponse.class))),
+        @io.swagger.v3.oas.annotations.responses.ApiResponse(
+                responseCode = "401",
+                description = "인증되지 않은 사용자",
+                content = @Content(schema = @Schema(implementation = ApiResponse.class))),
+        @io.swagger.v3.oas.annotations.responses.ApiResponse(
+                responseCode = "403",
+                description = "본인의 지출이 아님",
+                content = @Content(schema = @Schema(implementation = ApiResponse.class))),
+        @io.swagger.v3.oas.annotations.responses.ApiResponse(
+                responseCode = "404",
+                description = "지출 내역을 찾을 수 없음",
+                content = @Content(schema = @Schema(implementation = ApiResponse.class)))
     })
     @PutMapping("/{expenseId}")
     public ApiResponse<ExpenseResponse> updateExpense(
@@ -87,10 +103,22 @@ public class ExpenseController {
                     - 수입 내역을 이 API로 삭제할 수 없다 (400 응답).""")
     @ApiResponses({
         @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "200", description = "삭제 성공"),
-        @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "400", description = "수입 내역에 대한 잘못된 요청"),
-        @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "401", description = "인증되지 않은 사용자"),
-        @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "403", description = "본인의 지출이 아님"),
-        @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "404", description = "지출 내역을 찾을 수 없음")
+        @io.swagger.v3.oas.annotations.responses.ApiResponse(
+                responseCode = "400",
+                description = "수입 내역에 대한 잘못된 요청",
+                content = @Content(schema = @Schema(implementation = ApiResponse.class))),
+        @io.swagger.v3.oas.annotations.responses.ApiResponse(
+                responseCode = "401",
+                description = "인증되지 않은 사용자",
+                content = @Content(schema = @Schema(implementation = ApiResponse.class))),
+        @io.swagger.v3.oas.annotations.responses.ApiResponse(
+                responseCode = "403",
+                description = "본인의 지출이 아님",
+                content = @Content(schema = @Schema(implementation = ApiResponse.class))),
+        @io.swagger.v3.oas.annotations.responses.ApiResponse(
+                responseCode = "404",
+                description = "지출 내역을 찾을 수 없음",
+                content = @Content(schema = @Schema(implementation = ApiResponse.class)))
     })
     @DeleteMapping("/{expenseId}")
     public ApiResponse<Void> deleteExpense(

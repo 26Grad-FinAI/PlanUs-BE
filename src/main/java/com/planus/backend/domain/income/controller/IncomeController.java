@@ -7,6 +7,8 @@ import com.planus.backend.global.apiPayload.ApiResponse;
 import com.planus.backend.global.apiPayload.code.GeneralSuccessCode;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.Parameter;
+import io.swagger.v3.oas.annotations.media.Content;
+import io.swagger.v3.oas.annotations.media.Schema;
 import io.swagger.v3.oas.annotations.responses.ApiResponses;
 import io.swagger.v3.oas.annotations.tags.Tag;
 import jakarta.validation.Valid;
@@ -40,11 +42,16 @@ public class IncomeController {
         @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "201", description = "등록 성공"),
         @io.swagger.v3.oas.annotations.responses.ApiResponse(
                 responseCode = "400",
-                description = "입력값 검증 실패 또는 예산 한도 초과"),
-        @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "401", description = "인증되지 않은 사용자"),
+                description = "입력값 검증 실패 또는 예산 한도 초과",
+                content = @Content(schema = @Schema(implementation = ApiResponse.class))),
+        @io.swagger.v3.oas.annotations.responses.ApiResponse(
+                responseCode = "401",
+                description = "인증되지 않은 사용자",
+                content = @Content(schema = @Schema(implementation = ApiResponse.class))),
         @io.swagger.v3.oas.annotations.responses.ApiResponse(
                 responseCode = "404",
-                description = "해당 월 예산 또는 카테고리 예산 미설정")
+                description = "해당 월 예산 또는 카테고리 예산 미설정",
+                content = @Content(schema = @Schema(implementation = ApiResponse.class)))
     })
     @PostMapping
     @ResponseStatus(HttpStatus.CREATED)
@@ -57,7 +64,7 @@ public class IncomeController {
             summary = "수입 수정",
             description =
                     """
-                    기존 수입 내역을 수정한다. 금액·카테고리·월이 변경되면 예산도 자동 조정된다.
+                    기존 수입 내역을 수정한다. 대상 월의 Budget과 BudgetCategory가 모두 존재하면 예산이 자동 조정된다. 둘 중 하나라도 없으면 거래만 수정되고 예산은 조정되지 않는다.
 
                     **인증:** Authorization 헤더에 Bearer 액세스 토큰 필요.
                     **주의사항:**
@@ -67,10 +74,20 @@ public class IncomeController {
         @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "200", description = "수정 성공"),
         @io.swagger.v3.oas.annotations.responses.ApiResponse(
                 responseCode = "400",
-                description = "입력값 검증 실패 또는 지출 내역에 대한 잘못된 요청"),
-        @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "401", description = "인증되지 않은 사용자"),
-        @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "403", description = "본인의 수입이 아님"),
-        @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "404", description = "수입 내역을 찾을 수 없음")
+                description = "입력값 검증 실패 또는 지출 내역에 대한 잘못된 요청",
+                content = @Content(schema = @Schema(implementation = ApiResponse.class))),
+        @io.swagger.v3.oas.annotations.responses.ApiResponse(
+                responseCode = "401",
+                description = "인증되지 않은 사용자",
+                content = @Content(schema = @Schema(implementation = ApiResponse.class))),
+        @io.swagger.v3.oas.annotations.responses.ApiResponse(
+                responseCode = "403",
+                description = "본인의 수입이 아님",
+                content = @Content(schema = @Schema(implementation = ApiResponse.class))),
+        @io.swagger.v3.oas.annotations.responses.ApiResponse(
+                responseCode = "404",
+                description = "수입 내역을 찾을 수 없음",
+                content = @Content(schema = @Schema(implementation = ApiResponse.class)))
     })
     @PutMapping("/{incomeId}")
     public ApiResponse<IncomeResponse> updateIncome(
@@ -84,7 +101,7 @@ public class IncomeController {
             summary = "수입 삭제",
             description =
                     """
-                    수입 내역을 삭제한다. 삭제 시 해당 월의 예산이 자동으로 감소한다.
+                    수입 내역을 삭제한다. 해당 월의 Budget과 BudgetCategory가 모두 존재하면 예산이 자동 감소한다. 둘 중 하나라도 없으면 거래만 삭제되고 예산은 조정되지 않는다.
 
                     **인증:** Authorization 헤더에 Bearer 액세스 토큰 필요.
                     **주의사항:**
@@ -94,10 +111,20 @@ public class IncomeController {
         @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "200", description = "삭제 성공"),
         @io.swagger.v3.oas.annotations.responses.ApiResponse(
                 responseCode = "400",
-                description = "지출 내역에 대한 잘못된 요청 또는 예산 한도 초과"),
-        @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "401", description = "인증되지 않은 사용자"),
-        @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "403", description = "본인의 수입이 아님"),
-        @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "404", description = "수입 내역을 찾을 수 없음")
+                description = "지출 내역에 대한 잘못된 요청 또는 예산 한도 초과",
+                content = @Content(schema = @Schema(implementation = ApiResponse.class))),
+        @io.swagger.v3.oas.annotations.responses.ApiResponse(
+                responseCode = "401",
+                description = "인증되지 않은 사용자",
+                content = @Content(schema = @Schema(implementation = ApiResponse.class))),
+        @io.swagger.v3.oas.annotations.responses.ApiResponse(
+                responseCode = "403",
+                description = "본인의 수입이 아님",
+                content = @Content(schema = @Schema(implementation = ApiResponse.class))),
+        @io.swagger.v3.oas.annotations.responses.ApiResponse(
+                responseCode = "404",
+                description = "수입 내역을 찾을 수 없음",
+                content = @Content(schema = @Schema(implementation = ApiResponse.class)))
     })
     @DeleteMapping("/{incomeId}")
     public ApiResponse<Void> deleteIncome(

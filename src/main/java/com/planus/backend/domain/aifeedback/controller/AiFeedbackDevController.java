@@ -45,7 +45,7 @@ public class AiFeedbackDevController {
                     **weekEnd 형식:** yyyy-MM-dd (예: 2026-10-25)
                     **응답 필드:**
                     - created=true: 피드백 생성 성공. id, confidence, adviceType, feedback 포함.
-                    - created=false: 생성 조건 미충족 (예산 초과·이상치·카테고리 초과 없음) 또는 오류 발생.
+                    - created=false: generateWeekly가 Optional.empty를 반환한 경우 또는 오류 발생. reason 또는 error 필드에 상세 사유 포함.
                     **주의사항:**
                     - dev/local 프로필에서만 활성화된다. 운영 환경에서는 접근 불가.""")
     @GetMapping("/run-weekly")
