@@ -107,7 +107,7 @@ if [[ -n "$COMMENTS" ]]; then
     echo -e "$BODY" | fold -s -w 80
     echo ""
 
-    read -rp "이 리뷰를 반영할까? (y/n): " answer
+    read -rp "이 리뷰를 반영할까? (y/n): " answer < /dev/tty
     if [[ "$answer" =~ ^[Yy]$ ]]; then
       APPROVED_COUNT=$((APPROVED_COUNT + 1))
       APPROVED_LIST="${APPROVED_LIST}\n  - ${FILE_PATH}:${LINE}"
@@ -139,7 +139,7 @@ if [[ -n "$REVIEW_COMMENTS" ]]; then
     echo -e "$BODY" | fold -s -w 80
     echo ""
 
-    read -rp "이 리뷰를 반영할까? (y/n): " answer
+    read -rp "이 리뷰를 반영할까? (y/n): " answer < /dev/tty
     if [[ "$answer" =~ ^[Yy]$ ]]; then
       APPROVED_COUNT=$((APPROVED_COUNT + 1))
       APPROVED_LIST="${APPROVED_LIST}\n  - 일반 리뷰 #${TOTAL}"
@@ -174,7 +174,7 @@ fi
 # 6. 코드 수정 대기
 echo -e "${YELLOW}반영할 리뷰를 확인했다. 코드를 수정해라.${NC}"
 echo -e "${YELLOW}수정 완료 후 아무 키나 눌러라.${NC}"
-read -rp ""
+read -rp "" < /dev/tty
 
 # 7. 변경사항 확인
 CHANGED_FILES=$(git status --short)
