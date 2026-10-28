@@ -9,6 +9,13 @@ spring:
         auto_quote_keyword: true
 
 planus:
+  ai:
+    budget:
+      base-url: ${RUNPOD_ENDPOINT:https://8gcw31a7figzda.api.runpod.ai}
+      api-key: ${RUNPOD_API_KEY:}
+      planus-token: ${PLANUS_TOKEN:}
+  fcm:
+    service-account-path: ${FCM_SERVICE_ACCOUNT_PATH:}
   jwt:
     secret: ${JWT_SECRET}
     access-token-expiry: 3600000      # 1시간

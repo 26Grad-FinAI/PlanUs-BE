@@ -28,7 +28,7 @@ planus:
     # [3] 이상치 탐지
     point-z: 3.5
     trend-ratio: 1.40
-    high-freq-categories: [1, 6, 8, 10]
+    high-freq-categories: [1, 7, 4, 5]
     baseline-weeks: 8
     # [3] 이상치 신뢰도 표본 기준
     conf-high-min-samples: 30
@@ -43,6 +43,6 @@ planus:
     month-end-cron: "0 0 3 1 * *"
     # 카테고리 속성 (시스템 기본)
     category:
-      essential: [5, 9, 15, 20]
-      semi-essential: [1, 3, 7]
-      spike-prone: [5, 20]
+      essential: [3, 6]
+      semi-essential: [1, 2, 9]
+      spike-prone: [8]

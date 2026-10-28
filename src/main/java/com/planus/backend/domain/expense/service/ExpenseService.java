@@ -21,7 +21,7 @@ public class ExpenseService {
             Set.of("NECESSARY", "SATISFIED", "IMPULSE", "STRESS_RELIEF", "REGRET");
 
     private static final int MIN_CATEGORY_ID = 1;
-    private static final int MAX_CATEGORY_ID = 11;
+    private static final int MAX_CATEGORY_ID = 10;
 
     private final ExpenseRepository expenseRepository;
 

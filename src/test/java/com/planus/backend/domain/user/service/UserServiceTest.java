@@ -91,7 +91,8 @@ class UserServiceTest {
                             List.of("DINING", "TRAVEL"),
                             "SAVING",
                             true,
-                            false);
+                            false,
+                            null);
         }
     }
 
@@ -157,7 +158,8 @@ class UserServiceTest {
                             List.of("DINING", "TRAVEL"),
                             "SAVING",
                             true,
-                            false);
+                            false,
+                            null);
         }
     }
 
@@ -239,6 +241,7 @@ class UserServiceTest {
                 List.of("DINING", "TRAVEL"),
                 "SAVING",
                 true,
-                false);
+                false,
+                null);
     }
 }

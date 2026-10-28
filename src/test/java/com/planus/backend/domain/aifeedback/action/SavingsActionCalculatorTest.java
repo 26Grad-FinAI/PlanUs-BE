@@ -28,10 +28,10 @@ class SavingsActionCalculatorTest {
         @Test
         @DisplayName("essential 카테고리는 제외")
         void excludes_essential() {
-            // categoryId 5 = essential (기본값)
-            Map<Integer, Long> overspend = Map.of(5, 100_000L);
+            // categoryId 3 = essential (보건, 기본값)
+            Map<Integer, Long> overspend = Map.of(3, 100_000L);
             List<ActionPlan> plans = calculator.calculate(
-                    overspend, 100_000, 15, 15, Map.of(5, 200_000L), Map.of(), List.of(), List.of(), List.of());
+                    overspend, 100_000, 15, 15, Map.of(3, 200_000L), Map.of(), List.of(), List.of(), List.of());
             assertThat(plans).isEmpty();
         }
 

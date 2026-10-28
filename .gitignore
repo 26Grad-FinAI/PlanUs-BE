@@ -42,3 +42,6 @@ out/
 ### Environment files ###
 .env
 .env.*
+
+### Firebase ###
+firebase-service-account.json
