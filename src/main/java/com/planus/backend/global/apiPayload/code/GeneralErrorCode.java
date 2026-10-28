@@ -33,7 +33,7 @@ public enum GeneralErrorCode implements BaseErrorCode {
     SOCIAL_LOGIN_EMAIL_CONFLICT(HttpStatus.CONFLICT, "AUTH_409_002", "이미 다른 방식으로 가입된 이메일입니다."),
 
     // Expense
-    INVALID_CATEGORY(HttpStatus.BAD_REQUEST, "EXPENSE_400_001", "유효하지 않은 카테고리입니다. (1~11)"),
+    INVALID_CATEGORY(HttpStatus.BAD_REQUEST, "EXPENSE_400_001", "유효하지 않은 카테고리입니다. (1~10)"),
     INVALID_EMOTION(HttpStatus.BAD_REQUEST, "EXPENSE_400_002", "유효하지 않은 감정 태그입니다."),
 
     // Income
@@ -43,7 +43,13 @@ public enum GeneralErrorCode implements BaseErrorCode {
 
     // Expense / Income 수정·삭제
     EXPENSE_NOT_FOUND(HttpStatus.NOT_FOUND, "EXPENSE_404_001", "해당 지출 내역을 찾을 수 없습니다."),
-    INCOME_NOT_FOUND(HttpStatus.NOT_FOUND, "INCOME_404_003", "해당 수입 내역을 찾을 수 없습니다.");
+    INCOME_NOT_FOUND(HttpStatus.NOT_FOUND, "INCOME_404_003", "해당 수입 내역을 찾을 수 없습니다."),
+
+    // AI Budget Plan
+    BUDGET_PLAN_IN_PROGRESS(HttpStatus.CONFLICT, "BUDGET_409_001", "이미 진행 중인 예산 산출 요청이 있습니다."),
+    BUDGET_PLAN_NOT_FOUND(HttpStatus.NOT_FOUND, "BUDGET_404_003", "해당 월의 예산 산출 요청이 존재하지 않습니다."),
+    BUDGET_PLAN_NOT_COMPLETED(HttpStatus.BAD_REQUEST, "BUDGET_400_001", "예산 산출이 아직 완료되지 않았습니다."),
+    AI_BUDGET_SERVICE_UNAVAILABLE(HttpStatus.SERVICE_UNAVAILABLE, "BUDGET_503_001", "AI 예산 산출 서비스가 일시적으로 불가합니다.");
 
     private final HttpStatus httpStatus;
     private final String code;

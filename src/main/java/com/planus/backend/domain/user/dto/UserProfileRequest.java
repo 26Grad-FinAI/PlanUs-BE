@@ -20,4 +20,6 @@ public record UserProfileRequest(
         @Schema(description = "소비 습관 (SAVING / BALANCED / SPENDING)", example = "BALANCED") @NotBlank
                 String spendingHabit,
         @Schema(description = "재직 여부", example = "true") @NotNull Boolean employmentStatus,
-        @Schema(description = "자가 보유 여부", example = "false") @NotNull Boolean homeOwnership) {}
+        @Schema(description = "자가 보유 여부", example = "false") @NotNull Boolean homeOwnership,
+        @Schema(description = "자기소개서 (AI 예산 산출에 활용)", example = "절약을 중시하는 직장인입니다.", nullable = true)
+                String selfIntroduction) {}

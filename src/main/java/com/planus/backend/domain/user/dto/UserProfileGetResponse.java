@@ -20,6 +20,7 @@ public record UserProfileGetResponse(
         @Schema(description = "소비 습관 (SAVING / BALANCED / SPENDING)", example = "BALANCED") String spendingHabit,
         @Schema(description = "재직 여부", example = "true") Boolean employmentStatus,
         @Schema(description = "자가 보유 여부", example = "false") Boolean homeOwnership,
+        @Schema(description = "자기소개서", example = "절약을 중시하는 직장인입니다.") String selfIntroduction,
         @Schema(description = "프로필 입력 완료 여부", example = "true") boolean profileCompleted,
         @Schema(description = "계정 생성일시") LocalDateTime createdAt,
         @Schema(description = "마지막 수정일시") LocalDateTime updatedAt) {}

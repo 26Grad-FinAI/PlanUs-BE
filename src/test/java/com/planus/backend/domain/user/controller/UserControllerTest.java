@@ -123,7 +123,8 @@ class UserControllerTest {
                         List.of("DINING", ""),
                         "SAVING",
                         true,
-                        false);
+                        false,
+                        null);
 
                 mockMvc.perform(post("/api/users/me/profile")
                                 .contentType(MediaType.APPLICATION_JSON)
@@ -149,7 +150,8 @@ class UserControllerTest {
                         List.of("   "),
                         "SAVING",
                         true,
-                        false);
+                        false,
+                        null);
 
                 mockMvc.perform(post("/api/users/me/profile")
                                 .contentType(MediaType.APPLICATION_JSON)
@@ -270,6 +272,7 @@ class UserControllerTest {
                         "BALANCED",
                         true,
                         false,
+                        null,
                         true,
                         null,
                         null);
@@ -351,6 +354,7 @@ class UserControllerTest {
                 List.of("DINING", "TRAVEL"),
                 "SAVING",
                 true,
-                false);
+                false,
+                null);
     }
 }

@@ -41,6 +41,7 @@ dependencies {
 	runtimeOnly 'io.jsonwebtoken:jjwt-jackson:0.12.6'
 
 	implementation 'com.google.api-client:google-api-client:2.9.1'
+	implementation 'com.google.firebase:firebase-admin:9.4.3'
 
 	runtimeOnly 'org.postgresql:postgresql'
 	implementation 'org.flywaydb:flyway-core'

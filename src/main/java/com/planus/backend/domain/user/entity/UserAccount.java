@@ -75,6 +75,12 @@ public class UserAccount {
     @Column(name = "home_ownership")
     private Boolean homeOwnership;
 
+    @Column(name = "self_introduction", columnDefinition = "TEXT")
+    private String selfIntroduction;
+
+    @Column(name = "fcm_token", length = 512)
+    private String fcmToken;
+
     @Column(name = "refresh_token")
     private String refreshToken;
 
@@ -116,7 +122,8 @@ public class UserAccount {
             List<String> hobbies,
             String spendingHabit,
             Boolean employmentStatus,
-            Boolean homeOwnership) {
+            Boolean homeOwnership,
+            String selfIntroduction) {
         this.nickname = nickname;
         this.age = age;
         this.gender = gender;
@@ -128,6 +135,12 @@ public class UserAccount {
         this.spendingHabit = spendingHabit;
         this.employmentStatus = employmentStatus;
         this.homeOwnership = homeOwnership;
+        this.selfIntroduction = selfIntroduction;
+    }
+
+    /** FCM 디바이스 토큰을 갱신한다. */
+    public void updateFcmToken(String fcmToken) {
+        this.fcmToken = fcmToken;
     }
 
     /** 로그인·회원가입 시 발급된 리프레시 토큰을 저장한다. */

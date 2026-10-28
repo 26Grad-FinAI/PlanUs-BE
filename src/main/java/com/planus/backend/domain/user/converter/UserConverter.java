@@ -55,6 +55,7 @@ public class UserConverter {
                 user.getSpendingHabit(),
                 user.getEmploymentStatus(),
                 user.getHomeOwnership(),
+                user.getSelfIntroduction(),
                 user.isProfileCompleted(),
                 user.getCreatedAt(),
                 user.getUpdatedAt());

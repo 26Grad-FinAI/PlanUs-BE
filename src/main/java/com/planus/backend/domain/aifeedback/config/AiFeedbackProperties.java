@@ -17,15 +17,15 @@ public class AiFeedbackProperties {
     private double sparseFrac = 0.80;
     private long sparseMin = 80_000;
     private double lowSpreadMult = 4.0;
-    /** 이중 분포(bimodal) 카테고리: baseline 계산 시 bimodalMin 미만 거래를 제외한다. 외식(2)이 기본값. */
-    private int[] bimodalCategories = {2};
+    /** 이중 분포(bimodal) 카테고리: baseline 계산 시 bimodalMin 미만 거래를 제외한다. 식대(7)가 기본값. */
+    private int[] bimodalCategories = {7};
     /** bimodal 카테고리의 baseline 제외 하한 (원). 카페급 소액 거래를 baseline에서 걸러낸다. */
     private long bimodalMin = 6_000;
 
     // ── [3] 주간 추세(4+4 대칭 윈도우) — 고빈도 카테고리만 ──
     private double trendRatio = 1.40;
     private double trendFrac = 0.06;
-    private int[] highFreqCategories = {1, 2, 6, 8};
+    private int[] highFreqCategories = {1, 7, 4, 5};
 
     // ── 기준선 ──
     private int baselineWeeks = 8;
@@ -64,9 +64,9 @@ public class AiFeedbackProperties {
      * <p>사용자별 오버라이드는 {@code user_profile.sensitive_areas}(DB)로 관리한다.
      */
     public static class CategoryProperties {
-        private List<Long> essential = List.of(5L, 9L);
-        private List<Long> semiEssential = List.of(1L, 4L, 7L);
-        private List<Long> spikeProne = List.of(10L);
+        private List<Long> essential = List.of(3L, 6L);
+        private List<Long> semiEssential = List.of(1L, 2L, 9L);
+        private List<Long> spikeProne = List.of(8L);
 
         public List<Long> getEssential() {
             return essential;

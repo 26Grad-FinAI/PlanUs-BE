@@ -1048,15 +1048,15 @@ class WalkForwardValidationTest {
         try (BufferedReader br = new BufferedReader(new InputStreamReader(Objects.requireNonNull(
                 WalkForwardValidationTest.class.getResourceAsStream("/testdata/budgets.csv"),
                 "budgets.csv 파일을 찾을 수 없습니다.")))) {
-            br.readLine(); // 헤더 스킵 (month,식료품,외식,...)
+            br.readLine(); // 헤더 스킵 (month,식료품,의류신발,...)
             String line;
             while ((line = br.readLine()) != null) {
                 String[] cols = line.split(",", -1);
-                if (cols.length < 12 || cols[0].isBlank()) continue;
+                if (cols.length < 11 || cols[0].isBlank()) continue;
                 try {
                     YearMonth ym = YearMonth.parse(cols[0].trim(), MONTH_FMT);
                     Map<Integer, Long> budget = new HashMap<>();
-                    for (int catId = 1; catId <= 11; catId++) {
+                    for (int catId = 1; catId <= 10; catId++) {
                         String val = cols[catId].trim();
                         budget.put(catId, val.isEmpty() ? 0L : Long.parseLong(val));
                     }

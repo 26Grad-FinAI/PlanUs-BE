@@ -23,7 +23,7 @@ import org.springframework.transaction.annotation.Transactional;
 public class IncomeService {
 
     private static final int MIN_CATEGORY_ID = 1;
-    private static final int MAX_CATEGORY_ID = 11;
+    private static final int MAX_CATEGORY_ID = 10;
 
     private final ExpenseRepository expenseRepository;
     private final BudgetRepository budgetRepository;

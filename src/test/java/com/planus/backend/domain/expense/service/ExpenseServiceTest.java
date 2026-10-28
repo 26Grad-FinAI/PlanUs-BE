@@ -100,7 +100,7 @@ class ExpenseServiceTest {
                     .amount(500000L)
                     .title("월세")
                     .expenseDate(LocalDateTime.of(2026, 8, 1, 0, 0))
-                    .categoryId(11)
+                    .categoryId(10)
                     .recurring(true)
                     .planned(false)
                     .createdAt(LocalDateTime.of(2026, 8, 1, 0, 0))
@@ -108,7 +108,7 @@ class ExpenseServiceTest {
             when(expenseRepository.save(any())).thenReturn(saved);
 
             ExpenseRequest request =
-                    new ExpenseRequest(500000L, "월세", LocalDateTime.of(2026, 8, 1, 0, 0), 11, null, null, true, null);
+                    new ExpenseRequest(500000L, "월세", LocalDateTime.of(2026, 8, 1, 0, 0), 10, null, null, true, null);
 
             ExpenseResponse response = expenseService.createExpense(1L, request);
 

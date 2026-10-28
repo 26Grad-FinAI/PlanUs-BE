@@ -1,5 +1,6 @@
 package com.planus.backend.domain.user.controller;
 
+import com.planus.backend.domain.aibudget.dto.FcmTokenRequest;
 import com.planus.backend.domain.auth.service.AuthService;
 import com.planus.backend.domain.user.dto.UserProfileGetResponse;
 import com.planus.backend.domain.user.dto.UserProfileRequest;
@@ -109,6 +110,14 @@ public class UserController {
     @GetMapping("/me/profile")
     public ApiResponse<UserProfileGetResponse> getProfile(@AuthenticationPrincipal Long userId) {
         return ApiResponse.onSuccess(GeneralSuccessCode.OK, userService.getProfile(userId));
+    }
+
+    @Operation(summary = "FCM 디바이스 토큰 등록", description = "푸시 알림을 위한 FCM 디바이스 토큰을 등록한다.")
+    @PostMapping("/me/fcm-token")
+    public ApiResponse<Void> registerFcmToken(
+            @AuthenticationPrincipal Long userId, @Valid @RequestBody FcmTokenRequest request) {
+        userService.updateFcmToken(userId, request.fcmToken());
+        return ApiResponse.onSuccess(GeneralSuccessCode.OK);
     }
 
     @Operation(

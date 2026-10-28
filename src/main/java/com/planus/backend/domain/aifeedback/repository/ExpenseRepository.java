@@ -107,4 +107,19 @@ public interface ExpenseRepository extends JpaRepository<Expense, Long> {
             + " GROUP BY YEAR(e.expenseDate), MONTH(e.expenseDate)"
             + " ORDER BY YEAR(e.expenseDate), MONTH(e.expenseDate)")
     List<Object[]> sumExpensesGroupByMonth(Long userId, LocalDateTime from, LocalDateTime to);
+
+    /**
+     * 특정 기간 내 월별·카테고리별 지출 합계를 조회한다.
+     *
+     * @param userId 사용자 ID
+     * @param from   조회 시작 일시 (포함)
+     * @param to     조회 종료 일시 (포함)
+     * @return [year(Integer), month(Integer), categoryId(Integer), sum(Long)] 형태의 배열 목록
+     */
+    @Query("SELECT YEAR(e.expenseDate), MONTH(e.expenseDate), e.categoryId, COALESCE(SUM(e.amount), 0)"
+            + " FROM Expense e WHERE e.userId = :userId AND e.type = 'EXPENSE'"
+            + " AND e.expenseDate BETWEEN :from AND :to"
+            + " GROUP BY YEAR(e.expenseDate), MONTH(e.expenseDate), e.categoryId"
+            + " ORDER BY YEAR(e.expenseDate), MONTH(e.expenseDate), e.categoryId")
+    List<Object[]> sumExpensesGroupByMonthAndCategory(Long userId, LocalDateTime from, LocalDateTime to);
 }
