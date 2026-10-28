@@ -49,6 +49,7 @@ public enum GeneralErrorCode implements BaseErrorCode {
     BUDGET_PLAN_IN_PROGRESS(HttpStatus.CONFLICT, "BUDGET_409_001", "이미 진행 중인 예산 산출 요청이 있습니다."),
     BUDGET_PLAN_NOT_FOUND(HttpStatus.NOT_FOUND, "BUDGET_404_003", "해당 월의 예산 산출 요청이 존재하지 않습니다."),
     BUDGET_PLAN_NOT_COMPLETED(HttpStatus.BAD_REQUEST, "BUDGET_400_001", "예산 산출이 아직 완료되지 않았습니다."),
+    PROFILE_NOT_COMPLETED(HttpStatus.BAD_REQUEST, "BUDGET_400_002", "프로필 입력이 완료되지 않았습니다."),
     AI_BUDGET_SERVICE_UNAVAILABLE(HttpStatus.SERVICE_UNAVAILABLE, "BUDGET_503_001", "AI 예산 산출 서비스가 일시적으로 불가합니다.");
 
     private final HttpStatus httpStatus;

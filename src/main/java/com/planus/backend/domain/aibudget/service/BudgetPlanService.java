@@ -56,15 +56,27 @@ public class BudgetPlanService {
      */
     @Transactional(propagation = Propagation.REQUIRES_NEW)
     public void triggerBudgetPlan(Long userId) {
+        // 프로필 완료 여부 검증
+        UserAccount user = userAccountRepository
+                .findById(userId)
+                .orElseThrow(() -> new GeneralException(GeneralErrorCode.NOT_FOUND));
+        if (!user.isProfileCompleted()) {
+            throw new GeneralException(GeneralErrorCode.PROFILE_NOT_COMPLETED);
+        }
+
         LocalDate yearMonth = LocalDate.now().withDayOfMonth(1);
 
         Optional<BudgetPlanRequest> existing = budgetPlanRequestRepository.findByUserIdAndYearMonth(userId, yearMonth);
         if (existing.isPresent()) {
             BudgetPlanRequest req = existing.get();
             if (req.getStatus() == BudgetPlanStatus.PENDING || req.getStatus() == BudgetPlanStatus.IN_PROGRESS) {
-                throw new GeneralException(GeneralErrorCode.BUDGET_PLAN_IN_PROGRESS);
+                // 15분 이상 지난 PENDING/IN_PROGRESS는 stuck으로 간주하여 재시도 허용
+                if (req.getCreatedAt().plusMinutes(15).isBefore(LocalDateTime.now())) {
+                    log.warn("stuck 상태의 요청 삭제 userId={} status={}", userId, req.getStatus());
+                } else {
+                    throw new GeneralException(GeneralErrorCode.BUDGET_PLAN_IN_PROGRESS);
+                }
             }
-            // COMPLETED 또는 FAILED → 삭제 후 재생성
             budgetPlanRequestRepository.delete(req);
             budgetPlanRequestRepository.flush();
         }
@@ -77,7 +89,13 @@ public class BudgetPlanService {
         TransactionSynchronizationManager.registerSynchronization(new TransactionSynchronization() {
             @Override
             public void afterCommit() {
-                applicationContext.getBean(BudgetPlanService.class).executePlanAsync(userId, yearMonth);
+                BudgetPlanService self = applicationContext.getBean(BudgetPlanService.class);
+                try {
+                    self.executePlanAsync(userId, yearMonth);
+                } catch (org.springframework.core.task.TaskRejectedException e) {
+                    log.error("AI 예산 산출 작업 제출 거부 userId={}", userId, e);
+                    self.markFailed(userId, yearMonth, "처리 대기열 초과");
+                }
             }
         });
     }
@@ -165,7 +183,7 @@ public class BudgetPlanService {
 
     private List<Map<String, Object>> buildExpenseHistory(Long userId, LocalDate yearMonth) {
         LocalDateTime from = yearMonth.minusMonths(3).atStartOfDay();
-        LocalDateTime to = yearMonth.atStartOfDay();
+        LocalDateTime to = yearMonth.atStartOfDay().minusSeconds(1);
 
         // 월별·카테고리별 집계: [year, month, categoryId, sum]
         List<Object[]> grouped = expenseRepository.sumExpensesGroupByMonthAndCategory(userId, from, to);
@@ -236,6 +254,7 @@ public class BudgetPlanService {
         for (AiBudgetResponse.Budget.Allocation alloc : response.budget().allocations()) {
             int categoryId = Categories.id(alloc.category());
             if (categoryId == Categories.ETC_CATEGORY_ID) {
+                log.warn("AI 응답에 미등록 카테고리명: '{}' userId={}", alloc.category(), userId);
                 continue;
             }
 

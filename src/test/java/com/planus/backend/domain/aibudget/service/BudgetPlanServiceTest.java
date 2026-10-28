@@ -79,8 +79,7 @@ class BudgetPlanServiceTest {
             when(budgetPlanRequestRepository.findByUserIdAndYearMonth(userId, yearMonth))
                     .thenReturn(Optional.of(existing));
 
-            assertThatThrownBy(() -> service.triggerBudgetPlan(userId))
-                    .isInstanceOf(GeneralException.class);
+            assertThatThrownBy(() -> service.triggerBudgetPlan(userId)).isInstanceOf(GeneralException.class);
         }
 
         @Test
@@ -98,8 +97,7 @@ class BudgetPlanServiceTest {
             when(budgetPlanRequestRepository.findByUserIdAndYearMonth(userId, yearMonth))
                     .thenReturn(Optional.of(existing));
 
-            assertThatThrownBy(() -> service.triggerBudgetPlan(userId))
-                    .isInstanceOf(GeneralException.class);
+            assertThatThrownBy(() -> service.triggerBudgetPlan(userId)).isInstanceOf(GeneralException.class);
         }
     }
 

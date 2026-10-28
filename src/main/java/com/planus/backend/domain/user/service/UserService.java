@@ -10,8 +10,6 @@ import com.planus.backend.domain.user.repository.UserAccountRepository;
 import com.planus.backend.global.apiPayload.code.GeneralErrorCode;
 import com.planus.backend.global.apiPayload.exception.GeneralException;
 import lombok.RequiredArgsConstructor;
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -20,13 +18,10 @@ import org.springframework.transaction.annotation.Transactional;
 @RequiredArgsConstructor
 public class UserService {
 
-    private static final Logger log = LoggerFactory.getLogger(UserService.class);
-
     private final UserAccountRepository userAccountRepository;
 
     /**
      * 사용자 프로필을 저장하고 가용예산을 반환한다.
-     * 프로필이 완료되면 AI 예산 산출을 자동 트리거한다.
      *
      * @param userId  JWT 필터가 주입한 사용자 ID
      * @param request 프로필 요청 DTO
@@ -57,7 +52,6 @@ public class UserService {
 
     /**
      * 사용자 프로필을 수정한다.
-     * 프로필이 완료되면 AI 예산 산출을 자동 트리거한다.
      *
      * @param userId  JWT 필터가 주입한 사용자 ID
      * @param request 수정할 프로필 요청 DTO
