@@ -988,10 +988,12 @@ public class AiFeedbackService {
     private Confidence deriveOverallConfidence(PacingResult pacing, Confidence anomalyConfidence, boolean hasAnomaly) {
         Confidence base;
         if (pacing != null) {
-            base = switch (pacing.bandWidth()) {
-                case WIDE -> Confidence.LOW;
-                case MEDIUM -> Confidence.MEDIUM;
-                case NARROW -> Confidence.HIGH;};
+            base =
+                    switch (pacing.bandWidth()) {
+                        case WIDE -> Confidence.LOW;
+                        case MEDIUM -> Confidence.MEDIUM;
+                        case NARROW -> Confidence.HIGH;
+                    };
         } else {
             base = Confidence.LOW;
         }
