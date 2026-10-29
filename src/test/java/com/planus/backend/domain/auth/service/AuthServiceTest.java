@@ -15,11 +15,13 @@ import com.planus.backend.domain.auth.dto.LoginRequest;
 import com.planus.backend.domain.auth.dto.LoginResponse;
 import com.planus.backend.domain.auth.dto.SignUpRequest;
 import com.planus.backend.domain.auth.dto.SignUpResponse;
+import com.planus.backend.domain.auth.repository.PasswordResetCodeRepository;
 import com.planus.backend.domain.user.entity.AuthProvider;
 import com.planus.backend.domain.user.entity.UserAccount;
 import com.planus.backend.domain.user.repository.UserAccountRepository;
 import com.planus.backend.global.apiPayload.code.GeneralErrorCode;
 import com.planus.backend.global.apiPayload.exception.GeneralException;
+import com.planus.backend.global.mail.MailService;
 import com.planus.backend.global.security.JwtProvider;
 import java.util.Optional;
 import org.junit.jupiter.api.BeforeEach;
@@ -41,11 +43,16 @@ class AuthServiceTest {
         passwordEncoder = mock(PasswordEncoder.class);
         jwtProvider = mock(JwtProvider.class);
         authService = new AuthService(
-                userAccountRepository, passwordEncoder, jwtProvider, mock(jakarta.persistence.EntityManager.class));
+                userAccountRepository,
+                mock(PasswordResetCodeRepository.class),
+                passwordEncoder,
+                jwtProvider,
+                mock(jakarta.persistence.EntityManager.class),
+                mock(MailService.class));
     }
 
     private SignUpRequest validRequest() {
-        return new SignUpRequest("user@example.com", "pass1234", "pass1234", true);
+        return new SignUpRequest("user@example.com", "홍길동", "pass1234", "pass1234", true);
     }
 
     private UserAccount savedUser() {
@@ -90,7 +97,7 @@ class AuthServiceTest {
         @Test
         @DisplayName("약관에 동의하지 않으면 TERMS_NOT_AGREED 예외가 발생한다")
         void signUp_termsNotAgreed() {
-            SignUpRequest request = new SignUpRequest("user@example.com", "pass1234", "pass1234", false);
+            SignUpRequest request = new SignUpRequest("user@example.com", "홍길동", "pass1234", "pass1234", false);
 
             assertThatThrownBy(() -> authService.signUp(request))
                     .isInstanceOf(GeneralException.class)
@@ -103,7 +110,7 @@ class AuthServiceTest {
         @Test
         @DisplayName("이메일 형식이 올바르지 않으면 INVALID_EMAIL_FORMAT 예외가 발생한다")
         void signUp_invalidEmailFormat() {
-            SignUpRequest request = new SignUpRequest("not-an-email", "pass1234", "pass1234", true);
+            SignUpRequest request = new SignUpRequest("not-an-email", "홍길동", "pass1234", "pass1234", true);
 
             assertThatThrownBy(() -> authService.signUp(request))
                     .isInstanceOf(GeneralException.class)
@@ -129,7 +136,7 @@ class AuthServiceTest {
         @Test
         @DisplayName("비밀번호가 조건을 충족하지 않으면 PASSWORD_TOO_WEAK 예외가 발생한다")
         void signUp_passwordTooWeak() {
-            SignUpRequest request = new SignUpRequest("user@example.com", "weakpw", "weakpw", true);
+            SignUpRequest request = new SignUpRequest("user@example.com", "홍길동", "weakpw", "weakpw", true);
             when(userAccountRepository.existsByEmail(anyString())).thenReturn(false);
 
             assertThatThrownBy(() -> authService.signUp(request))
@@ -143,7 +150,7 @@ class AuthServiceTest {
         @Test
         @DisplayName("비밀번호와 확인 비밀번호가 다르면 PASSWORD_MISMATCH 예외가 발생한다")
         void signUp_passwordMismatch() {
-            SignUpRequest request = new SignUpRequest("user@example.com", "pass1234", "pass5678", true);
+            SignUpRequest request = new SignUpRequest("user@example.com", "홍길동", "pass1234", "pass5678", true);
             when(userAccountRepository.existsByEmail(anyString())).thenReturn(false);
 
             assertThatThrownBy(() -> authService.signUp(request))

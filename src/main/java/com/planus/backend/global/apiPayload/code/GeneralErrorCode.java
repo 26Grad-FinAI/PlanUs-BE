@@ -31,6 +31,10 @@ public enum GeneralErrorCode implements BaseErrorCode {
     INVALID_TOKEN(HttpStatus.UNAUTHORIZED, "AUTH_401_003", "유효하지 않은 토큰입니다."),
     EXPIRED_TOKEN(HttpStatus.UNAUTHORIZED, "AUTH_401_004", "만료된 토큰입니다."),
     SOCIAL_LOGIN_EMAIL_CONFLICT(HttpStatus.CONFLICT, "AUTH_409_002", "이미 다른 방식으로 가입된 이메일입니다."),
+    INVALID_RESET_CODE(HttpStatus.BAD_REQUEST, "AUTH_400_005", "유효하지 않은 인증코드입니다."),
+    EXPIRED_RESET_CODE(HttpStatus.BAD_REQUEST, "AUTH_400_006", "만료된 인증코드입니다."),
+    EMAIL_NOT_FOUND(HttpStatus.NOT_FOUND, "AUTH_404_001", "등록되지 않은 이메일입니다."),
+    RESET_CODE_NOT_VERIFIED(HttpStatus.BAD_REQUEST, "AUTH_400_007", "인증코드가 검증되지 않았습니다."),
 
     // Expense
     INVALID_CATEGORY(HttpStatus.BAD_REQUEST, "EXPENSE_400_001", "유효하지 않은 카테고리입니다. (1~10)"),

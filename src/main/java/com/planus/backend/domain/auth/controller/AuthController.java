@@ -2,6 +2,9 @@ package com.planus.backend.domain.auth.controller;
 
 import com.planus.backend.domain.auth.dto.LoginRequest;
 import com.planus.backend.domain.auth.dto.LoginResponse;
+import com.planus.backend.domain.auth.dto.PasswordResetRequest;
+import com.planus.backend.domain.auth.dto.PasswordResetSendRequest;
+import com.planus.backend.domain.auth.dto.PasswordResetVerifyRequest;
 import com.planus.backend.domain.auth.dto.ReissueRequest;
 import com.planus.backend.domain.auth.dto.SignUpRequest;
 import com.planus.backend.domain.auth.dto.SignUpResponse;
@@ -190,6 +193,48 @@ public class AuthController {
     @PostMapping("/logout")
     public ApiResponse<Void> logout(@AuthenticationPrincipal Long userId) {
         authService.logout(userId);
+        return ApiResponse.onSuccess(GeneralSuccessCode.OK);
+    }
+
+    @Operation(summary = "비밀번호 재설정 인증코드 발송", description = "등록된 이메일로 6자리 인증코드를 발송한다. 인증코드는 10분간 유효하다.")
+    @ApiResponses({
+        @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "200", description = "인증코드 발송 성공"),
+        @io.swagger.v3.oas.annotations.responses.ApiResponse(
+                responseCode = "404",
+                description = "등록되지 않은 이메일",
+                content = @Content(schema = @Schema(implementation = ApiResponse.class)))
+    })
+    @PostMapping("/password-reset/send")
+    public ApiResponse<Void> sendPasswordResetCode(@Valid @RequestBody PasswordResetSendRequest request) {
+        authService.sendPasswordResetCode(request);
+        return ApiResponse.onSuccess(GeneralSuccessCode.OK);
+    }
+
+    @Operation(summary = "비밀번호 재설정 인증코드 검증", description = "이메일로 발송된 인증코드를 검증한다.")
+    @ApiResponses({
+        @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "200", description = "인증코드 검증 성공"),
+        @io.swagger.v3.oas.annotations.responses.ApiResponse(
+                responseCode = "400",
+                description = "유효하지 않거나 만료된 인증코드",
+                content = @Content(schema = @Schema(implementation = ApiResponse.class)))
+    })
+    @PostMapping("/password-reset/verify")
+    public ApiResponse<Void> verifyPasswordResetCode(@Valid @RequestBody PasswordResetVerifyRequest request) {
+        authService.verifyPasswordResetCode(request);
+        return ApiResponse.onSuccess(GeneralSuccessCode.OK);
+    }
+
+    @Operation(summary = "비밀번호 재설정", description = "인증코드 검증 완료 후 새 비밀번호를 설정한다. 비밀번호 정책: 8자 이상, 영문+숫자 필수 포함.")
+    @ApiResponses({
+        @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "200", description = "비밀번호 재설정 성공"),
+        @io.swagger.v3.oas.annotations.responses.ApiResponse(
+                responseCode = "400",
+                description = "인증코드 미검증 또는 비밀번호 정책 미충족",
+                content = @Content(schema = @Schema(implementation = ApiResponse.class)))
+    })
+    @PostMapping("/password-reset")
+    public ApiResponse<Void> resetPassword(@Valid @RequestBody PasswordResetRequest request) {
+        authService.resetPassword(request);
         return ApiResponse.onSuccess(GeneralSuccessCode.OK);
     }
 }

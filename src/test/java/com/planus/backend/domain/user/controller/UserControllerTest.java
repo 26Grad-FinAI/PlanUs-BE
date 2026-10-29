@@ -15,6 +15,7 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.planus.backend.domain.auth.service.AuthService;
+import com.planus.backend.domain.user.dto.FixedExpenseItem;
 import com.planus.backend.domain.user.dto.UserProfileGetResponse;
 import com.planus.backend.domain.user.dto.UserProfileRequest;
 import com.planus.backend.domain.user.dto.UserProfileResponse;
@@ -102,60 +103,6 @@ class UserControllerTest {
                 mockMvc.perform(post("/api/users/me/profile")
                                 .contentType(MediaType.APPLICATION_JSON)
                                 .content("{}"))
-                        .andExpect(status().isBadRequest())
-                        .andExpect(jsonPath("$.isSuccess").value(false))
-                        .andExpect(jsonPath("$.code").value("COMMON_400_002"));
-            }
-
-            @Test
-            @DisplayName("hobbies에 빈 문자열 요소가 포함되면 400을 반환한다")
-            void saveProfile_blankHobbyElement_returns400() throws Exception {
-                SecurityContextHolder.getContext().setAuthentication(new UsernamePasswordAuthenticationToken(1L, null));
-
-                UserProfileRequest requestWithBlankHobby = new UserProfileRequest(
-                        "김스펜드",
-                        30,
-                        "MALE",
-                        "서울",
-                        3_000_000L,
-                        1_000_000L,
-                        500_000L,
-                        List.of("DINING", ""),
-                        "SAVING",
-                        true,
-                        false,
-                        null);
-
-                mockMvc.perform(post("/api/users/me/profile")
-                                .contentType(MediaType.APPLICATION_JSON)
-                                .content(objectMapper.writeValueAsString(requestWithBlankHobby)))
-                        .andExpect(status().isBadRequest())
-                        .andExpect(jsonPath("$.isSuccess").value(false))
-                        .andExpect(jsonPath("$.code").value("COMMON_400_002"));
-            }
-
-            @Test
-            @DisplayName("hobbies에 공백만 있는 요소가 포함되면 400을 반환한다")
-            void saveProfile_whitespaceHobbyElement_returns400() throws Exception {
-                SecurityContextHolder.getContext().setAuthentication(new UsernamePasswordAuthenticationToken(1L, null));
-
-                UserProfileRequest requestWithWhitespaceHobby = new UserProfileRequest(
-                        "김스펜드",
-                        30,
-                        "MALE",
-                        "서울",
-                        3_000_000L,
-                        1_000_000L,
-                        500_000L,
-                        List.of("   "),
-                        "SAVING",
-                        true,
-                        false,
-                        null);
-
-                mockMvc.perform(post("/api/users/me/profile")
-                                .contentType(MediaType.APPLICATION_JSON)
-                                .content(objectMapper.writeValueAsString(requestWithWhitespaceHobby)))
                         .andExpect(status().isBadRequest())
                         .andExpect(jsonPath("$.isSuccess").value(false))
                         .andExpect(jsonPath("$.code").value("COMMON_400_002"));
@@ -265,11 +212,10 @@ class UserControllerTest {
                         "MALE",
                         "서울특별시",
                         3_000_000L,
+                        List.of(new FixedExpenseItem("월세", 700_000L), new FixedExpenseItem("보험", 300_000L)),
                         1_000_000L,
                         500_000L,
                         1_500_000L,
-                        List.of("DINING", "TRAVEL"),
-                        "BALANCED",
                         true,
                         false,
                         null,
@@ -285,8 +231,7 @@ class UserControllerTest {
                         .andExpect(jsonPath("$.result.email").value("spendwise@email.com"))
                         .andExpect(jsonPath("$.result.nickname").value("김스펜드"))
                         .andExpect(jsonPath("$.result.availableBudget").value(1_500_000L))
-                        .andExpect(jsonPath("$.result.hobbies[0]").value("DINING"))
-                        .andExpect(jsonPath("$.result.hobbies[1]").value("TRAVEL"))
+                        .andExpect(jsonPath("$.result.totalFixedExpenses").value(1_000_000L))
                         .andExpect(jsonPath("$.result.profileCompleted").value(true));
 
                 verify(userService).getProfile(1L);
@@ -344,15 +289,12 @@ class UserControllerTest {
 
     private UserProfileRequest validRequest() {
         return new UserProfileRequest(
-                "김스펜드",
                 30,
                 "MALE",
                 "서울",
                 3_000_000L,
-                1_000_000L,
+                List.of(new FixedExpenseItem("월세", 700_000L), new FixedExpenseItem("보험", 300_000L)),
                 500_000L,
-                List.of("DINING", "TRAVEL"),
-                "SAVING",
                 true,
                 false,
                 null);

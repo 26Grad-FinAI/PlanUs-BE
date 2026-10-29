@@ -1,0 +1,2 @@
+ALTER TABLE "user" DROP COLUMN IF EXISTS hobbies;
+ALTER TABLE "user" DROP COLUMN IF EXISTS spending_habit;

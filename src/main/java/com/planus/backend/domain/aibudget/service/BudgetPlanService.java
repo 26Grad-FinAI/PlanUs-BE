@@ -169,7 +169,7 @@ public class BudgetPlanService {
         profile.put("취업여부", boolToCode(user.getEmploymentStatus()));
         profile.put("주택소유유무", boolToCode(user.getHomeOwnership()));
         profile.put("월소득", user.getMonthlyIncome());
-        profile.put("월고정지출", user.getMonthlyFixedExpenses());
+        profile.put("월고정지출", user.totalFixedExpenses());
         profile.put("월목표저축액", user.getMonthlySavingsGoal());
 
         // 소비내역: 최근 3개월 카테고리별 월별 집계 (기타 카테고리 제외)

@@ -34,15 +34,12 @@ public class UserService {
                 .orElseThrow(() -> new GeneralException(GeneralErrorCode.NOT_FOUND));
 
         user.updateProfile(
-                request.nickname(),
                 request.age(),
                 request.gender(),
                 request.residence(),
                 request.monthlyIncome(),
                 request.monthlyFixedExpenses(),
                 request.monthlySavingsGoal(),
-                request.hobbies(),
-                request.spendingHabit(),
                 request.employmentStatus(),
                 request.homeOwnership(),
                 request.selfIntroduction());
@@ -64,15 +61,12 @@ public class UserService {
                 .orElseThrow(() -> new GeneralException(GeneralErrorCode.NOT_FOUND));
 
         user.updateProfile(
-                request.nickname(),
                 request.age(),
                 request.gender(),
                 request.residence(),
                 request.monthlyIncome(),
                 request.monthlyFixedExpenses(),
                 request.monthlySavingsGoal(),
-                request.hobbies(),
-                request.spendingHabit(),
                 request.employmentStatus(),
                 request.homeOwnership(),
                 request.selfIntroduction());

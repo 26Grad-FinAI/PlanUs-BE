@@ -34,7 +34,13 @@ class AuthServiceReissueTest {
         userAccountRepository = mock(UserAccountRepository.class);
         jwtProvider = mock(JwtProvider.class);
         entityManager = mock(EntityManager.class);
-        authService = new AuthService(userAccountRepository, mock(PasswordEncoder.class), jwtProvider, entityManager);
+        authService = new AuthService(
+                userAccountRepository,
+                mock(com.planus.backend.domain.auth.repository.PasswordResetCodeRepository.class),
+                mock(PasswordEncoder.class),
+                jwtProvider,
+                entityManager,
+                mock(com.planus.backend.global.mail.MailService.class));
     }
 
     @Nested

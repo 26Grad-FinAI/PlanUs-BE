@@ -122,7 +122,8 @@ class AiFeedbackServiceTest {
         return UserAccount.builder()
                 .id(USER_ID)
                 .monthlyIncome(3_000_000)
-                .monthlyFixedExpenses(1_000_000)
+                .monthlyFixedExpenses(
+                        java.util.List.of(new com.planus.backend.domain.user.dto.FixedExpenseItem("기타", 1_000_000L)))
                 .monthlySavingsGoal(500_000)
                 .build();
     }

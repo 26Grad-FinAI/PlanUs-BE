@@ -7,6 +7,7 @@ import static org.mockito.Mockito.spy;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
+import com.planus.backend.domain.user.dto.FixedExpenseItem;
 import com.planus.backend.domain.user.dto.UserProfileGetResponse;
 import com.planus.backend.domain.user.dto.UserProfileRequest;
 import com.planus.backend.domain.user.dto.UserProfileResponse;
@@ -81,15 +82,12 @@ class UserServiceTest {
 
             verify(user)
                     .updateProfile(
-                            "김스펜드",
                             30,
                             "MALE",
                             "서울",
                             3_000_000L,
-                            1_000_000L,
+                            List.of(new FixedExpenseItem("월세", 700_000L), new FixedExpenseItem("보험", 300_000L)),
                             500_000L,
-                            List.of("DINING", "TRAVEL"),
-                            "SAVING",
                             true,
                             false,
                             null);
@@ -148,15 +146,12 @@ class UserServiceTest {
 
             verify(user)
                     .updateProfile(
-                            "김스펜드",
                             30,
                             "MALE",
                             "서울",
                             3_000_000L,
-                            1_000_000L,
+                            List.of(new FixedExpenseItem("월세", 700_000L), new FixedExpenseItem("보험", 300_000L)),
                             500_000L,
-                            List.of("DINING", "TRAVEL"),
-                            "SAVING",
                             true,
                             false,
                             null);
@@ -194,10 +189,9 @@ class UserServiceTest {
                     .gender("MALE")
                     .residence("서울특별시")
                     .monthlyIncome(3_000_000L)
-                    .monthlyFixedExpenses(1_000_000L)
+                    .monthlyFixedExpenses(
+                            List.of(new FixedExpenseItem("월세", 700_000L), new FixedExpenseItem("보험", 300_000L)))
                     .monthlySavingsGoal(500_000L)
-                    .hobbies(List.of("DINING", "TRAVEL"))
-                    .spendingHabit("BALANCED")
                     .employmentStatus(true)
                     .homeOwnership(false)
                     .build();
@@ -207,7 +201,7 @@ class UserServiceTest {
 
             assertThat(response.userId()).isEqualTo(1L);
             assertThat(response.email()).isEqualTo("spendwise@email.com");
-            assertThat(response.hobbies()).containsExactly("DINING", "TRAVEL");
+            assertThat(response.totalFixedExpenses()).isEqualTo(1_000_000L);
             assertThat(response.availableBudget()).isEqualTo(1_500_000L);
             assertThat(response.profileCompleted()).isTrue();
         }
@@ -231,15 +225,12 @@ class UserServiceTest {
 
     private UserProfileRequest validRequest() {
         return new UserProfileRequest(
-                "김스펜드",
                 30,
                 "MALE",
                 "서울",
                 3_000_000L,
-                1_000_000L,
+                List.of(new FixedExpenseItem("월세", 700_000L), new FixedExpenseItem("보험", 300_000L)),
                 500_000L,
-                List.of("DINING", "TRAVEL"),
-                "SAVING",
                 true,
                 false,
                 null);
