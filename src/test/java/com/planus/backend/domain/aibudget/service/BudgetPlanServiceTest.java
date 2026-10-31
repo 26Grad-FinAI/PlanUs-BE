@@ -7,6 +7,7 @@ import static org.mockito.Mockito.*;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.planus.backend.domain.aibudget.client.AiBudgetClient;
 import com.planus.backend.domain.aibudget.client.dto.AiBudgetResponse;
+import com.planus.backend.domain.aibudget.dto.BudgetCategoryUpdateRequest;
 import com.planus.backend.domain.aibudget.dto.BudgetSummaryResponse;
 import com.planus.backend.domain.aibudget.entity.BudgetPlanRequest;
 import com.planus.backend.domain.aibudget.entity.BudgetPlanStatus;
@@ -309,8 +310,8 @@ class BudgetPlanServiceTest {
     }
 
     @Nested
-    @DisplayName("updateCategoryBudget()")
-    class UpdateCategoryBudget {
+    @DisplayName("saveCategories()")
+    class SaveCategories {
 
         private final Long userId = 1L;
         private final LocalDate yearMonth = LocalDate.of(2026, 10, 1);
@@ -320,12 +321,15 @@ class BudgetPlanServiceTest {
         void budgetNotFound_throws() {
             when(budgetRepository.findByUserIdAndYearMonth(userId, yearMonth)).thenReturn(Optional.empty());
 
-            assertThatThrownBy(() -> service.updateCategoryBudget(userId, yearMonth, 1, 50000))
+            List<BudgetCategoryUpdateRequest.CategoryAmount> items =
+                    List.of(new BudgetCategoryUpdateRequest.CategoryAmount(1, 50000L));
+
+            assertThatThrownBy(() -> service.saveCategories(userId, yearMonth, items))
                     .isInstanceOf(GeneralException.class);
         }
 
         @Test
-        @DisplayName("카테고리가 없으면 BUDGET_CATEGORY_NOT_FOUND 예외")
+        @DisplayName("존재하지 않는 카테고리 ID가 포함되면 BUDGET_CATEGORY_NOT_FOUND 예외")
         void categoryNotFound_throws() {
             Budget budget = Budget.builder()
                     .id(10L)
@@ -335,14 +339,17 @@ class BudgetPlanServiceTest {
                     .build();
 
             when(budgetRepository.findByUserIdAndYearMonth(userId, yearMonth)).thenReturn(Optional.of(budget));
-            when(budgetCategoryRepository.findByBudgetIdAndCategoryId(10L, 99)).thenReturn(Optional.empty());
+            when(budgetCategoryRepository.findByBudgetId(10L)).thenReturn(List.of());
 
-            assertThatThrownBy(() -> service.updateCategoryBudget(userId, yearMonth, 99, 50000))
+            List<BudgetCategoryUpdateRequest.CategoryAmount> items =
+                    List.of(new BudgetCategoryUpdateRequest.CategoryAmount(99, 50000L));
+
+            assertThatThrownBy(() -> service.saveCategories(userId, yearMonth, items))
                     .isInstanceOf(GeneralException.class);
         }
 
         @Test
-        @DisplayName("정상 수정 시 금액 변경, userModified 설정, 총액 재계산")
+        @DisplayName("여러 카테고리 일괄 수정 시 금액 변경, userModified 설정, 총액 재계산")
         void success() {
             Budget budget = Budget.builder()
                     .id(10L)
@@ -369,22 +376,27 @@ class BudgetPlanServiceTest {
                     .build();
 
             when(budgetRepository.findByUserIdAndYearMonth(userId, yearMonth)).thenReturn(Optional.of(budget));
-            when(budgetCategoryRepository.findByBudgetIdAndCategoryId(10L, 1)).thenReturn(Optional.of(cat1));
             when(budgetCategoryRepository.findByBudgetId(10L)).thenReturn(List.of(cat1, cat2));
 
-            BudgetSummaryResponse result = service.updateCategoryBudget(userId, yearMonth, 1, 80000);
+            List<BudgetCategoryUpdateRequest.CategoryAmount> items = List.of(
+                    new BudgetCategoryUpdateRequest.CategoryAmount(1, 80000L),
+                    new BudgetCategoryUpdateRequest.CategoryAmount(4, 400000L));
+
+            BudgetSummaryResponse result = service.saveCategories(userId, yearMonth, items);
 
             assertThat(cat1.getAmount()).isEqualTo(80000);
             assertThat(cat1.getUserModified()).isTrue();
-            // 총액 = 80000 + 500000 = 580000
-            assertThat(budget.getTotalBudget()).isEqualTo(580000);
-            assertThat(result.userTotalBudget()).isEqualTo(580000);
-            assertThat(result.budgetDifference()).isEqualTo(-20000);
+            assertThat(cat2.getAmount()).isEqualTo(400000);
+            assertThat(cat2.getUserModified()).isTrue();
+            // 총액 = 80000 + 400000 = 480000
+            assertThat(budget.getTotalBudget()).isEqualTo(480000);
+            assertThat(result.userTotalBudget()).isEqualTo(480000);
+            assertThat(result.budgetDifference()).isEqualTo(-120000);
         }
 
         @Test
-        @DisplayName("수정 후 aiAmount는 원래 AI 제안값을 유지한다")
-        void aiAmount_preserved_after_modify() {
+        @DisplayName("금액이 변경되지 않은 카테고리는 userModified가 설정되지 않는다")
+        void unchanged_category_not_marked() {
             Budget budget = Budget.builder()
                     .id(10L)
                     .userId(userId)
@@ -403,12 +415,45 @@ class BudgetPlanServiceTest {
                     .build();
 
             when(budgetRepository.findByUserIdAndYearMonth(userId, yearMonth)).thenReturn(Optional.of(budget));
-            when(budgetCategoryRepository.findByBudgetIdAndCategoryId(10L, 1)).thenReturn(Optional.of(cat1));
             when(budgetCategoryRepository.findByBudgetId(10L)).thenReturn(List.of(cat1));
 
-            service.updateCategoryBudget(userId, yearMonth, 1, 50000);
+            // 같은 금액으로 저장
+            List<BudgetCategoryUpdateRequest.CategoryAmount> items =
+                    List.of(new BudgetCategoryUpdateRequest.CategoryAmount(1, 100000L));
 
-            // userAmount는 변경, aiAmount는 원래 AI 값 유지
+            service.saveCategories(userId, yearMonth, items);
+
+            assertThat(cat1.getUserModified()).isFalse();
+        }
+
+        @Test
+        @DisplayName("수정 후 aiAmount는 원래 AI 제안값을 유지한다")
+        void aiAmount_preserved_after_modify() {
+            Budget budget = Budget.builder()
+                    .id(10L)
+                    .userId(userId)
+                    .yearMonth(yearMonth)
+                    .totalBudget(100000)
+                    .aiTotalBudget(100000L)
+                    .aiSummary("분석")
+                    .build();
+
+            BudgetCategory cat1 = BudgetCategory.builder()
+                    .budgetId(10L)
+                    .categoryId(1)
+                    .amount(100000)
+                    .aiAmount(100000L)
+                    .userModified(false)
+                    .build();
+
+            when(budgetRepository.findByUserIdAndYearMonth(userId, yearMonth)).thenReturn(Optional.of(budget));
+            when(budgetCategoryRepository.findByBudgetId(10L)).thenReturn(List.of(cat1));
+
+            List<BudgetCategoryUpdateRequest.CategoryAmount> items =
+                    List.of(new BudgetCategoryUpdateRequest.CategoryAmount(1, 50000L));
+
+            service.saveCategories(userId, yearMonth, items);
+
             assertThat(cat1.getAmount()).isEqualTo(50000);
             assertThat(cat1.getAiAmount()).isEqualTo(100000L);
 

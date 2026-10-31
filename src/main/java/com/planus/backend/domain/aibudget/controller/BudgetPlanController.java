@@ -114,11 +114,10 @@ public class BudgetPlanController {
         return ApiResponse.onSuccess(GeneralSuccessCode.OK, summary);
     }
 
-    @Operation(summary = "카테고리별 예산 수정", description = "특정 카테고리의 예산 금액을 수정하고 총액을 재계산한다.")
-    @PutMapping("/categories/{categoryId}")
-    public ApiResponse<BudgetSummaryResponse> updateCategoryBudget(
+    @Operation(summary = "카테고리 예산 일괄 저장", description = "프론트에서 수정한 카테고리별 금액을 일괄 저장한다. 총 예산은 자동 재계산된다.")
+    @PutMapping("/categories")
+    public ApiResponse<BudgetSummaryResponse> saveCategories(
             @AuthenticationPrincipal Long userId,
-            @PathVariable int categoryId,
             @Parameter(description = "조회 연월 (yyyy-MM)", example = "2026-10")
                     @RequestParam
                     @DateTimeFormat(pattern = "yyyy-MM")
@@ -126,8 +125,7 @@ public class BudgetPlanController {
             @Valid @RequestBody BudgetCategoryUpdateRequest request) {
 
         LocalDate ym = yearMonth.atDay(1);
-        BudgetSummaryResponse summary =
-                budgetPlanService.updateCategoryBudget(userId, ym, categoryId, request.amount());
+        BudgetSummaryResponse summary = budgetPlanService.saveCategories(userId, ym, request.categories());
         return ApiResponse.onSuccess(GeneralSuccessCode.OK, summary);
     }
 }

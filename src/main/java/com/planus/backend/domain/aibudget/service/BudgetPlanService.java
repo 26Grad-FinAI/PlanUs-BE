@@ -4,6 +4,7 @@ import com.fasterxml.jackson.databind.ObjectMapper;
 import com.planus.backend.domain.aibudget.client.AiBudgetClient;
 import com.planus.backend.domain.aibudget.client.dto.AiBudgetRequest;
 import com.planus.backend.domain.aibudget.client.dto.AiBudgetResponse;
+import com.planus.backend.domain.aibudget.dto.BudgetCategoryUpdateRequest;
 import com.planus.backend.domain.aibudget.dto.BudgetSummaryResponse;
 import com.planus.backend.domain.aibudget.entity.BudgetPlanAnalysis;
 import com.planus.backend.domain.aibudget.entity.BudgetPlanRequest;
@@ -408,23 +409,33 @@ public class BudgetPlanService {
         }
     }
 
-    /** 카테고리별 예산을 수정하고 총액을 재계산한 뒤 요약을 반환한다. */
+    /** 프론트에서 수정한 카테고리 금액을 일괄 저장하고 총액을 재계산한 뒤 요약을 반환한다. */
     @Transactional
-    public BudgetSummaryResponse updateCategoryBudget(Long userId, LocalDate yearMonth, int categoryId, long amount) {
+    public BudgetSummaryResponse saveCategories(
+            Long userId, LocalDate yearMonth, List<BudgetCategoryUpdateRequest.CategoryAmount> categories) {
         Budget budget = budgetRepository
                 .findByUserIdAndYearMonth(userId, yearMonth)
                 .orElseThrow(() -> new GeneralException(GeneralErrorCode.BUDGET_NOT_FOUND));
 
-        BudgetCategory budgetCategory = budgetCategoryRepository
-                .findByBudgetIdAndCategoryId(budget.getId(), categoryId)
-                .orElseThrow(() -> new GeneralException(GeneralErrorCode.BUDGET_CATEGORY_NOT_FOUND));
+        Map<Integer, BudgetCategory> existingMap = new HashMap<>();
+        for (BudgetCategory bc : budgetCategoryRepository.findByBudgetId(budget.getId())) {
+            existingMap.put(bc.getCategoryId(), bc);
+        }
 
-        budgetCategory.modifyAmount(amount);
+        for (BudgetCategoryUpdateRequest.CategoryAmount item : categories) {
+            BudgetCategory bc = existingMap.get(item.categoryId());
+            if (bc == null) {
+                throw new GeneralException(GeneralErrorCode.BUDGET_CATEGORY_NOT_FOUND);
+            }
+            if (bc.getAmount() != item.amount()) {
+                bc.modifyAmount(item.amount());
+            }
+        }
 
         // 총액 재계산
-        List<BudgetCategory> allCategories = budgetCategoryRepository.findByBudgetId(budget.getId());
-        long newTotal =
-                allCategories.stream().mapToLong(BudgetCategory::getAmount).sum();
+        long newTotal = existingMap.values().stream()
+                .mapToLong(BudgetCategory::getAmount)
+                .sum();
         budget.updateTotalBudget(newTotal);
 
         return getBudgetSummary(userId, yearMonth);
