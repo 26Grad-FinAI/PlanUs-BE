@@ -2,6 +2,7 @@ package com.planus.backend.domain.user.converter;
 
 import static org.assertj.core.api.Assertions.assertThat;
 
+import com.planus.backend.domain.user.dto.FixedExpenseItem;
 import com.planus.backend.domain.user.dto.UserProfileGetResponse;
 import com.planus.backend.domain.user.dto.UserProfileResponse;
 import com.planus.backend.domain.user.entity.UserAccount;
@@ -11,6 +12,11 @@ import org.junit.jupiter.api.Nested;
 import org.junit.jupiter.api.Test;
 
 class UserConverterTest {
+
+    private static final List<FixedExpenseItem> FIXED_EXPENSES_1M =
+            List.of(new FixedExpenseItem("월세", 700_000L), new FixedExpenseItem("보험", 300_000L));
+
+    private static final List<FixedExpenseItem> FIXED_EXPENSES_500K = List.of(new FixedExpenseItem("월세", 500_000L));
 
     @Nested
     @DisplayName("toProfileResponse (프로필 저장 응답)")
@@ -23,7 +29,7 @@ class UserConverterTest {
                     .id(1L)
                     .nickname("김스펜드")
                     .monthlyIncome(3_000_000L)
-                    .monthlyFixedExpenses(1_000_000L)
+                    .monthlyFixedExpenses(FIXED_EXPENSES_1M)
                     .monthlySavingsGoal(500_000L)
                     .build();
 
@@ -41,7 +47,7 @@ class UserConverterTest {
                     .id(1L)
                     .nickname("테스트")
                     .monthlyIncome(2_000_000L)
-                    .monthlyFixedExpenses(500_000L)
+                    .monthlyFixedExpenses(FIXED_EXPENSES_500K)
                     .monthlySavingsGoal(500_000L)
                     .build();
 
@@ -51,7 +57,7 @@ class UserConverterTest {
         }
 
         @Test
-        @DisplayName("10개 필드가 모두 채워진 유저는 profileCompleted가 true이다")
+        @DisplayName("필수 필드가 모두 채워진 유저는 profileCompleted가 true이다")
         void profileCompleted_true() {
             UserAccount user = UserAccount.builder()
                     .id(1L)
@@ -60,10 +66,8 @@ class UserConverterTest {
                     .gender("MALE")
                     .residence("서울")
                     .monthlyIncome(3_000_000L)
-                    .monthlyFixedExpenses(1_000_000L)
+                    .monthlyFixedExpenses(FIXED_EXPENSES_1M)
                     .monthlySavingsGoal(500_000L)
-                    .hobbies(List.of("DINING", "TRAVEL"))
-                    .spendingHabit("SAVING")
                     .employmentStatus(true)
                     .homeOwnership(false)
                     .build();
@@ -104,10 +108,8 @@ class UserConverterTest {
                     .gender("MALE")
                     .residence("서울특별시")
                     .monthlyIncome(3_000_000L)
-                    .monthlyFixedExpenses(1_000_000L)
+                    .monthlyFixedExpenses(FIXED_EXPENSES_1M)
                     .monthlySavingsGoal(500_000L)
-                    .hobbies(List.of("DINING", "TRAVEL"))
-                    .spendingHabit("BALANCED")
                     .employmentStatus(true)
                     .homeOwnership(false)
                     .build();
@@ -121,9 +123,8 @@ class UserConverterTest {
             assertThat(response.gender()).isEqualTo("MALE");
             assertThat(response.residence()).isEqualTo("서울특별시");
             assertThat(response.monthlyIncome()).isEqualTo(3_000_000L);
+            assertThat(response.totalFixedExpenses()).isEqualTo(1_000_000L);
             assertThat(response.availableBudget()).isEqualTo(1_500_000L);
-            assertThat(response.hobbies()).containsExactly("DINING", "TRAVEL");
-            assertThat(response.spendingHabit()).isEqualTo("BALANCED");
             assertThat(response.employmentStatus()).isTrue();
             assertThat(response.homeOwnership()).isFalse();
         }
@@ -138,10 +139,8 @@ class UserConverterTest {
                     .gender("MALE")
                     .residence("서울특별시")
                     .monthlyIncome(3_000_000L)
-                    .monthlyFixedExpenses(1_000_000L)
+                    .monthlyFixedExpenses(FIXED_EXPENSES_1M)
                     .monthlySavingsGoal(500_000L)
-                    .hobbies(List.of("DINING"))
-                    .spendingHabit("BALANCED")
                     .employmentStatus(true)
                     .homeOwnership(false)
                     .build();

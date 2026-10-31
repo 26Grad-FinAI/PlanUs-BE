@@ -28,7 +28,12 @@ class AuthServiceLogoutTest {
     void setUp() {
         userAccountRepository = mock(UserAccountRepository.class);
         authService = new AuthService(
-                userAccountRepository, mock(PasswordEncoder.class), mock(JwtProvider.class), mock(EntityManager.class));
+                userAccountRepository,
+                mock(com.planus.backend.domain.auth.repository.PasswordResetCodeRepository.class),
+                mock(PasswordEncoder.class),
+                mock(JwtProvider.class),
+                mock(EntityManager.class),
+                mock(com.planus.backend.global.mail.MailService.class));
     }
 
     @Test

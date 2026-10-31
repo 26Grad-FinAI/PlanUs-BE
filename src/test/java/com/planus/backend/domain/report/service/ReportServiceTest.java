@@ -102,7 +102,8 @@ class ReportServiceTest {
             UserAccount user = UserAccount.builder()
                     .id(USER_ID)
                     .monthlyIncome(3_000_000L)
-                    .monthlyFixedExpenses(500_000L)
+                    .monthlyFixedExpenses(
+                            java.util.List.of(new com.planus.backend.domain.user.dto.FixedExpenseItem("기타", 500_000L)))
                     .monthlySavingsGoal(500_000L)
                     .build();
 

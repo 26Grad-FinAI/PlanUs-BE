@@ -1,5 +1,6 @@
 package com.planus.backend.domain.user.entity;
 
+import com.planus.backend.domain.user.dto.FixedExpenseItem;
 import jakarta.persistence.Column;
 import jakarta.persistence.Entity;
 import jakarta.persistence.EntityListeners;
@@ -52,14 +53,12 @@ public class UserAccount {
     @Column(name = "monthly_income")
     private long monthlyIncome;
 
-    @Column(name = "monthly_fixed_expenses")
-    private long monthlyFixedExpenses;
+    @JdbcTypeCode(SqlTypes.JSON)
+    @Column(name = "monthly_fixed_expenses", columnDefinition = "jsonb")
+    private List<FixedExpenseItem> monthlyFixedExpenses;
 
     @Column(name = "monthly_savings_goal")
     private long monthlySavingsGoal;
-
-    @Column(name = "spending_habit")
-    private String spendingHabit; // SAVING/BALANCED/SPENDING
 
     @Column(name = "employment_status")
     private Boolean employmentStatus;
@@ -67,10 +66,6 @@ public class UserAccount {
     private Integer age;
     private String gender;
     private String residence;
-
-    @JdbcTypeCode(SqlTypes.JSON)
-    @Column(name = "hobbies", columnDefinition = "jsonb")
-    private List<String> hobbies;
 
     @Column(name = "home_ownership")
     private Boolean homeOwnership;
@@ -92,50 +87,54 @@ public class UserAccount {
     @Column(name = "updated_at", nullable = false)
     private LocalDateTime updatedAt;
 
-    /** 가용예산 = 소득 − 고정지출 − 저축목표. */
-    public long availableBudget() {
-        return monthlyIncome - monthlyFixedExpenses - monthlySavingsGoal;
+    /** 고정지출 합계를 반환한다. */
+    public long totalFixedExpenses() {
+        if (monthlyFixedExpenses == null || monthlyFixedExpenses.isEmpty()) {
+            return 0;
+        }
+        return monthlyFixedExpenses.stream().mapToLong(FixedExpenseItem::amount).sum();
     }
 
-    /** 프로필 입력 완료 여부. 10개 필수 필드가 모두 채워진 경우에만 완료로 판단한다. */
+    /** 가용예산 = 소득 − 고정지출 합계 − 저축목표. */
+    public long availableBudget() {
+        return monthlyIncome - totalFixedExpenses() - monthlySavingsGoal;
+    }
+
+    /** 프로필 입력 완료 여부. 필수 필드가 모두 채워진 경우에만 완료로 판단한다. */
     public boolean isProfileCompleted() {
         return age != null
                 && monthlyIncome > 0
                 && gender != null
                 && residence != null
-                && hobbies != null
-                && !hobbies.isEmpty()
-                && spendingHabit != null
                 && employmentStatus != null
                 && homeOwnership != null;
     }
 
     /** 사용자 프로필 정보를 최초 저장하거나 갱신한다. */
     public void updateProfile(
-            String nickname,
             Integer age,
             String gender,
             String residence,
             long monthlyIncome,
-            long monthlyFixedExpenses,
+            List<FixedExpenseItem> monthlyFixedExpenses,
             long monthlySavingsGoal,
-            List<String> hobbies,
-            String spendingHabit,
             Boolean employmentStatus,
             Boolean homeOwnership,
             String selfIntroduction) {
-        this.nickname = nickname;
         this.age = age;
         this.gender = gender;
         this.residence = residence;
         this.monthlyIncome = monthlyIncome;
         this.monthlyFixedExpenses = monthlyFixedExpenses;
         this.monthlySavingsGoal = monthlySavingsGoal;
-        this.hobbies = hobbies;
-        this.spendingHabit = spendingHabit;
         this.employmentStatus = employmentStatus;
         this.homeOwnership = homeOwnership;
         this.selfIntroduction = selfIntroduction;
+    }
+
+    /** 비밀번호를 변경한다. */
+    public void updatePassword(String encodedPassword) {
+        this.password = encodedPassword;
     }
 
     /** FCM 디바이스 토큰을 갱신한다. */

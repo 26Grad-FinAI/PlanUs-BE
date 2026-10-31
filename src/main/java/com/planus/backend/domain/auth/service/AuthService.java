@@ -3,17 +3,25 @@ package com.planus.backend.domain.auth.service;
 import com.planus.backend.domain.auth.converter.AuthConverter;
 import com.planus.backend.domain.auth.dto.LoginRequest;
 import com.planus.backend.domain.auth.dto.LoginResponse;
+import com.planus.backend.domain.auth.dto.PasswordResetRequest;
+import com.planus.backend.domain.auth.dto.PasswordResetSendRequest;
+import com.planus.backend.domain.auth.dto.PasswordResetVerifyRequest;
 import com.planus.backend.domain.auth.dto.ReissueRequest;
 import com.planus.backend.domain.auth.dto.SignUpRequest;
 import com.planus.backend.domain.auth.dto.SignUpResponse;
+import com.planus.backend.domain.auth.entity.PasswordResetCode;
+import com.planus.backend.domain.auth.repository.PasswordResetCodeRepository;
 import com.planus.backend.domain.user.entity.AuthProvider;
 import com.planus.backend.domain.user.entity.UserAccount;
 import com.planus.backend.domain.user.repository.UserAccountRepository;
 import com.planus.backend.global.apiPayload.code.GeneralErrorCode;
 import com.planus.backend.global.apiPayload.exception.GeneralException;
+import com.planus.backend.global.mail.MailService;
 import com.planus.backend.global.security.JwtProvider;
 import jakarta.persistence.EntityManager;
 import jakarta.persistence.LockModeType;
+import java.security.SecureRandom;
+import java.time.LocalDateTime;
 import java.util.Optional;
 import java.util.regex.Pattern;
 import lombok.RequiredArgsConstructor;
@@ -32,10 +40,15 @@ public class AuthService {
     /** 타이밍 공격 방지용 더미 BCrypt 해시. 이메일 미존재 시 비교에만 사용하며 실제 로그인에 쓰이지 않는다. */
     private static final String DUMMY_PASSWORD_HASH = "$2a$10$N9qo8uLOickgx2ZMRZoMyeIjZAgcfl7p92ldGxad68LJZdL17lhWy";
 
+    private static final SecureRandom RANDOM = new SecureRandom();
+    private static final int RESET_CODE_EXPIRY_MINUTES = 10;
+
     private final UserAccountRepository userAccountRepository;
+    private final PasswordResetCodeRepository passwordResetCodeRepository;
     private final PasswordEncoder passwordEncoder;
     private final JwtProvider jwtProvider;
     private final EntityManager entityManager;
+    private final MailService mailService;
 
     /**
      * 회원가입을 처리한다.
@@ -156,6 +169,91 @@ public class AuthService {
                 .findById(userId)
                 .orElseThrow(() -> new GeneralException(GeneralErrorCode.NOT_FOUND));
         userAccountRepository.delete(user);
+    }
+
+    /**
+     * 비밀번호 재설정 인증코드를 생성하고 이메일로 발송한다.
+     *
+     * @param request 이메일 주소
+     */
+    @Transactional
+    public void sendPasswordResetCode(PasswordResetSendRequest request) {
+        Optional<UserAccount> foundUser = userAccountRepository.findByEmail(request.email());
+
+        if (foundUser.isEmpty() || foundUser.get().getProvider() != AuthProvider.LOCAL) {
+            return;
+        }
+
+        passwordResetCodeRepository.deleteByEmail(request.email());
+
+        String code = String.format("%06d", RANDOM.nextInt(1_000_000));
+        PasswordResetCode resetCode = PasswordResetCode.builder()
+                .email(request.email())
+                .code(code)
+                .expiresAt(LocalDateTime.now().plusMinutes(RESET_CODE_EXPIRY_MINUTES))
+                .build();
+        passwordResetCodeRepository.save(resetCode);
+
+        mailService.sendVerificationCode(request.email(), code);
+    }
+
+    /**
+     * 비밀번호 재설정 인증코드를 검증한다.
+     *
+     * @param request 이메일, 인증코드
+     */
+    @Transactional
+    public void verifyPasswordResetCode(PasswordResetVerifyRequest request) {
+        PasswordResetCode resetCode = passwordResetCodeRepository
+                .findByEmailAndVerifiedFalse(request.email())
+                .orElseThrow(() -> new GeneralException(GeneralErrorCode.INVALID_RESET_CODE));
+
+        if (resetCode.getExpiresAt().isBefore(LocalDateTime.now())) {
+            throw new GeneralException(GeneralErrorCode.EXPIRED_RESET_CODE);
+        }
+
+        resetCode.incrementAttempt();
+
+        if (resetCode.isMaxAttemptsExceeded()) {
+            passwordResetCodeRepository.deleteByEmail(request.email());
+            throw new GeneralException(GeneralErrorCode.INVALID_RESET_CODE);
+        }
+
+        if (!resetCode.getCode().equals(request.code())) {
+            throw new GeneralException(GeneralErrorCode.INVALID_RESET_CODE);
+        }
+
+        resetCode.markVerified();
+    }
+
+    /**
+     * 인증코드 검증 완료 후 새 비밀번호를 설정한다.
+     *
+     * @param request 이메일, 인증코드, 새 비밀번호, 비밀번호 확인
+     */
+    @Transactional
+    public void resetPassword(PasswordResetRequest request) {
+        PasswordResetCode resetCode = passwordResetCodeRepository
+                .findByEmailAndVerifiedTrue(request.email())
+                .orElseThrow(() -> new GeneralException(GeneralErrorCode.RESET_CODE_NOT_VERIFIED));
+
+        if (!resetCode.getCode().equals(request.code())) {
+            throw new GeneralException(GeneralErrorCode.INVALID_RESET_CODE);
+        }
+
+        if (resetCode.getExpiresAt().isBefore(LocalDateTime.now())) {
+            throw new GeneralException(GeneralErrorCode.EXPIRED_RESET_CODE);
+        }
+
+        validatePasswordStrength(request.newPassword());
+        validatePasswordMatch(request.newPassword(), request.confirmNewPassword());
+
+        UserAccount user = userAccountRepository
+                .findByEmail(request.email())
+                .orElseThrow(() -> new GeneralException(GeneralErrorCode.EMAIL_NOT_FOUND));
+
+        user.updatePassword(passwordEncoder.encode(request.newPassword()));
+        passwordResetCodeRepository.deleteByEmail(request.email());
     }
 
     private void validateTerms(boolean agreeToTerms) {
