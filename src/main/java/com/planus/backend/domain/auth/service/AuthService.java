@@ -178,12 +178,10 @@ public class AuthService {
      */
     @Transactional
     public void sendPasswordResetCode(PasswordResetSendRequest request) {
-        UserAccount user = userAccountRepository
-                .findByEmail(request.email())
-                .orElseThrow(() -> new GeneralException(GeneralErrorCode.EMAIL_NOT_FOUND));
+        Optional<UserAccount> foundUser = userAccountRepository.findByEmail(request.email());
 
-        if (user.getProvider() != AuthProvider.LOCAL) {
-            throw new GeneralException(GeneralErrorCode.SOCIAL_LOGIN_EMAIL_CONFLICT);
+        if (foundUser.isEmpty() || foundUser.get().getProvider() != AuthProvider.LOCAL) {
+            return;
         }
 
         passwordResetCodeRepository.deleteByEmail(request.email());
@@ -207,11 +205,22 @@ public class AuthService {
     @Transactional
     public void verifyPasswordResetCode(PasswordResetVerifyRequest request) {
         PasswordResetCode resetCode = passwordResetCodeRepository
-                .findByEmailAndCodeAndVerifiedFalse(request.email(), request.code())
+                .findByEmailAndVerifiedFalse(request.email())
                 .orElseThrow(() -> new GeneralException(GeneralErrorCode.INVALID_RESET_CODE));
 
         if (resetCode.getExpiresAt().isBefore(LocalDateTime.now())) {
             throw new GeneralException(GeneralErrorCode.EXPIRED_RESET_CODE);
+        }
+
+        resetCode.incrementAttempt();
+
+        if (resetCode.isMaxAttemptsExceeded()) {
+            passwordResetCodeRepository.deleteByEmail(request.email());
+            throw new GeneralException(GeneralErrorCode.INVALID_RESET_CODE);
+        }
+
+        if (!resetCode.getCode().equals(request.code())) {
+            throw new GeneralException(GeneralErrorCode.INVALID_RESET_CODE);
         }
 
         resetCode.markVerified();
@@ -230,6 +239,10 @@ public class AuthService {
 
         if (!resetCode.getCode().equals(request.code())) {
             throw new GeneralException(GeneralErrorCode.INVALID_RESET_CODE);
+        }
+
+        if (resetCode.getExpiresAt().isBefore(LocalDateTime.now())) {
+            throw new GeneralException(GeneralErrorCode.EXPIRED_RESET_CODE);
         }
 
         validatePasswordStrength(request.newPassword());

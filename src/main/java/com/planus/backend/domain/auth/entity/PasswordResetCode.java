@@ -42,11 +42,25 @@ public class PasswordResetCode {
     @Column(nullable = false)
     private boolean verified = false;
 
+    @Builder.Default
+    @Column(name = "attempt_count", nullable = false)
+    private int attemptCount = 0;
+
     @CreatedDate
     @Column(name = "created_at", nullable = false, updatable = false)
     private LocalDateTime createdAt;
 
+    private static final int MAX_ATTEMPTS = 5;
+
     public void markVerified() {
         this.verified = true;
+    }
+
+    public void incrementAttempt() {
+        this.attemptCount++;
+    }
+
+    public boolean isMaxAttemptsExceeded() {
+        return this.attemptCount >= MAX_ATTEMPTS;
     }
 }
