@@ -123,9 +123,12 @@ public class BudgetPlanService {
             AiBudgetResponse aiResponse = aiBudgetClient.requestPlan(aiRequest);
 
             // 4. 결과 저장
-            self.saveResult(userId, yearMonth, aiResponse);
+            Long budgetId = self.saveResult(userId, yearMonth, aiResponse);
 
-            // 5. FCM 푸시 알림
+            // 5. 분석 데이터 저장 (별도 트랜잭션 — 실패해도 예산 결과에 영향 없음)
+            self.saveAnalysisSafe(budgetId, aiResponse);
+
+            // 6. FCM 푸시 알림
             fcmService.sendBudgetPlanComplete(userId);
 
             log.info("AI 예산 산출 완료 userId={} yearMonth={}", userId, yearMonth);
@@ -152,13 +155,12 @@ public class BudgetPlanService {
     }
 
     @Transactional(propagation = Propagation.REQUIRES_NEW)
-    public void saveResult(Long userId, LocalDate yearMonth, AiBudgetResponse aiResponse) {
+    public Long saveResult(Long userId, LocalDate yearMonth, AiBudgetResponse aiResponse) {
         BudgetPlanRequest planRequest = budgetPlanRequestRepository
                 .findByUserIdAndYearMonth(userId, yearMonth)
                 .orElseThrow(() -> new IllegalStateException("BudgetPlanRequest not found"));
 
         Budget budget = upsertBudget(userId, yearMonth, aiResponse);
-        saveAnalysis(budget.getId(), aiResponse);
 
         try {
             String responseJson = objectMapper.writeValueAsString(aiResponse);
@@ -166,6 +168,18 @@ public class BudgetPlanService {
         } catch (Exception e) {
             planRequest.markCompleted("{}");
             log.warn("AI 응답 JSON 직렬화 실패", e);
+        }
+
+        return budget.getId();
+    }
+
+    /** AI 분석 데이터를 별도 트랜잭션으로 저장한다. 실패해도 예산 저장에 영향을 주지 않는다. */
+    @Transactional(propagation = Propagation.REQUIRES_NEW)
+    public void saveAnalysisSafe(Long budgetId, AiBudgetResponse response) {
+        try {
+            saveAnalysis(budgetId, response);
+        } catch (Exception e) {
+            log.warn("AI 분석 데이터 저장 실패 budgetId={}", budgetId, e);
         }
     }
 
@@ -298,28 +312,24 @@ public class BudgetPlanService {
 
     /** AI 분석 데이터를 budget_plan_analysis 테이블에 upsert 한다. */
     private void saveAnalysis(Long budgetId, AiBudgetResponse response) {
-        try {
-            Map<String, Object> observation = toMap(response.observation());
-            Map<String, Object> persona = toMap(response.persona());
-            Map<String, Object> strategy = toMap(response.strategy());
-            Map<String, Object> userContext = toMap(response.userContext());
+        Map<String, Object> observation = toMap(response.observation());
+        Map<String, Object> persona = toMap(response.persona());
+        Map<String, Object> strategy = toMap(response.strategy());
+        Map<String, Object> userContext = toMap(response.userContext());
 
-            BudgetPlanAnalysis analysis =
-                    budgetPlanAnalysisRepository.findByBudgetId(budgetId).orElse(null);
+        BudgetPlanAnalysis analysis =
+                budgetPlanAnalysisRepository.findByBudgetId(budgetId).orElse(null);
 
-            if (analysis != null) {
-                analysis.updateAnalysis(observation, persona, strategy, userContext);
-            } else {
-                budgetPlanAnalysisRepository.save(BudgetPlanAnalysis.builder()
-                        .budgetId(budgetId)
-                        .observation(observation)
-                        .persona(persona)
-                        .strategy(strategy)
-                        .userContext(userContext)
-                        .build());
-            }
-        } catch (Exception e) {
-            log.warn("AI 분석 데이터 저장 실패 budgetId={}", budgetId, e);
+        if (analysis != null) {
+            analysis.updateAnalysis(observation, persona, strategy, userContext);
+        } else {
+            budgetPlanAnalysisRepository.save(BudgetPlanAnalysis.builder()
+                    .budgetId(budgetId)
+                    .observation(observation)
+                    .persona(persona)
+                    .strategy(strategy)
+                    .userContext(userContext)
+                    .build());
         }
     }
 
@@ -407,9 +417,13 @@ public class BudgetPlanService {
                 budget.updateAiTotalBudget(budget.getTotalBudget());
             }
 
-            // 분석 데이터도 없으면 함께 백필
-            if (budgetPlanAnalysisRepository.findByBudgetId(budget.getId()).isEmpty()) {
-                saveAnalysis(budget.getId(), response);
+            // 분석 데이터도 없으면 함께 백필 (실패해도 예산 백필에 영향 없도록 격리)
+            try {
+                if (budgetPlanAnalysisRepository.findByBudgetId(budget.getId()).isEmpty()) {
+                    saveAnalysis(budget.getId(), response);
+                }
+            } catch (Exception ex) {
+                log.warn("백필 중 분석 데이터 저장 실패 budgetId={}", budget.getId(), ex);
             }
         } catch (Exception e) {
             log.warn("AI 필드 백필 실패 userId={} yearMonth={}", userId, yearMonth, e);

@@ -319,23 +319,26 @@ public class FeedbackRenderer {
             sb.append("\n[페이싱 비교]\n");
             PacingResult p = c.pacing();
             switch (p.displayType()) {
-                case SINGLE -> sb.append("- 지난달 이맘때는 예산의 ")
-                        .append(pct(p.historicalAvgRate()))
-                        .append("를 썼는데, 지금은 ")
-                        .append(pct(p.currentRate()))
-                        .append("\n");
-                case RANGE -> sb.append("- 보통 이맘때 ")
-                        .append(pct(p.referenceMin()))
-                        .append("~")
-                        .append(pct(p.referenceMax()))
-                        .append(" 쓰셨는데, 지금은 ")
-                        .append(pct(p.currentRate()))
-                        .append("\n");
-                case MEDIAN -> sb.append("- 보통 이맘때 ")
-                        .append(pct(p.historicalAvgRate()))
-                        .append(" 쓰셨는데, 지금은 ")
-                        .append(pct(p.currentRate()))
-                        .append("\n");
+                case SINGLE ->
+                    sb.append("- 지난달 이맘때는 예산의 ")
+                            .append(pct(p.historicalAvgRate()))
+                            .append("를 썼는데, 지금은 ")
+                            .append(pct(p.currentRate()))
+                            .append("\n");
+                case RANGE ->
+                    sb.append("- 보통 이맘때 ")
+                            .append(pct(p.referenceMin()))
+                            .append("~")
+                            .append(pct(p.referenceMax()))
+                            .append(" 쓰셨는데, 지금은 ")
+                            .append(pct(p.currentRate()))
+                            .append("\n");
+                case MEDIAN ->
+                    sb.append("- 보통 이맘때 ")
+                            .append(pct(p.historicalAvgRate()))
+                            .append(" 쓰셨는데, 지금은 ")
+                            .append(pct(p.currentRate()))
+                            .append("\n");
             }
         }
 
