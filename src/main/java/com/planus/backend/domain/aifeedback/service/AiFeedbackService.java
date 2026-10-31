@@ -987,23 +987,18 @@ public class AiFeedbackService {
      */
     private Confidence deriveOverallConfidence(PacingResult pacing, Confidence anomalyConfidence, boolean hasAnomaly) {
         Confidence base;
-        if (pacing == null) {
-            base = Confidence.LOW;
+        if (pacing != null) {
+            base = switch (pacing.bandWidth()) {
+                case WIDE -> Confidence.LOW;
+                case MEDIUM -> Confidence.MEDIUM;
+                case NARROW -> Confidence.HIGH;};
         } else {
-            base = mapBandWidthToConfidence(pacing.bandWidth());
+            base = Confidence.LOW;
         }
         if (hasAnomaly) {
             return Confidence.lower(base, anomalyConfidence);
         }
         return base;
-    }
-
-    private Confidence mapBandWidthToConfidence(BandWidth bandWidth) {
-        return switch (bandWidth) {
-            case WIDE -> Confidence.LOW;
-            case MEDIUM -> Confidence.MEDIUM;
-            case NARROW -> Confidence.HIGH;
-        };
     }
 
     /** UserProfile의 sensitiveAreas JSON을 파싱한다. ProfileUpdater의 공용 헬퍼 재사용. */

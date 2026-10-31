@@ -33,8 +33,33 @@ public class Budget {
     @Column(name = "total_budget")
     private long totalBudget;
 
+    @Column(name = "ai_summary")
+    private String aiSummary;
+
+    @Column(name = "is_confirmed")
+    @Builder.Default
+    private Boolean isConfirmed = false;
+
+    @Column(name = "ai_total_budget")
+    private Long aiTotalBudget;
+
     /** 총 예산에 금액을 추가한다. (수입 등록 시 사용) */
     public void addTotalBudget(long amount) {
         this.totalBudget = Math.addExact(this.totalBudget, amount);
+    }
+
+    /** AI 분석 요약을 저장한다. */
+    public void updateAiSummary(String aiSummary) {
+        this.aiSummary = aiSummary;
+    }
+
+    /** AI 제안 총 예산을 저장한다. */
+    public void updateAiTotalBudget(Long aiTotalBudget) {
+        this.aiTotalBudget = aiTotalBudget;
+    }
+
+    /** 총 예산을 지정된 값으로 변경한다. */
+    public void updateTotalBudget(long totalBudget) {
+        this.totalBudget = totalBudget;
     }
 }

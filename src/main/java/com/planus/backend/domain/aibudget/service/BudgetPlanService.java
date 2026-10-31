@@ -4,8 +4,11 @@ import com.fasterxml.jackson.databind.ObjectMapper;
 import com.planus.backend.domain.aibudget.client.AiBudgetClient;
 import com.planus.backend.domain.aibudget.client.dto.AiBudgetRequest;
 import com.planus.backend.domain.aibudget.client.dto.AiBudgetResponse;
+import com.planus.backend.domain.aibudget.dto.BudgetSummaryResponse;
+import com.planus.backend.domain.aibudget.entity.BudgetPlanAnalysis;
 import com.planus.backend.domain.aibudget.entity.BudgetPlanRequest;
 import com.planus.backend.domain.aibudget.entity.BudgetPlanStatus;
+import com.planus.backend.domain.aibudget.repository.BudgetPlanAnalysisRepository;
 import com.planus.backend.domain.aibudget.repository.BudgetPlanRequestRepository;
 import com.planus.backend.domain.aifeedback.core.Categories;
 import com.planus.backend.domain.aifeedback.entity.Budget;
@@ -17,6 +20,8 @@ import com.planus.backend.domain.user.entity.UserAccount;
 import com.planus.backend.domain.user.repository.UserAccountRepository;
 import com.planus.backend.global.apiPayload.code.GeneralErrorCode;
 import com.planus.backend.global.apiPayload.exception.GeneralException;
+import java.math.BigDecimal;
+import java.math.RoundingMode;
 import java.time.LocalDate;
 import java.time.LocalDateTime;
 import java.util.*;
@@ -40,6 +45,7 @@ public class BudgetPlanService {
 
     private final UserAccountRepository userAccountRepository;
     private final BudgetPlanRequestRepository budgetPlanRequestRepository;
+    private final BudgetPlanAnalysisRepository budgetPlanAnalysisRepository;
     private final ExpenseRepository expenseRepository;
     private final BudgetRepository budgetRepository;
     private final BudgetCategoryRepository budgetCategoryRepository;
@@ -150,7 +156,8 @@ public class BudgetPlanService {
                 .findByUserIdAndYearMonth(userId, yearMonth)
                 .orElseThrow(() -> new IllegalStateException("BudgetPlanRequest not found"));
 
-        upsertBudget(userId, yearMonth, aiResponse);
+        Budget budget = upsertBudget(userId, yearMonth, aiResponse);
+        saveAnalysis(budget.getId(), aiResponse);
 
         try {
             String responseJson = objectMapper.writeValueAsString(aiResponse);
@@ -218,10 +225,12 @@ public class BudgetPlanService {
         return history;
     }
 
-    private void upsertBudget(Long userId, LocalDate yearMonth, AiBudgetResponse response) {
+    private Budget upsertBudget(Long userId, LocalDate yearMonth, AiBudgetResponse response) {
         if (response.budget() == null || response.budget().allocations() == null) {
             log.warn("AI 응답에 budget 정보 없음 userId={}", userId);
-            return;
+            return budgetRepository
+                    .findByUserIdAndYearMonth(userId, yearMonth)
+                    .orElseThrow(() -> new IllegalStateException("Budget not found"));
         }
 
         // totalBudget = allocations 합계 + savings
@@ -229,6 +238,9 @@ public class BudgetPlanService {
                         .mapToLong(AiBudgetResponse.Budget.Allocation::amount)
                         .sum()
                 + response.budget().savings();
+
+        // AI 분석 요약 (strategy.notes)
+        String aiSummary = response.strategy() != null ? response.strategy().notes() : null;
 
         Budget budget = budgetRepository
                 .findByUserIdAndYearMonth(userId, yearMonth)
@@ -243,6 +255,10 @@ public class BudgetPlanService {
         if (diff != 0) {
             budget.addTotalBudget(diff);
         }
+
+        // AI 관련 필드 저장
+        budget.updateAiTotalBudget(totalBudget);
+        budget.updateAiSummary(aiSummary);
 
         // 기존 카테고리별 배분 조회
         List<BudgetCategory> existingCategories = budgetCategoryRepository.findByBudgetId(budget.getId());
@@ -260,6 +276,8 @@ public class BudgetPlanService {
 
             BudgetCategory existing = existingMap.get(categoryId);
             if (existing != null) {
+                // AI 제안 금액은 항상 최신값으로 갱신
+                existing.updateAiAmount(alloc.amount());
                 long catDiff = alloc.amount() - existing.getAmount();
                 if (catDiff != 0) {
                     existing.addAmount(catDiff);
@@ -269,9 +287,147 @@ public class BudgetPlanService {
                         .budgetId(budget.getId())
                         .categoryId(categoryId)
                         .amount(alloc.amount())
+                        .aiAmount(alloc.amount())
                         .build());
             }
         }
+
+        return budget;
+    }
+
+    /** AI 분석 데이터를 budget_plan_analysis 테이블에 upsert 한다. */
+    private void saveAnalysis(Long budgetId, AiBudgetResponse response) {
+        try {
+            String observation =
+                    response.observation() != null ? objectMapper.writeValueAsString(response.observation()) : null;
+            String persona = response.persona() != null ? objectMapper.writeValueAsString(response.persona()) : null;
+            String strategy = response.strategy() != null ? objectMapper.writeValueAsString(response.strategy()) : null;
+            String userContext =
+                    response.userContext() != null ? objectMapper.writeValueAsString(response.userContext()) : null;
+
+            BudgetPlanAnalysis analysis =
+                    budgetPlanAnalysisRepository.findByBudgetId(budgetId).orElse(null);
+
+            if (analysis != null) {
+                analysis.updateAnalysis(observation, persona, strategy, userContext);
+            } else {
+                budgetPlanAnalysisRepository.save(BudgetPlanAnalysis.builder()
+                        .budgetId(budgetId)
+                        .observation(observation)
+                        .persona(persona)
+                        .strategy(strategy)
+                        .userContext(userContext)
+                        .build());
+            }
+        } catch (Exception e) {
+            log.warn("AI 분석 데이터 저장 실패 budgetId={}", budgetId, e);
+        }
+    }
+
+    /** 예산 요약을 조회한다. 기존 데이터에 AI 필드가 없으면 BudgetPlanRequest에서 백필한다. */
+    @Transactional
+    public BudgetSummaryResponse getBudgetSummary(Long userId, LocalDate yearMonth) {
+        Budget budget = budgetRepository
+                .findByUserIdAndYearMonth(userId, yearMonth)
+                .orElseThrow(() -> new GeneralException(GeneralErrorCode.BUDGET_NOT_FOUND));
+
+        // AI 필드가 비어 있으면 기존 AI 응답에서 백필
+        if (budget.getAiSummary() == null || budget.getAiTotalBudget() == null) {
+            backfillAiFields(userId, yearMonth, budget);
+        }
+
+        List<BudgetCategory> categories = budgetCategoryRepository.findByBudgetId(budget.getId());
+
+        // 카테고리 aiAmount가 비어 있으면 현재 amount를 AI 원본으로 간주하여 백필
+        for (BudgetCategory bc : categories) {
+            if (bc.getAiAmount() == null) {
+                bc.updateAiAmount(bc.getAmount());
+            }
+        }
+
+        long aiTotal = budget.getAiTotalBudget() != null ? budget.getAiTotalBudget() : budget.getTotalBudget();
+        long userTotal = budget.getTotalBudget();
+
+        List<BudgetSummaryResponse.CategoryBudget> categoryBudgets = categories.stream()
+                .map(bc -> {
+                    long aiAmount = bc.getEffectiveAiAmount();
+                    long userAmount = bc.getAmount();
+                    BigDecimal percentage = userTotal > 0
+                            ? BigDecimal.valueOf(userAmount)
+                                    .multiply(BigDecimal.valueOf(100))
+                                    .divide(BigDecimal.valueOf(userTotal), 1, RoundingMode.HALF_UP)
+                            : BigDecimal.ZERO;
+                    return new BudgetSummaryResponse.CategoryBudget(
+                            bc.getCategoryId(),
+                            Categories.name(bc.getCategoryId()),
+                            aiAmount,
+                            userAmount,
+                            userAmount - aiAmount,
+                            percentage,
+                            Boolean.TRUE.equals(bc.getUserModified()));
+                })
+                .toList();
+
+        return new BudgetSummaryResponse(
+                budget.getAiSummary(), aiTotal, userTotal, userTotal - aiTotal, categoryBudgets);
+    }
+
+    /** 기존 데이터 하위 호환: BudgetPlanRequest의 AI 응답에서 aiSummary/aiTotalBudget을 백필한다. */
+    private void backfillAiFields(Long userId, LocalDate yearMonth, Budget budget) {
+        try {
+            BudgetPlanRequest planRequest = budgetPlanRequestRepository
+                    .findByUserIdAndYearMonth(userId, yearMonth)
+                    .orElse(null);
+            if (planRequest == null
+                    || planRequest.getStatus() != BudgetPlanStatus.COMPLETED
+                    || planRequest.getAiResponse() == null) {
+                return;
+            }
+
+            AiBudgetResponse response = objectMapper.readValue(planRequest.getAiResponse(), AiBudgetResponse.class);
+
+            if (budget.getAiSummary() == null && response.strategy() != null) {
+                budget.updateAiSummary(response.strategy().notes());
+            }
+            if (budget.getAiTotalBudget() == null
+                    && response.budget() != null
+                    && response.budget().allocations() != null) {
+                long aiTotal = response.budget().allocations().stream()
+                                .mapToLong(AiBudgetResponse.Budget.Allocation::amount)
+                                .sum()
+                        + response.budget().savings();
+                budget.updateAiTotalBudget(aiTotal);
+            }
+
+            // 분석 데이터도 없으면 함께 백필
+            if (budgetPlanAnalysisRepository.findByBudgetId(budget.getId()).isEmpty()) {
+                saveAnalysis(budget.getId(), response);
+            }
+        } catch (Exception e) {
+            log.warn("AI 필드 백필 실패 userId={} yearMonth={}", userId, yearMonth, e);
+        }
+    }
+
+    /** 카테고리별 예산을 수정하고 총액을 재계산한 뒤 요약을 반환한다. */
+    @Transactional
+    public BudgetSummaryResponse updateCategoryBudget(Long userId, LocalDate yearMonth, int categoryId, long amount) {
+        Budget budget = budgetRepository
+                .findByUserIdAndYearMonth(userId, yearMonth)
+                .orElseThrow(() -> new GeneralException(GeneralErrorCode.BUDGET_NOT_FOUND));
+
+        BudgetCategory budgetCategory = budgetCategoryRepository
+                .findByBudgetIdAndCategoryId(budget.getId(), categoryId)
+                .orElseThrow(() -> new GeneralException(GeneralErrorCode.BUDGET_CATEGORY_NOT_FOUND));
+
+        budgetCategory.modifyAmount(amount);
+
+        // 총액 재계산
+        List<BudgetCategory> allCategories = budgetCategoryRepository.findByBudgetId(budget.getId());
+        long newTotal =
+                allCategories.stream().mapToLong(BudgetCategory::getAmount).sum();
+        budget.updateTotalBudget(newTotal);
+
+        return getBudgetSummary(userId, yearMonth);
     }
 
     @Transactional(propagation = Propagation.REQUIRES_NEW)

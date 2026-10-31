@@ -318,7 +318,25 @@ public class FeedbackRenderer {
         if (c.pacing() != null) {
             sb.append("\n[페이싱 비교]\n");
             PacingResult p = c.pacing();
-            appendPacingComparison(sb, p);
+            switch (p.displayType()) {
+                case SINGLE -> sb.append("- 지난달 이맘때는 예산의 ")
+                        .append(pct(p.historicalAvgRate()))
+                        .append("를 썼는데, 지금은 ")
+                        .append(pct(p.currentRate()))
+                        .append("\n");
+                case RANGE -> sb.append("- 보통 이맘때 ")
+                        .append(pct(p.referenceMin()))
+                        .append("~")
+                        .append(pct(p.referenceMax()))
+                        .append(" 쓰셨는데, 지금은 ")
+                        .append(pct(p.currentRate()))
+                        .append("\n");
+                case MEDIAN -> sb.append("- 보통 이맘때 ")
+                        .append(pct(p.historicalAvgRate()))
+                        .append(" 쓰셨는데, 지금은 ")
+                        .append(pct(p.currentRate()))
+                        .append("\n");
+            }
         }
 
         // ── 이번 주 소비 감정 분포 ──
@@ -641,24 +659,6 @@ public class FeedbackRenderer {
     private static String won(long v) {
         if (Math.abs(v) >= 10_000) return String.format(java.util.Locale.KOREA, "%,d만원", Math.round(v / 10_000.0));
         return String.format(java.util.Locale.KOREA, "%,d원", v);
-    }
-
-    private void appendPacingComparison(StringBuilder sb, PacingResult p) {
-        switch (p.displayType()) {
-            case SINGLE -> {
-                sb.append("- 지난달 이맘때는 예산의 ").append(pct(p.historicalAvgRate()));
-                sb.append("를 썼는데, 지금은 ").append(pct(p.currentRate())).append("\n");
-            }
-            case RANGE -> {
-                sb.append("- 보통 이맘때 ").append(pct(p.referenceMin()));
-                sb.append("~").append(pct(p.referenceMax()));
-                sb.append(" 쓰셨는데, 지금은 ").append(pct(p.currentRate())).append("\n");
-            }
-            case MEDIAN -> {
-                sb.append("- 보통 이맘때 ").append(pct(p.historicalAvgRate()));
-                sb.append(" 쓰셨는데, 지금은 ").append(pct(p.currentRate())).append("\n");
-            }
-        }
     }
 
     /** 소진율을 퍼센트 문자열로 변환한다. */
