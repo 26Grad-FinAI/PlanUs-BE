@@ -2,6 +2,7 @@ package com.planus.backend.domain.aibudget.entity;
 
 import jakarta.persistence.*;
 import java.time.LocalDateTime;
+import java.util.Map;
 import lombok.AllArgsConstructor;
 import lombok.Builder;
 import lombok.Getter;
@@ -29,26 +30,30 @@ public class BudgetPlanAnalysis {
 
     @JdbcTypeCode(SqlTypes.JSON)
     @Column(columnDefinition = "jsonb")
-    private String observation;
+    private Map<String, Object> observation;
 
     @JdbcTypeCode(SqlTypes.JSON)
     @Column(columnDefinition = "jsonb")
-    private String persona;
+    private Map<String, Object> persona;
 
     @JdbcTypeCode(SqlTypes.JSON)
     @Column(columnDefinition = "jsonb")
-    private String strategy;
+    private Map<String, Object> strategy;
 
     @JdbcTypeCode(SqlTypes.JSON)
     @Column(name = "user_context", columnDefinition = "jsonb")
-    private String userContext;
+    private Map<String, Object> userContext;
 
     @Column(name = "created_at", nullable = false, updatable = false)
     @Builder.Default
     private LocalDateTime createdAt = LocalDateTime.now();
 
     /** 분석 데이터를 갱신한다. */
-    public void updateAnalysis(String observation, String persona, String strategy, String userContext) {
+    public void updateAnalysis(
+            Map<String, Object> observation,
+            Map<String, Object> persona,
+            Map<String, Object> strategy,
+            Map<String, Object> userContext) {
         this.observation = observation;
         this.persona = persona;
         this.strategy = strategy;

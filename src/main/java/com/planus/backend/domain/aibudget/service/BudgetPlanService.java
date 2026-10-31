@@ -299,12 +299,10 @@ public class BudgetPlanService {
     /** AI 분석 데이터를 budget_plan_analysis 테이블에 upsert 한다. */
     private void saveAnalysis(Long budgetId, AiBudgetResponse response) {
         try {
-            String observation =
-                    response.observation() != null ? objectMapper.writeValueAsString(response.observation()) : null;
-            String persona = response.persona() != null ? objectMapper.writeValueAsString(response.persona()) : null;
-            String strategy = response.strategy() != null ? objectMapper.writeValueAsString(response.strategy()) : null;
-            String userContext =
-                    response.userContext() != null ? objectMapper.writeValueAsString(response.userContext()) : null;
+            Map<String, Object> observation = toMap(response.observation());
+            Map<String, Object> persona = toMap(response.persona());
+            Map<String, Object> strategy = toMap(response.strategy());
+            Map<String, Object> userContext = toMap(response.userContext());
 
             BudgetPlanAnalysis analysis =
                     budgetPlanAnalysisRepository.findByBudgetId(budgetId).orElse(null);
@@ -325,6 +323,13 @@ public class BudgetPlanService {
         }
     }
 
+    /** DTO를 Map으로 변환한다. null이면 null 반환. */
+    @SuppressWarnings("unchecked")
+    private Map<String, Object> toMap(Object dto) {
+        if (dto == null) return null;
+        return objectMapper.convertValue(dto, Map.class);
+    }
+
     /** 예산 요약을 조회한다. 기존 데이터에 AI 필드가 없으면 BudgetPlanRequest에서 백필한다. */
     @Transactional
     public BudgetSummaryResponse getBudgetSummary(Long userId, LocalDate yearMonth) {
@@ -332,8 +337,8 @@ public class BudgetPlanService {
                 .findByUserIdAndYearMonth(userId, yearMonth)
                 .orElseThrow(() -> new GeneralException(GeneralErrorCode.BUDGET_NOT_FOUND));
 
-        // AI 필드가 비어 있으면 기존 AI 응답에서 백필
-        if (budget.getAiSummary() == null || budget.getAiTotalBudget() == null) {
+        // AI 필드가 비어 있으면 기존 AI 응답에서 백필 (한 번만 시도)
+        if (budget.getAiTotalBudget() == null) {
             backfillAiFields(userId, yearMonth, budget);
         }
 
@@ -382,6 +387,8 @@ public class BudgetPlanService {
             if (planRequest == null
                     || planRequest.getStatus() != BudgetPlanStatus.COMPLETED
                     || planRequest.getAiResponse() == null) {
+                // 백필 불가 — totalBudget을 AI 총액 대용으로 설정하여 재시도 방지
+                budget.updateAiTotalBudget(budget.getTotalBudget());
                 return;
             }
 
@@ -390,14 +397,14 @@ public class BudgetPlanService {
             if (budget.getAiSummary() == null && response.strategy() != null) {
                 budget.updateAiSummary(response.strategy().notes());
             }
-            if (budget.getAiTotalBudget() == null
-                    && response.budget() != null
-                    && response.budget().allocations() != null) {
+            if (response.budget() != null && response.budget().allocations() != null) {
                 long aiTotal = response.budget().allocations().stream()
                                 .mapToLong(AiBudgetResponse.Budget.Allocation::amount)
                                 .sum()
                         + response.budget().savings();
                 budget.updateAiTotalBudget(aiTotal);
+            } else {
+                budget.updateAiTotalBudget(budget.getTotalBudget());
             }
 
             // 분석 데이터도 없으면 함께 백필
@@ -406,6 +413,8 @@ public class BudgetPlanService {
             }
         } catch (Exception e) {
             log.warn("AI 필드 백필 실패 userId={} yearMonth={}", userId, yearMonth, e);
+            // 실패해도 재시도 방지
+            budget.updateAiTotalBudget(budget.getTotalBudget());
         }
     }
 
@@ -422,21 +431,24 @@ public class BudgetPlanService {
             existingMap.put(bc.getCategoryId(), bc);
         }
 
+        long totalDelta = 0;
         for (BudgetCategoryUpdateRequest.CategoryAmount item : categories) {
             BudgetCategory bc = existingMap.get(item.categoryId());
             if (bc == null) {
                 throw new GeneralException(GeneralErrorCode.BUDGET_CATEGORY_NOT_FOUND);
             }
+            // 레거시 데이터: aiAmount가 null이면 수정 전 현재 금액으로 백필
+            if (bc.getAiAmount() == null) {
+                bc.updateAiAmount(bc.getAmount());
+            }
             if (bc.getAmount() != item.amount()) {
+                totalDelta += item.amount() - bc.getAmount();
                 bc.modifyAmount(item.amount());
             }
         }
 
-        // 총액 재계산
-        long newTotal = existingMap.values().stream()
-                .mapToLong(BudgetCategory::getAmount)
-                .sum();
-        budget.updateTotalBudget(newTotal);
+        // 총액 재계산 (저축액 등 카테고리 외 금액 보존)
+        budget.updateTotalBudget(Math.addExact(budget.getTotalBudget(), totalDelta));
 
         return getBudgetSummary(userId, yearMonth);
     }

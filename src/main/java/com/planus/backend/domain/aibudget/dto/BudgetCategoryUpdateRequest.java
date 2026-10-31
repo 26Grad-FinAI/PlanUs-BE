@@ -10,7 +10,7 @@ import java.util.List;
 /** 카테고리 예산 일괄 저장 요청 DTO. */
 @Schema(description = "카테고리 예산 일괄 저장 요청")
 public record BudgetCategoryUpdateRequest(
-        @Schema(description = "수정된 카테고리 목록") @NotEmpty @Valid List<CategoryAmount> categories) {
+        @Schema(description = "수정된 카테고리 목록") @NotEmpty List<@NotNull @Valid CategoryAmount> categories) {
 
     @Schema(description = "카테고리별 금액")
     public record CategoryAmount(

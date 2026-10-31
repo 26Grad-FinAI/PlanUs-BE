@@ -388,7 +388,7 @@ class BudgetPlanServiceTest {
             assertThat(cat1.getUserModified()).isTrue();
             assertThat(cat2.getAmount()).isEqualTo(400000);
             assertThat(cat2.getUserModified()).isTrue();
-            // 총액 = 80000 + 400000 = 480000
+            // delta = (80000-100000) + (400000-500000) = -120000, 총액 = 600000 + (-120000) = 480000
             assertThat(budget.getTotalBudget()).isEqualTo(480000);
             assertThat(result.userTotalBudget()).isEqualTo(480000);
             assertThat(result.budgetDifference()).isEqualTo(-120000);
@@ -424,6 +424,82 @@ class BudgetPlanServiceTest {
             service.saveCategories(userId, yearMonth, items);
 
             assertThat(cat1.getUserModified()).isFalse();
+        }
+
+        @Test
+        @DisplayName("savings 포함 총액에서 카테고리 수정 시 delta만 반영된다")
+        void savings_preserved_after_modify() {
+            // totalBudget = allocations(300000) + savings(200000) = 500000
+            Budget budget = Budget.builder()
+                    .id(10L)
+                    .userId(userId)
+                    .yearMonth(yearMonth)
+                    .totalBudget(500000)
+                    .aiTotalBudget(500000L)
+                    .aiSummary("분석")
+                    .build();
+
+            BudgetCategory cat1 = BudgetCategory.builder()
+                    .budgetId(10L)
+                    .categoryId(1)
+                    .amount(200000)
+                    .aiAmount(200000L)
+                    .userModified(false)
+                    .build();
+            BudgetCategory cat2 = BudgetCategory.builder()
+                    .budgetId(10L)
+                    .categoryId(4)
+                    .amount(100000)
+                    .aiAmount(100000L)
+                    .userModified(false)
+                    .build();
+
+            when(budgetRepository.findByUserIdAndYearMonth(userId, yearMonth)).thenReturn(Optional.of(budget));
+            when(budgetCategoryRepository.findByBudgetId(10L)).thenReturn(List.of(cat1, cat2));
+
+            // cat1만 50000 감소
+            List<BudgetCategoryUpdateRequest.CategoryAmount> items = List.of(
+                    new BudgetCategoryUpdateRequest.CategoryAmount(1, 150000L),
+                    new BudgetCategoryUpdateRequest.CategoryAmount(4, 100000L));
+
+            service.saveCategories(userId, yearMonth, items);
+
+            // savings(200000)가 보존되어야 함: 500000 + (-50000) = 450000
+            assertThat(budget.getTotalBudget()).isEqualTo(450000);
+        }
+
+        @Test
+        @DisplayName("레거시 데이터 첫 수정 시 aiAmount가 수정 전 값으로 백필된다")
+        void legacy_aiAmount_backfill_before_modify() {
+            Budget budget = Budget.builder()
+                    .id(10L)
+                    .userId(userId)
+                    .yearMonth(yearMonth)
+                    .totalBudget(100000)
+                    .aiTotalBudget(100000L)
+                    .aiSummary("분석")
+                    .build();
+
+            // aiAmount가 null인 레거시 데이터
+            BudgetCategory cat1 = BudgetCategory.builder()
+                    .budgetId(10L)
+                    .categoryId(1)
+                    .amount(100000)
+                    .userModified(false)
+                    .build();
+
+            when(budgetRepository.findByUserIdAndYearMonth(userId, yearMonth)).thenReturn(Optional.of(budget));
+            when(budgetCategoryRepository.findByBudgetId(10L)).thenReturn(List.of(cat1));
+
+            List<BudgetCategoryUpdateRequest.CategoryAmount> items =
+                    List.of(new BudgetCategoryUpdateRequest.CategoryAmount(1, 50000L));
+
+            service.saveCategories(userId, yearMonth, items);
+
+            // aiAmount는 수정 전 원본(100000)으로 백필, amount는 수정값
+            assertThat(cat1.getAiAmount()).isEqualTo(100000L);
+            assertThat(cat1.getAmount()).isEqualTo(50000);
+            assertThat(cat1.getUserModified()).isTrue();
         }
 
         @Test
