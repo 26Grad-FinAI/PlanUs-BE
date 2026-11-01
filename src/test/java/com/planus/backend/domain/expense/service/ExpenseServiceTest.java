@@ -82,7 +82,7 @@ class ExpenseServiceTest {
             when(expenseRepository.save(any())).thenReturn(saved);
 
             ExpenseRequest request =
-                    new ExpenseRequest(5000L, "버스비", LocalDateTime.of(2026, 8, 19, 8, 0), 6, null, null, null, null);
+                    new ExpenseRequest(5000L, "버스비", LocalDateTime.of(2026, 8, 19, 8, 0), 6, null, null, null);
 
             ExpenseResponse response = expenseService.createExpense(1L, request);
 
@@ -108,7 +108,7 @@ class ExpenseServiceTest {
             when(expenseRepository.save(any())).thenReturn(saved);
 
             ExpenseRequest request =
-                    new ExpenseRequest(500000L, "월세", LocalDateTime.of(2026, 8, 1, 0, 0), 10, null, null, true, null);
+                    new ExpenseRequest(500000L, "월세", LocalDateTime.of(2026, 8, 1, 0, 0), 10, null, null, true);
 
             ExpenseResponse response = expenseService.createExpense(1L, request);
 
@@ -146,7 +146,7 @@ class ExpenseServiceTest {
         @Test
         @DisplayName("카테고리 ID가 0이면 INVALID_CATEGORY 예외가 발생한다")
         void createExpense_categoryIdZero_throwsInvalidCategory() {
-            ExpenseRequest request = new ExpenseRequest(10000L, "테스트", LocalDateTime.now(), 0, null, null, null, null);
+            ExpenseRequest request = new ExpenseRequest(10000L, "테스트", LocalDateTime.now(), 0, null, null, null);
 
             assertThatThrownBy(() -> expenseService.createExpense(1L, request))
                     .isInstanceOf(GeneralException.class)
@@ -157,7 +157,7 @@ class ExpenseServiceTest {
         @Test
         @DisplayName("카테고리 ID가 12이면 INVALID_CATEGORY 예외가 발생한다")
         void createExpense_categoryIdTwelve_throwsInvalidCategory() {
-            ExpenseRequest request = new ExpenseRequest(10000L, "테스트", LocalDateTime.now(), 12, null, null, null, null);
+            ExpenseRequest request = new ExpenseRequest(10000L, "테스트", LocalDateTime.now(), 12, null, null, null);
 
             assertThatThrownBy(() -> expenseService.createExpense(1L, request))
                     .isInstanceOf(GeneralException.class)
@@ -168,8 +168,7 @@ class ExpenseServiceTest {
         @Test
         @DisplayName("유효하지 않은 감정 태그면 INVALID_EMOTION 예외가 발생한다")
         void createExpense_invalidEmotion_throwsInvalidEmotion() {
-            ExpenseRequest request =
-                    new ExpenseRequest(10000L, "테스트", LocalDateTime.now(), 1, null, "HAPPY", null, null);
+            ExpenseRequest request = new ExpenseRequest(10000L, "테스트", LocalDateTime.now(), 1, null, "HAPPY", null);
 
             assertThatThrownBy(() -> expenseService.createExpense(1L, request))
                     .isInstanceOf(GeneralException.class)
@@ -202,7 +201,7 @@ class ExpenseServiceTest {
             when(expenseRepository.findById(1L)).thenReturn(Optional.of(existing));
 
             ExpenseRequest updateRequest = new ExpenseRequest(
-                    20000L, "투썸 케이크", LocalDateTime.of(2026, 8, 20, 14, 0), 3, "생일 케이크", "NECESSARY", true, false);
+                    20000L, "투썸 케이크", LocalDateTime.of(2026, 8, 20, 14, 0), 3, "생일 케이크", "NECESSARY", true);
 
             ExpenseResponse response = expenseService.updateExpense(1L, 1L, updateRequest);
 
@@ -211,6 +210,56 @@ class ExpenseServiceTest {
             assertThat(response.categoryId()).isEqualTo(3);
             assertThat(response.emotion()).isEqualTo("NECESSARY");
             assertThat(response.isRecurring()).isTrue();
+        }
+
+        @Test
+        @DisplayName("미래 날짜로 수정하면 isPlanned=true로 설정된다")
+        void updateExpense_futureDate_plannedTrue() {
+            Expense existing = Expense.builder()
+                    .id(1L)
+                    .userId(1L)
+                    .type("EXPENSE")
+                    .amount(15000L)
+                    .title("테스트")
+                    .expenseDate(LocalDateTime.of(2026, 8, 19, 12, 0))
+                    .categoryId(2)
+                    .recurring(false)
+                    .planned(false)
+                    .createdAt(LocalDateTime.of(2026, 8, 19, 12, 0))
+                    .build();
+            when(expenseRepository.findById(1L)).thenReturn(Optional.of(existing));
+
+            ExpenseRequest updateRequest =
+                    new ExpenseRequest(20000L, "미래 지출", LocalDateTime.of(2099, 12, 31, 12, 0), 3, null, null, null);
+
+            ExpenseResponse response = expenseService.updateExpense(1L, 1L, updateRequest);
+
+            assertThat(response.isPlanned()).isTrue();
+        }
+
+        @Test
+        @DisplayName("과거 날짜로 수정하면 isPlanned=false로 설정된다")
+        void updateExpense_pastDate_plannedFalse() {
+            Expense existing = Expense.builder()
+                    .id(1L)
+                    .userId(1L)
+                    .type("EXPENSE")
+                    .amount(15000L)
+                    .title("테스트")
+                    .expenseDate(LocalDateTime.of(2099, 12, 31, 12, 0))
+                    .categoryId(2)
+                    .recurring(false)
+                    .planned(true)
+                    .createdAt(LocalDateTime.of(2026, 8, 19, 12, 0))
+                    .build();
+            when(expenseRepository.findById(1L)).thenReturn(Optional.of(existing));
+
+            ExpenseRequest updateRequest =
+                    new ExpenseRequest(20000L, "과거 지출", LocalDateTime.of(2020, 1, 1, 12, 0), 3, null, null, null);
+
+            ExpenseResponse response = expenseService.updateExpense(1L, 1L, updateRequest);
+
+            assertThat(response.isPlanned()).isFalse();
         }
     }
 
@@ -292,7 +341,7 @@ class ExpenseServiceTest {
                     .build();
             when(expenseRepository.findById(1L)).thenReturn(Optional.of(existing));
 
-            ExpenseRequest request = new ExpenseRequest(10000L, "테스트", LocalDateTime.now(), 99, null, null, null, null);
+            ExpenseRequest request = new ExpenseRequest(10000L, "테스트", LocalDateTime.now(), 99, null, null, null);
 
             assertThatThrownBy(() -> expenseService.updateExpense(1L, 1L, request))
                     .isInstanceOf(GeneralException.class)
@@ -317,8 +366,7 @@ class ExpenseServiceTest {
                     .build();
             when(expenseRepository.findById(1L)).thenReturn(Optional.of(existing));
 
-            ExpenseRequest request =
-                    new ExpenseRequest(10000L, "테스트", LocalDateTime.now(), 1, null, "HAPPY", null, null);
+            ExpenseRequest request = new ExpenseRequest(10000L, "테스트", LocalDateTime.now(), 1, null, "HAPPY", null);
 
             assertThatThrownBy(() -> expenseService.updateExpense(1L, 1L, request))
                     .isInstanceOf(GeneralException.class)
@@ -422,6 +470,6 @@ class ExpenseServiceTest {
 
     private ExpenseRequest validRequest() {
         return new ExpenseRequest(
-                15000L, "스타벅스 아메리카노", LocalDateTime.of(2026, 8, 19, 12, 0), 2, "친구랑 같이", "SATISFIED", null, null);
+                15000L, "스타벅스 아메리카노", LocalDateTime.of(2026, 8, 19, 12, 0), 2, "친구랑 같이", "SATISFIED", null);
     }
 }

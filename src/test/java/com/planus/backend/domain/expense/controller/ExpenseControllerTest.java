@@ -118,7 +118,7 @@ class ExpenseControllerTest {
                 SecurityContextHolder.getContext().setAuthentication(new UsernamePasswordAuthenticationToken(1L, null));
 
                 ExpenseRequest request =
-                        new ExpenseRequest(0L, "테스트", LocalDateTime.of(2026, 8, 19, 12, 0), 1, null, null, null, null);
+                        new ExpenseRequest(0L, "테스트", LocalDateTime.of(2026, 8, 19, 12, 0), 1, null, null, null);
 
                 mockMvc.perform(post("/api/expenses")
                                 .contentType(MediaType.APPLICATION_JSON)
@@ -133,8 +133,8 @@ class ExpenseControllerTest {
             void createExpense_blankTitle_returns400() throws Exception {
                 SecurityContextHolder.getContext().setAuthentication(new UsernamePasswordAuthenticationToken(1L, null));
 
-                ExpenseRequest request = new ExpenseRequest(
-                        10000L, "  ", LocalDateTime.of(2026, 8, 19, 12, 0), 1, null, null, null, null);
+                ExpenseRequest request =
+                        new ExpenseRequest(10000L, "  ", LocalDateTime.of(2026, 8, 19, 12, 0), 1, null, null, null);
 
                 mockMvc.perform(post("/api/expenses")
                                 .contentType(MediaType.APPLICATION_JSON)
@@ -152,8 +152,8 @@ class ExpenseControllerTest {
                 when(expenseService.createExpense(eq(1L), any()))
                         .thenThrow(new GeneralException(GeneralErrorCode.INVALID_CATEGORY));
 
-                ExpenseRequest request = new ExpenseRequest(
-                        10000L, "테스트", LocalDateTime.of(2026, 8, 19, 12, 0), 99, null, null, null, null);
+                ExpenseRequest request =
+                        new ExpenseRequest(10000L, "테스트", LocalDateTime.of(2026, 8, 19, 12, 0), 99, null, null, null);
 
                 mockMvc.perform(post("/api/expenses")
                                 .contentType(MediaType.APPLICATION_JSON)
@@ -172,7 +172,7 @@ class ExpenseControllerTest {
                         .thenThrow(new GeneralException(GeneralErrorCode.INVALID_EMOTION));
 
                 ExpenseRequest request = new ExpenseRequest(
-                        15000L, "스타벅스 아메리카노", LocalDateTime.of(2026, 8, 19, 12, 0), 2, "친구랑 같이", "HAPPY", null, null);
+                        15000L, "스타벅스 아메리카노", LocalDateTime.of(2026, 8, 19, 12, 0), 2, "친구랑 같이", "HAPPY", null);
 
                 mockMvc.perform(post("/api/expenses")
                                 .contentType(MediaType.APPLICATION_JSON)
@@ -188,7 +188,7 @@ class ExpenseControllerTest {
                 SecurityContextHolder.getContext().setAuthentication(new UsernamePasswordAuthenticationToken(1L, null));
 
                 ExpenseRequest request = new ExpenseRequest(
-                        10000L, "가".repeat(256), LocalDateTime.of(2026, 8, 19, 12, 0), 1, null, null, null, null);
+                        10000L, "가".repeat(256), LocalDateTime.of(2026, 8, 19, 12, 0), 1, null, null, null);
 
                 mockMvc.perform(post("/api/expenses")
                                 .contentType(MediaType.APPLICATION_JSON)
@@ -227,7 +227,7 @@ class ExpenseControllerTest {
                 when(expenseService.updateExpense(eq(1L), eq(1L), any())).thenReturn(response);
 
                 ExpenseRequest request = new ExpenseRequest(
-                        20000L, "투썸 케이크", LocalDateTime.of(2026, 8, 20, 14, 0), 3, "생일 케이크", "NECESSARY", null, null);
+                        20000L, "투썸 케이크", LocalDateTime.of(2026, 8, 20, 14, 0), 3, "생일 케이크", "NECESSARY", null);
 
                 mockMvc.perform(put("/api/expenses/1")
                                 .contentType(MediaType.APPLICATION_JSON)
@@ -354,6 +354,6 @@ class ExpenseControllerTest {
 
     private ExpenseRequest validRequest() {
         return new ExpenseRequest(
-                15000L, "스타벅스 아메리카노", LocalDateTime.of(2026, 8, 19, 12, 0), 2, "친구랑 같이", "SATISFIED", null, null);
+                15000L, "스타벅스 아메리카노", LocalDateTime.of(2026, 8, 19, 12, 0), 2, "친구랑 같이", "SATISFIED", null);
     }
 }

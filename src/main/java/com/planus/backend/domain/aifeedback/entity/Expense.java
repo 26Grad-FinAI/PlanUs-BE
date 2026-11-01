@@ -46,6 +46,9 @@ public class Expense {
     @Column(name = "is_planned")
     private boolean planned;
 
+    @Column(name = "source_expense_id")
+    private Long sourceExpenseId;
+
     @Column(name = "created_at")
     private LocalDateTime createdAt;
 

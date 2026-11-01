@@ -4,6 +4,7 @@ import com.planus.backend.domain.aifeedback.entity.Expense;
 import java.time.LocalDateTime;
 import java.util.List;
 import org.springframework.data.jpa.repository.JpaRepository;
+import org.springframework.data.jpa.repository.Modifying;
 import org.springframework.data.jpa.repository.Query;
 
 /** {@link Expense} 리포지토리. 거래 내역 조회 및 집계 쿼리 제공. */
@@ -143,4 +144,33 @@ public interface ExpenseRepository extends JpaRepository<Expense, Long> {
      * @return 최근 거래 10건
      */
     List<Expense> findTop10ByUserIdOrderByExpenseDateDescIdDesc(Long userId);
+
+    /**
+     * 원본 반복 지출을 조회한다. sourceExpenseId가 null인 recurring 지출만 대상.
+     *
+     * @param recurring recurring 여부 (true)
+     * @param type      거래 유형 ("EXPENSE")
+     * @return 원본 반복 지출 목록
+     */
+    List<Expense> findByRecurringAndTypeAndSourceExpenseIdIsNull(boolean recurring, String type);
+
+    /**
+     * 특정 원본 지출에 대해 지정 기간 내 자동 등록된 반복 지출이 존재하는지 확인한다.
+     *
+     * @param sourceExpenseId 원본 지출 ID
+     * @param from            조회 시작 일시 (포함)
+     * @param to              조회 종료 일시 (포함)
+     * @return 이미 등록되었으면 true
+     */
+    boolean existsBySourceExpenseIdAndExpenseDateBetween(Long sourceExpenseId, LocalDateTime from, LocalDateTime to);
+
+    /**
+     * 예정일이 경과한 계획 지출의 planned 플래그를 false로 일괄 갱신한다.
+     *
+     * @param now 현재 일시
+     * @return 갱신된 행 수
+     */
+    @Modifying
+    @Query("UPDATE Expense e SET e.planned = false WHERE e.planned = true AND e.expenseDate <= :now")
+    int clearExpiredPlanned(LocalDateTime now);
 }
