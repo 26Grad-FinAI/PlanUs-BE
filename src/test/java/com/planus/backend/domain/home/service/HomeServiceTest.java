@@ -56,14 +56,24 @@ class HomeServiceTest {
         @Test
         @DisplayName("Budget이 있으면 해당 예산으로 요약을 반환한다")
         void getSummary_withBudget_returnsSummary() {
+            UserAccount user = UserAccount.builder()
+                    .id(USER_ID)
+                    .monthlyIncome(3_000_000L)
+                    .monthlyFixedExpenses(
+                            java.util.List.of(new com.planus.backend.domain.user.dto.FixedExpenseItem("월세", 500_000L)))
+                    .monthlySavingsGoal(500_000L)
+                    .build();
             Budget budget = Budget.builder()
                     .id(1L)
                     .userId(USER_ID)
                     .yearMonth(LocalDate.of(2026, 8, 1))
                     .totalBudget(2_000_000L)
                     .build();
+            when(userAccountRepository.findById(USER_ID)).thenReturn(Optional.of(user));
             when(expenseRepository.sumExpensesByPeriod(eq(USER_ID), any(), any()))
                     .thenReturn(850_000L);
+            when(expenseRepository.sumIncomeByPeriod(eq(USER_ID), any(), any()))
+                    .thenReturn(200_000L);
             when(budgetRepository.findByUserIdAndYearMonth(USER_ID, LocalDate.of(2026, 8, 1)))
                     .thenReturn(Optional.of(budget));
 
@@ -74,7 +84,16 @@ class HomeServiceTest {
             assertThat(response.budget()).isEqualTo(2_000_000L);
             assertThat(response.remainingBudget()).isEqualTo(1_150_000L);
             assertThat(response.burnRate()).isEqualTo(42.5);
-            verify(userAccountRepository, never()).findById(any());
+
+            // 수입 상세: 월 소득(프로필) + 추가 소득(거래 내역)
+            assertThat(response.income().monthlyIncome()).isEqualTo(3_000_000L);
+            assertThat(response.income().additionalIncome()).isEqualTo(200_000L);
+            assertThat(response.income().totalIncome()).isEqualTo(3_200_000L);
+
+            // 지출 상세: 고정 지출(프로필) + 나머지(거래 내역)
+            assertThat(response.expense().fixedExpense()).isEqualTo(500_000L);
+            assertThat(response.expense().variableExpense()).isEqualTo(850_000L);
+            assertThat(response.expense().totalExpense()).isEqualTo(1_350_000L);
         }
 
         @Test
@@ -87,11 +106,13 @@ class HomeServiceTest {
                             java.util.List.of(new com.planus.backend.domain.user.dto.FixedExpenseItem("기타", 500_000L)))
                     .monthlySavingsGoal(500_000L)
                     .build();
+            when(userAccountRepository.findById(USER_ID)).thenReturn(Optional.of(user));
             when(expenseRepository.sumExpensesByPeriod(eq(USER_ID), any(), any()))
                     .thenReturn(400_000L);
+            when(expenseRepository.sumIncomeByPeriod(eq(USER_ID), any(), any()))
+                    .thenReturn(0L);
             when(budgetRepository.findByUserIdAndYearMonth(USER_ID, LocalDate.of(2026, 8, 1)))
                     .thenReturn(Optional.empty());
-            when(userAccountRepository.findById(USER_ID)).thenReturn(Optional.of(user));
 
             HomeSummaryResponse response = homeService.getSummary(USER_ID, YEAR_MONTH);
 
@@ -99,18 +120,34 @@ class HomeServiceTest {
             assertThat(response.totalExpense()).isEqualTo(400_000L);
             assertThat(response.remainingBudget()).isEqualTo(1_600_000L);
             assertThat(response.burnRate()).isEqualTo(20.0);
+
+            assertThat(response.income().monthlyIncome()).isEqualTo(3_000_000L);
+            assertThat(response.income().additionalIncome()).isZero();
+            assertThat(response.income().totalIncome()).isEqualTo(3_000_000L);
+
+            assertThat(response.expense().fixedExpense()).isEqualTo(500_000L);
+            assertThat(response.expense().variableExpense()).isEqualTo(400_000L);
+            assertThat(response.expense().totalExpense()).isEqualTo(900_000L);
         }
 
         @Test
         @DisplayName("지출이 0이면 소진율 0%, 남은 예산은 예산과 동일하다")
         void getSummary_noExpense_zeroRateFullBudget() {
+            UserAccount user = UserAccount.builder()
+                    .id(USER_ID)
+                    .monthlyIncome(2_000_000L)
+                    .monthlySavingsGoal(0L)
+                    .build();
             Budget budget = Budget.builder()
                     .id(1L)
                     .userId(USER_ID)
                     .yearMonth(LocalDate.of(2026, 8, 1))
                     .totalBudget(1_000_000L)
                     .build();
+            when(userAccountRepository.findById(USER_ID)).thenReturn(Optional.of(user));
             when(expenseRepository.sumExpensesByPeriod(eq(USER_ID), any(), any()))
+                    .thenReturn(0L);
+            when(expenseRepository.sumIncomeByPeriod(eq(USER_ID), any(), any()))
                     .thenReturn(0L);
             when(budgetRepository.findByUserIdAndYearMonth(USER_ID, LocalDate.of(2026, 8, 1)))
                     .thenReturn(Optional.of(budget));
@@ -120,19 +157,29 @@ class HomeServiceTest {
             assertThat(response.totalExpense()).isZero();
             assertThat(response.burnRate()).isEqualTo(0.0);
             assertThat(response.remainingBudget()).isEqualTo(1_000_000L);
+            assertThat(response.income().totalIncome()).isEqualTo(2_000_000L);
+            assertThat(response.expense().totalExpense()).isZero();
         }
 
         @Test
         @DisplayName("지출이 예산을 초과하면 남은 예산이 음수이다")
         void getSummary_overBudget_negativeRemaining() {
+            UserAccount user = UserAccount.builder()
+                    .id(USER_ID)
+                    .monthlyIncome(1_000_000L)
+                    .monthlySavingsGoal(0L)
+                    .build();
             Budget budget = Budget.builder()
                     .id(1L)
                     .userId(USER_ID)
                     .yearMonth(LocalDate.of(2026, 8, 1))
                     .totalBudget(500_000L)
                     .build();
+            when(userAccountRepository.findById(USER_ID)).thenReturn(Optional.of(user));
             when(expenseRepository.sumExpensesByPeriod(eq(USER_ID), any(), any()))
                     .thenReturn(700_000L);
+            when(expenseRepository.sumIncomeByPeriod(eq(USER_ID), any(), any()))
+                    .thenReturn(0L);
             when(budgetRepository.findByUserIdAndYearMonth(USER_ID, LocalDate.of(2026, 8, 1)))
                     .thenReturn(Optional.of(budget));
 
@@ -145,14 +192,22 @@ class HomeServiceTest {
         @Test
         @DisplayName("예산이 0이면 소진율은 0.0이다")
         void getSummary_zeroBudget_burnRateZero() {
+            UserAccount user = UserAccount.builder()
+                    .id(USER_ID)
+                    .monthlyIncome(0L)
+                    .monthlySavingsGoal(0L)
+                    .build();
             Budget budget = Budget.builder()
                     .id(1L)
                     .userId(USER_ID)
                     .yearMonth(LocalDate.of(2026, 8, 1))
                     .totalBudget(0L)
                     .build();
+            when(userAccountRepository.findById(USER_ID)).thenReturn(Optional.of(user));
             when(expenseRepository.sumExpensesByPeriod(eq(USER_ID), any(), any()))
                     .thenReturn(100_000L);
+            when(expenseRepository.sumIncomeByPeriod(eq(USER_ID), any(), any()))
+                    .thenReturn(0L);
             when(budgetRepository.findByUserIdAndYearMonth(USER_ID, LocalDate.of(2026, 8, 1)))
                     .thenReturn(Optional.of(budget));
 
@@ -329,12 +384,8 @@ class HomeServiceTest {
     class GetSummaryFailure {
 
         @Test
-        @DisplayName("Budget이 없고 사용자도 없으면 NOT_FOUND 예외가 발생한다")
-        void getSummary_noBudgetNoUser_throwsNotFound() {
-            when(expenseRepository.sumExpensesByPeriod(eq(USER_ID), any(), any()))
-                    .thenReturn(0L);
-            when(budgetRepository.findByUserIdAndYearMonth(USER_ID, LocalDate.of(2026, 8, 1)))
-                    .thenReturn(Optional.empty());
+        @DisplayName("사용자가 없으면 NOT_FOUND 예외가 발생한다")
+        void getSummary_noUser_throwsNotFound() {
             when(userAccountRepository.findById(USER_ID)).thenReturn(Optional.empty());
 
             assertThatThrownBy(() -> homeService.getSummary(USER_ID, YEAR_MONTH))

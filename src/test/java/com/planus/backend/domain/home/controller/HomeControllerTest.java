@@ -76,8 +76,10 @@ class HomeControllerTest {
             void getSummary_success_returns200() throws Exception {
                 SecurityContextHolder.getContext().setAuthentication(new UsernamePasswordAuthenticationToken(1L, null));
 
-                HomeSummaryResponse response =
-                        new HomeSummaryResponse("2026-08", 850_000L, 2_000_000L, 42.5, 1_150_000L);
+                HomeSummaryResponse response = new HomeSummaryResponse(
+                        "2026-08", 850_000L, 2_000_000L, 42.5, 1_150_000L,
+                        new HomeSummaryResponse.IncomeSummary(3_200_000L, 3_000_000L, 200_000L),
+                        new HomeSummaryResponse.ExpenseSummary(1_350_000L, 500_000L, 850_000L));
                 when(homeService.getSummary(eq(1L), eq(YearMonth.of(2026, 8)))).thenReturn(response);
 
                 mockMvc.perform(get("/api/home/summary").param("yearMonth", "2026-08"))
@@ -87,7 +89,13 @@ class HomeControllerTest {
                         .andExpect(jsonPath("$.result.totalExpense").value(850000))
                         .andExpect(jsonPath("$.result.budget").value(2000000))
                         .andExpect(jsonPath("$.result.burnRate").value(42.5))
-                        .andExpect(jsonPath("$.result.remainingBudget").value(1150000));
+                        .andExpect(jsonPath("$.result.remainingBudget").value(1150000))
+                        .andExpect(jsonPath("$.result.income.totalIncome").value(3200000))
+                        .andExpect(jsonPath("$.result.income.monthlyIncome").value(3000000))
+                        .andExpect(jsonPath("$.result.income.additionalIncome").value(200000))
+                        .andExpect(jsonPath("$.result.expense.totalExpense").value(1350000))
+                        .andExpect(jsonPath("$.result.expense.fixedExpense").value(500000))
+                        .andExpect(jsonPath("$.result.expense.variableExpense").value(850000));
 
                 verify(homeService).getSummary(eq(1L), eq(YearMonth.of(2026, 8)));
             }

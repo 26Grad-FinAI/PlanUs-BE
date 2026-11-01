@@ -41,18 +41,20 @@ public class HomeService {
      *
      * @param userId 사용자 ID
      * @param yearMonth 조회 월
-     * @return 사용 금액, 예산, 소진율, 남은 예산
+     * @return 사용 금액, 예산, 소진율, 남은 예산, 수입·지출 상세
      */
     public HomeSummaryResponse getSummary(Long userId, YearMonth yearMonth) {
         LocalDateTime from = yearMonth.atDay(1).atStartOfDay();
         LocalDateTime to = yearMonth.atEndOfMonth().atTime(LocalTime.MAX);
+
+        UserAccount user = findUserOrThrow(userId);
 
         long totalExpense = expenseRepository.sumExpensesByPeriod(userId, from, to);
 
         long budget = budgetRepository
                 .findByUserIdAndYearMonth(userId, yearMonth.atDay(1))
                 .map(Budget::getTotalBudget)
-                .orElseGet(() -> findUserOrThrow(userId).availableBudget());
+                .orElseGet(user::availableBudget);
 
         long remainingBudget = budget - totalExpense;
 
@@ -64,7 +66,21 @@ public class HomeService {
                     .doubleValue();
         }
 
-        return new HomeSummaryResponse(yearMonth.toString(), totalExpense, budget, burnRate, remainingBudget);
+        // 수입 상세: 월 소득(프로필) + 추가 소득(거래 내역)
+        long monthlyIncome = user.getMonthlyIncome();
+        long additionalIncome = expenseRepository.sumIncomeByPeriod(userId, from, to);
+        long totalIncome = monthlyIncome + additionalIncome;
+        var incomeSummary = new HomeSummaryResponse.IncomeSummary(totalIncome, monthlyIncome, additionalIncome);
+
+        // 지출 상세: 고정 지출(프로필) + 나머지(거래 내역)
+        long fixedExpense = user.totalFixedExpenses();
+        long variableExpense = totalExpense;
+        long totalExpenseAll = fixedExpense + variableExpense;
+        var expenseSummary = new HomeSummaryResponse.ExpenseSummary(totalExpenseAll, fixedExpense, variableExpense);
+
+        return new HomeSummaryResponse(
+                yearMonth.toString(), totalExpense, budget, burnRate, remainingBudget,
+                incomeSummary, expenseSummary);
     }
 
     /**
