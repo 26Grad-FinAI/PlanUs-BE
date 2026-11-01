@@ -59,10 +59,6 @@ public class IncomeConverter {
      */
     public static IncomeDetailResponse toIncomeDetailResponse(Expense expense) {
         return new IncomeDetailResponse(
-                expense.getTitle(),
-                expense.getAmount(),
-                "수입",
-                expense.getCategoryId(),
-                expense.getMemo());
+                expense.getTitle(), expense.getAmount(), "수입", expense.getCategoryId(), expense.getMemo());
     }
 }
