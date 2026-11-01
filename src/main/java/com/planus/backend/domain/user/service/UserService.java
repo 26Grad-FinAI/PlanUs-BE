@@ -12,7 +12,6 @@ import com.planus.backend.domain.user.entity.UserAccount;
 import com.planus.backend.domain.user.repository.UserAccountRepository;
 import com.planus.backend.global.apiPayload.code.GeneralErrorCode;
 import com.planus.backend.global.apiPayload.exception.GeneralException;
-import java.time.LocalDate;
 import java.time.LocalDateTime;
 import java.time.LocalTime;
 import java.time.YearMonth;
@@ -136,10 +135,8 @@ public class UserService {
         LocalDateTime to = currentMonth.atEndOfMonth().atTime(LocalTime.MAX);
 
         // 월별 지출·수입 합계를 한 번에 조회
-        Map<String, Long> expenseByMonth = toMonthMap(
-                expenseRepository.sumExpensesGroupByMonth(userId, from, to));
-        Map<String, Long> incomeByMonth = toMonthMap(
-                expenseRepository.sumIncomeGroupByMonth(userId, from, to));
+        Map<String, Long> expenseByMonth = toMonthMap(expenseRepository.sumExpensesGroupByMonth(userId, from, to));
+        Map<String, Long> incomeByMonth = toMonthMap(expenseRepository.sumIncomeGroupByMonth(userId, from, to));
 
         long monthlyIncome = user.getMonthlyIncome();
         long fixedExpense = user.totalFixedExpenses();

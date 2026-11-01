@@ -314,7 +314,8 @@ class UserServiceTest {
                     .createdAt(LocalDateTime.of(2026, 11, 1, 0, 0))
                     .build();
             when(userAccountRepository.findById(1L)).thenReturn(Optional.of(user));
-            when(expenseRepository.sumExpensesGroupByMonth(eq(1L), any(), any())).thenReturn(List.of());
+            when(expenseRepository.sumExpensesGroupByMonth(eq(1L), any(), any()))
+                    .thenReturn(List.of());
             when(expenseRepository.sumIncomeGroupByMonth(eq(1L), any(), any())).thenReturn(List.of());
 
             SavingsStatusResponse response = userService.getSavingsStatus(1L);

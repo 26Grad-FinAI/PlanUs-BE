@@ -300,8 +300,7 @@ class UserControllerTest {
             @Test
             @DisplayName("200 OK와 총 저축 금액·월별 기록을 반환한다")
             void getSavingsStatus_success_returns200() throws Exception {
-                SecurityContextHolder.getContext()
-                        .setAuthentication(new UsernamePasswordAuthenticationToken(1L, null));
+                SecurityContextHolder.getContext().setAuthentication(new UsernamePasswordAuthenticationToken(1L, null));
 
                 SavingsStatusResponse response = new SavingsStatusResponse(
                         1_800_000L,
@@ -317,12 +316,18 @@ class UserControllerTest {
                         .andExpect(jsonPath("$.result.totalSavings").value(1_800_000L))
                         .andExpect(jsonPath("$.result.monthlyRecords").isArray())
                         .andExpect(jsonPath("$.result.monthlyRecords.length()").value(3))
-                        .andExpect(jsonPath("$.result.monthlyRecords[0].yearMonth").value("2026-09"))
-                        .andExpect(jsonPath("$.result.monthlyRecords[0].savings").value(1_200_000L))
-                        .andExpect(jsonPath("$.result.monthlyRecords[1].yearMonth").value("2026-10"))
-                        .andExpect(jsonPath("$.result.monthlyRecords[1].savings").value(-400_000L))
-                        .andExpect(jsonPath("$.result.monthlyRecords[2].yearMonth").value("2026-11"))
-                        .andExpect(jsonPath("$.result.monthlyRecords[2].savings").value(1_000_000L));
+                        .andExpect(
+                                jsonPath("$.result.monthlyRecords[0].yearMonth").value("2026-09"))
+                        .andExpect(
+                                jsonPath("$.result.monthlyRecords[0].savings").value(1_200_000L))
+                        .andExpect(
+                                jsonPath("$.result.monthlyRecords[1].yearMonth").value("2026-10"))
+                        .andExpect(
+                                jsonPath("$.result.monthlyRecords[1].savings").value(-400_000L))
+                        .andExpect(
+                                jsonPath("$.result.monthlyRecords[2].yearMonth").value("2026-11"))
+                        .andExpect(
+                                jsonPath("$.result.monthlyRecords[2].savings").value(1_000_000L));
 
                 verify(userService).getSavingsStatus(1L);
             }
@@ -337,8 +342,7 @@ class UserControllerTest {
             void getSavingsStatus_userNotFound_returns404() throws Exception {
                 SecurityContextHolder.getContext()
                         .setAuthentication(new UsernamePasswordAuthenticationToken(999L, null));
-                when(userService.getSavingsStatus(999L))
-                        .thenThrow(new GeneralException(GeneralErrorCode.NOT_FOUND));
+                when(userService.getSavingsStatus(999L)).thenThrow(new GeneralException(GeneralErrorCode.NOT_FOUND));
 
                 mockMvc.perform(get("/api/users/me/savings-status"))
                         .andExpect(status().isNotFound())
