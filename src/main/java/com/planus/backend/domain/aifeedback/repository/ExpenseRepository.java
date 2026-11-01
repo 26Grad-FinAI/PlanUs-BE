@@ -80,6 +80,18 @@ public interface ExpenseRepository extends JpaRepository<Expense, Long> {
     long countByUserIdAndPeriod(Long userId, LocalDateTime from, LocalDateTime to);
 
     /**
+     * 특정 기간 내 사용자 총 수입(INCOME) 합계를 조회한다.
+     *
+     * @param userId 사용자 ID
+     * @param from   조회 시작 일시 (포함)
+     * @param to     조회 종료 일시 (포함)
+     * @return 기간 내 총 수입 합계 (원), 거래 없으면 0
+     */
+    @Query(
+            "SELECT COALESCE(SUM(e.amount), 0) FROM Expense e WHERE e.userId = :userId AND e.type = 'INCOME' AND e.expenseDate BETWEEN :from AND :to")
+    long sumIncomeByPeriod(Long userId, LocalDateTime from, LocalDateTime to);
+
+    /**
      * 특정 기간 내 카테고리별 지출 합계를 조회한다.
      *
      * @param userId 사용자 ID
