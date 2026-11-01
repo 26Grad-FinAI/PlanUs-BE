@@ -7,6 +7,7 @@ import com.planus.backend.domain.aifeedback.repository.BudgetCategoryRepository;
 import com.planus.backend.domain.aifeedback.repository.BudgetRepository;
 import com.planus.backend.domain.aifeedback.repository.ExpenseRepository;
 import com.planus.backend.domain.income.converter.IncomeConverter;
+import com.planus.backend.domain.income.dto.IncomeDetailResponse;
 import com.planus.backend.domain.income.dto.IncomeRequest;
 import com.planus.backend.domain.income.dto.IncomeResponse;
 import com.planus.backend.global.apiPayload.code.GeneralErrorCode;
@@ -28,6 +29,25 @@ public class IncomeService {
     private final ExpenseRepository expenseRepository;
     private final BudgetRepository budgetRepository;
     private final BudgetCategoryRepository budgetCategoryRepository;
+
+    /**
+     * 수입을 상세 조회한다.
+     *
+     * @param userId   인증된 사용자 ID
+     * @param incomeId 조회할 수입 ID
+     * @return 수입 상세 정보
+     */
+    @Transactional(readOnly = true)
+    public IncomeDetailResponse getIncome(Long userId, Long incomeId) {
+        Expense income = expenseRepository
+                .findById(incomeId)
+                .orElseThrow(() -> new GeneralException(GeneralErrorCode.INCOME_NOT_FOUND));
+
+        income.validateOwnership(userId);
+        income.validateType("INCOME");
+
+        return IncomeConverter.toIncomeDetailResponse(income);
+    }
 
     /**
      * 수입을 등록한다.

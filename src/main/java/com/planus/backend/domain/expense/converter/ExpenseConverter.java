@@ -1,6 +1,7 @@
 package com.planus.backend.domain.expense.converter;
 
 import com.planus.backend.domain.aifeedback.entity.Expense;
+import com.planus.backend.domain.expense.dto.ExpenseDetailResponse;
 import com.planus.backend.domain.expense.dto.ExpenseRequest;
 import com.planus.backend.domain.expense.dto.ExpenseResponse;
 import java.time.LocalDate;
@@ -53,5 +54,22 @@ public class ExpenseConverter {
                 expense.isRecurring(),
                 expense.isPlanned(),
                 expense.getCreatedAt());
+    }
+
+    /**
+     * Expense 엔티티를 지출 상세 조회 응답 DTO로 변환한다.
+     *
+     * @param expense 저장된 Expense 엔티티
+     * @return 지출 상세 조회 응답 DTO
+     */
+    public static ExpenseDetailResponse toExpenseDetailResponse(Expense expense) {
+        return new ExpenseDetailResponse(
+                expense.getTitle(),
+                expense.getAmount(),
+                "지출",
+                expense.getExpenseDate(),
+                expense.getEmotion(),
+                expense.isRecurring(),
+                expense.getMemo());
     }
 }

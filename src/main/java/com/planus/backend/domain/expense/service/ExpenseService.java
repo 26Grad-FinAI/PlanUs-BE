@@ -3,6 +3,7 @@ package com.planus.backend.domain.expense.service;
 import com.planus.backend.domain.aifeedback.entity.Expense;
 import com.planus.backend.domain.aifeedback.repository.ExpenseRepository;
 import com.planus.backend.domain.expense.converter.ExpenseConverter;
+import com.planus.backend.domain.expense.dto.ExpenseDetailResponse;
 import com.planus.backend.domain.expense.dto.ExpenseRequest;
 import com.planus.backend.domain.expense.dto.ExpenseResponse;
 import com.planus.backend.global.apiPayload.code.GeneralErrorCode;
@@ -25,6 +26,25 @@ public class ExpenseService {
     private static final int MAX_CATEGORY_ID = 10;
 
     private final ExpenseRepository expenseRepository;
+
+    /**
+     * 지출을 상세 조회한다.
+     *
+     * @param userId    인증된 사용자 ID
+     * @param expenseId 조회할 지출 ID
+     * @return 지출 상세 정보
+     */
+    @Transactional(readOnly = true)
+    public ExpenseDetailResponse getExpense(Long userId, Long expenseId) {
+        Expense expense = expenseRepository
+                .findById(expenseId)
+                .orElseThrow(() -> new GeneralException(GeneralErrorCode.EXPENSE_NOT_FOUND));
+
+        expense.validateOwnership(userId);
+        expense.validateType("EXPENSE");
+
+        return ExpenseConverter.toExpenseDetailResponse(expense);
+    }
 
     /**
      * 지출을 등록한다.
