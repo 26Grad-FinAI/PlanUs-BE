@@ -5,8 +5,7 @@ import java.time.LocalDate;
 import java.util.List;
 
 @Schema(description = "홈 화면 최근 거래 내역 응답")
-public record HomeRecentResponse(
-        @Schema(description = "날짜별 거래 그룹 목록") List<DailyGroup> dailyGroups) {
+public record HomeRecentResponse(@Schema(description = "날짜별 거래 그룹 목록") List<DailyGroup> dailyGroups) {
 
     @Schema(description = "날짜별 거래 그룹")
     public record DailyGroup(

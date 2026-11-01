@@ -136,10 +136,11 @@ public interface ExpenseRepository extends JpaRepository<Expense, Long> {
     List<Object[]> sumExpensesGroupByMonthAndCategory(Long userId, LocalDateTime from, LocalDateTime to);
 
     /**
-     * 사용자의 최근 거래 10건을 날짜 내림차순으로 조회한다.
+     * 사용자의 최근 거래 10건을 날짜 내림차순, ID 내림차순으로 조회한다.
+     * 동일 expenseDate에 대해 결정적 순서를 보장하기 위해 id를 보조 정렬 기준으로 사용한다.
      *
      * @param userId 사용자 ID
      * @return 최근 거래 10건
      */
-    List<Expense> findTop10ByUserIdOrderByExpenseDateDesc(Long userId);
+    List<Expense> findTop10ByUserIdOrderByExpenseDateDescIdDesc(Long userId);
 }

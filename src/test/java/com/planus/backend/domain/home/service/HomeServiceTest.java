@@ -408,7 +408,8 @@ class HomeServiceTest {
                             .categoryId(10)
                             .expenseDate(LocalDateTime.of(2026, 8, 21, 9, 0))
                             .build());
-            when(expenseRepository.findTop10ByUserIdOrderByExpenseDateDesc(USER_ID)).thenReturn(expenses);
+            when(expenseRepository.findTop10ByUserIdOrderByExpenseDateDescIdDesc(USER_ID))
+                    .thenReturn(expenses);
 
             HomeRecentResponse response = homeService.getRecentTransactions(USER_ID);
 
@@ -445,7 +446,8 @@ class HomeServiceTest {
                             .categoryId(10)
                             .expenseDate(LocalDateTime.of(2026, 8, 22, 9, 0))
                             .build());
-            when(expenseRepository.findTop10ByUserIdOrderByExpenseDateDesc(USER_ID)).thenReturn(expenses);
+            when(expenseRepository.findTop10ByUserIdOrderByExpenseDateDescIdDesc(USER_ID))
+                    .thenReturn(expenses);
 
             HomeRecentResponse response = homeService.getRecentTransactions(USER_ID);
 
@@ -457,27 +459,28 @@ class HomeServiceTest {
         @Test
         @DisplayName("카테고리명이 올바르게 매핑된다")
         void getRecentTransactions_categoryNameMapped() {
-            List<Expense> expenses = List.of(
-                    Expense.builder()
-                            .id(1L)
-                            .userId(USER_ID)
-                            .type("EXPENSE")
-                            .amount(5000L)
-                            .title("버스")
-                            .categoryId(4)
-                            .expenseDate(LocalDateTime.of(2026, 8, 22, 8, 0))
-                            .build());
-            when(expenseRepository.findTop10ByUserIdOrderByExpenseDateDesc(USER_ID)).thenReturn(expenses);
+            List<Expense> expenses = List.of(Expense.builder()
+                    .id(1L)
+                    .userId(USER_ID)
+                    .type("EXPENSE")
+                    .amount(5000L)
+                    .title("버스")
+                    .categoryId(4)
+                    .expenseDate(LocalDateTime.of(2026, 8, 22, 8, 0))
+                    .build());
+            when(expenseRepository.findTop10ByUserIdOrderByExpenseDateDescIdDesc(USER_ID))
+                    .thenReturn(expenses);
 
             HomeRecentResponse response = homeService.getRecentTransactions(USER_ID);
 
-            assertThat(response.dailyGroups().get(0).transactions().get(0).categoryName()).isEqualTo("교통");
+            assertThat(response.dailyGroups().get(0).transactions().get(0).categoryName())
+                    .isEqualTo("교통");
         }
 
         @Test
         @DisplayName("거래가 없으면 빈 배열을 반환한다")
         void getRecentTransactions_noTransactions_returnsEmpty() {
-            when(expenseRepository.findTop10ByUserIdOrderByExpenseDateDesc(USER_ID))
+            when(expenseRepository.findTop10ByUserIdOrderByExpenseDateDescIdDesc(USER_ID))
                     .thenReturn(Collections.emptyList());
 
             HomeRecentResponse response = homeService.getRecentTransactions(USER_ID);

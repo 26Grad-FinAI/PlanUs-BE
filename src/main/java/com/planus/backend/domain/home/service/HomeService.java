@@ -1,10 +1,10 @@
 package com.planus.backend.domain.home.service;
 
+import com.planus.backend.domain.aifeedback.core.Categories;
 import com.planus.backend.domain.aifeedback.entity.Budget;
 import com.planus.backend.domain.aifeedback.entity.Expense;
 import com.planus.backend.domain.aifeedback.repository.BudgetRepository;
 import com.planus.backend.domain.aifeedback.repository.ExpenseRepository;
-import com.planus.backend.domain.aifeedback.core.Categories;
 import com.planus.backend.domain.home.dto.HomeCalendarResponse;
 import com.planus.backend.domain.home.dto.HomeCalendarResponse.DailySummary;
 import com.planus.backend.domain.home.dto.HomeDailyResponse;
@@ -165,7 +165,7 @@ public class HomeService {
      * @return 날짜별 그룹화된 최근 거래 목록
      */
     public HomeRecentResponse getRecentTransactions(Long userId) {
-        List<Expense> recent = expenseRepository.findTop10ByUserIdOrderByExpenseDateDesc(userId);
+        List<Expense> recent = expenseRepository.findTop10ByUserIdOrderByExpenseDateDescIdDesc(userId);
 
         List<DailyGroup> dailyGroups = recent.stream()
                 .collect(Collectors.groupingBy(Expense::getDate, java.util.LinkedHashMap::new, Collectors.toList()))
