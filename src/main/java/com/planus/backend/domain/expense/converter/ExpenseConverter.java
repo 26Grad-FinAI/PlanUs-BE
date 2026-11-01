@@ -3,6 +3,7 @@ package com.planus.backend.domain.expense.converter;
 import com.planus.backend.domain.aifeedback.entity.Expense;
 import com.planus.backend.domain.expense.dto.ExpenseRequest;
 import com.planus.backend.domain.expense.dto.ExpenseResponse;
+import java.time.LocalDate;
 import java.time.LocalDateTime;
 import lombok.AccessLevel;
 import lombok.NoArgsConstructor;
@@ -29,7 +30,7 @@ public class ExpenseConverter {
                 .memo(request.memo())
                 .emotion(request.emotion())
                 .recurring(request.isRecurring() != null && request.isRecurring())
-                .planned(request.isPlanned() != null && request.isPlanned())
+                .planned(request.expenseDate().toLocalDate().isAfter(LocalDate.now()))
                 .createdAt(LocalDateTime.now())
                 .build();
     }

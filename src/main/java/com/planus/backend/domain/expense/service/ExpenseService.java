@@ -7,6 +7,7 @@ import com.planus.backend.domain.expense.dto.ExpenseRequest;
 import com.planus.backend.domain.expense.dto.ExpenseResponse;
 import com.planus.backend.global.apiPayload.code.GeneralErrorCode;
 import com.planus.backend.global.apiPayload.exception.GeneralException;
+import java.time.LocalDate;
 import java.util.Set;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
@@ -29,7 +30,7 @@ public class ExpenseService {
      * 지출을 등록한다.
      *
      * @param userId  인증된 사용자 ID
-     * @param request 지출 등록 요청 (금액·내역·날짜·카테고리·메모·감정태그·고정지출여부·계획지출여부)
+     * @param request 지출 등록 요청 (금액·내역·날짜·카테고리·메모·감정태그·고정지출여부)
      * @return 등록된 지출 정보
      * @throws GeneralException categoryId가 1~11 범위 밖이거나 emotion이 유효하지 않은 경우
      */
@@ -70,7 +71,7 @@ public class ExpenseService {
                 request.memo(),
                 request.emotion(),
                 Boolean.TRUE.equals(request.isRecurring()),
-                Boolean.TRUE.equals(request.isPlanned()));
+                request.expenseDate().toLocalDate().isAfter(LocalDate.now()));
 
         return ExpenseConverter.toExpenseResponse(expense);
     }
