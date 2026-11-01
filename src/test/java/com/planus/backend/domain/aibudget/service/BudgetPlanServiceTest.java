@@ -9,6 +9,8 @@ import com.planus.backend.domain.aibudget.client.AiBudgetClient;
 import com.planus.backend.domain.aibudget.client.dto.AiBudgetResponse;
 import com.planus.backend.domain.aibudget.dto.BudgetCategoryUpdateRequest;
 import com.planus.backend.domain.aibudget.dto.BudgetSummaryResponse;
+import com.planus.backend.domain.aibudget.dto.PeerComparisonResponse;
+import com.planus.backend.domain.aibudget.entity.BudgetPlanAnalysis;
 import com.planus.backend.domain.aibudget.entity.BudgetPlanRequest;
 import com.planus.backend.domain.aibudget.entity.BudgetPlanStatus;
 import com.planus.backend.domain.aibudget.repository.BudgetPlanAnalysisRepository;
@@ -21,7 +23,10 @@ import com.planus.backend.domain.aifeedback.repository.ExpenseRepository;
 import com.planus.backend.domain.user.repository.UserAccountRepository;
 import com.planus.backend.global.apiPayload.exception.GeneralException;
 import java.time.LocalDate;
+import java.time.LocalDateTime;
+import java.util.LinkedHashMap;
 import java.util.List;
+import java.util.Map;
 import java.util.Optional;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
@@ -540,6 +545,121 @@ class BudgetPlanServiceTest {
             assertThat(catResult.userAmount()).isEqualTo(50000);
             assertThat(catResult.difference()).isEqualTo(-50000);
             assertThat(catResult.userModified()).isTrue();
+        }
+    }
+
+    @Nested
+    @DisplayName("getPeerComparison()")
+    class GetPeerComparison {
+
+        private final Long userId = 1L;
+        private final LocalDate yearMonth = LocalDate.of(2026, 10, 1);
+
+        @Test
+        @DisplayName("정상 조회: 9개 카테고리 반환, difference 계산 검증")
+        void success() {
+            Budget budget = Budget.builder()
+                    .id(10L)
+                    .userId(userId)
+                    .yearMonth(yearMonth)
+                    .totalBudget(600000)
+                    .aiTotalBudget(600000L)
+                    .build();
+
+            Map<String, Object> observation = new LinkedHashMap<>();
+            observation.put("또래인원", 141);
+
+            Map<String, Object> peerMap = new LinkedHashMap<>();
+            peerMap.put("식료품", 120000L);
+            peerMap.put("의류신발", 50000L);
+            peerMap.put("보건", 30000L);
+            peerMap.put("교통", 80000L);
+            peerMap.put("오락문화", 60000L);
+            peerMap.put("교육", 40000L);
+            peerMap.put("식대", 377268L);
+            peerMap.put("숙박여행", 20000L);
+            peerMap.put("정보통신", 35000L);
+            observation.put("또래", peerMap);
+
+            BudgetPlanAnalysis analysis = BudgetPlanAnalysis.builder()
+                    .budgetId(10L)
+                    .observation(observation)
+                    .build();
+
+            // 실시간 소비 데이터 mock (categoryId, sum 튜플)
+            LocalDateTime from = yearMonth.atStartOfDay();
+            LocalDateTime to = yearMonth.plusMonths(1).atStartOfDay().minusSeconds(1);
+            List<Object[]> expenseRows = List.of(
+                    new Object[] {1, 100000L},
+                    new Object[] {2, 30000L},
+                    new Object[] {3, 10000L},
+                    new Object[] {4, 50000L},
+                    new Object[] {5, 40000L},
+                    new Object[] {6, 20000L},
+                    new Object[] {7, 154900L},
+                    new Object[] {8, 0L},
+                    new Object[] {9, 25000L});
+
+            when(budgetRepository.findByUserIdAndYearMonth(userId, yearMonth)).thenReturn(Optional.of(budget));
+            when(budgetPlanAnalysisRepository.findByBudgetId(10L)).thenReturn(Optional.of(analysis));
+            when(expenseRepository.sumExpensesGroupByCategory(userId, from, to)).thenReturn(expenseRows);
+
+            PeerComparisonResponse result = service.getPeerComparison(userId, yearMonth);
+
+            assertThat(result.peerGroupSize()).isEqualTo(141);
+            // totalSpending = 실시간 소비 합계
+            long expectedTotal = 100000L + 30000L + 10000L + 50000L + 40000L + 20000L + 154900L + 0L + 25000L;
+            assertThat(result.totalSpending()).isEqualTo(expectedTotal);
+            assertThat(result.categories()).hasSize(9);
+
+            // 식대 카테고리 검증
+            PeerComparisonResponse.CategoryComparison meal = result.categories().stream()
+                    .filter(c -> c.categoryId() == 7)
+                    .findFirst()
+                    .orElseThrow();
+            assertThat(meal.categoryName()).isEqualTo("식대");
+            assertThat(meal.myAmount()).isEqualTo(154900L);
+            assertThat(meal.peerAmount()).isEqualTo(377268L);
+            assertThat(meal.difference()).isEqualTo(154900L - 377268L);
+
+            // 식료품 카테고리 검증
+            PeerComparisonResponse.CategoryComparison grocery = result.categories().stream()
+                    .filter(c -> c.categoryId() == 1)
+                    .findFirst()
+                    .orElseThrow();
+            assertThat(grocery.myAmount()).isEqualTo(100000L);
+            assertThat(grocery.peerAmount()).isEqualTo(120000L);
+            assertThat(grocery.difference()).isEqualTo(-20000L);
+        }
+
+        @Test
+        @DisplayName("예산 미존재 시 BUDGET_NOT_FOUND 예외")
+        void budgetNotFound_throws() {
+            when(budgetRepository.findByUserIdAndYearMonth(userId, yearMonth)).thenReturn(Optional.empty());
+
+            assertThatThrownBy(() -> service.getPeerComparison(userId, yearMonth))
+                    .isInstanceOf(GeneralException.class);
+        }
+
+        @Test
+        @DisplayName("analysis 미존재 시 BUDGET_PLAN_NOT_FOUND 예외")
+        void analysisNotFound_throws() {
+            Budget budget = Budget.builder()
+                    .id(10L)
+                    .userId(userId)
+                    .yearMonth(yearMonth)
+                    .totalBudget(600000)
+                    .aiTotalBudget(600000L)
+                    .build();
+
+            when(budgetRepository.findByUserIdAndYearMonth(userId, yearMonth)).thenReturn(Optional.of(budget));
+            when(budgetPlanAnalysisRepository.findByBudgetId(10L)).thenReturn(Optional.empty());
+            // 백필 시도도 실패 (planRequest 없음)
+            when(budgetPlanRequestRepository.findByUserIdAndYearMonth(userId, yearMonth))
+                    .thenReturn(Optional.empty());
+
+            assertThatThrownBy(() -> service.getPeerComparison(userId, yearMonth))
+                    .isInstanceOf(GeneralException.class);
         }
     }
 }
