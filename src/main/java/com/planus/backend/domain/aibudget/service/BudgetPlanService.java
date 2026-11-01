@@ -6,6 +6,7 @@ import com.planus.backend.domain.aibudget.client.dto.AiBudgetRequest;
 import com.planus.backend.domain.aibudget.client.dto.AiBudgetResponse;
 import com.planus.backend.domain.aibudget.dto.BudgetCategoryUpdateRequest;
 import com.planus.backend.domain.aibudget.dto.BudgetSummaryResponse;
+import com.planus.backend.domain.aibudget.dto.PeerComparisonResponse;
 import com.planus.backend.domain.aibudget.entity.BudgetPlanAnalysis;
 import com.planus.backend.domain.aibudget.entity.BudgetPlanRequest;
 import com.planus.backend.domain.aibudget.entity.BudgetPlanStatus;
@@ -386,6 +387,62 @@ public class BudgetPlanService {
 
         return new BudgetSummaryResponse(
                 budget.getAiSummary(), aiTotal, userTotal, userTotal - aiTotal, categoryBudgets);
+    }
+
+    /** 또래 소비 비교 데이터를 조회한다. 내 소비는 실시간 DB 집계, 또래 정보는 observation에서 조회한다. */
+    @Transactional
+    public PeerComparisonResponse getPeerComparison(Long userId, LocalDate yearMonth) {
+        Budget budget = budgetRepository
+                .findByUserIdAndYearMonth(userId, yearMonth)
+                .orElseThrow(() -> new GeneralException(GeneralErrorCode.BUDGET_NOT_FOUND));
+
+        Optional<BudgetPlanAnalysis> analysisOpt = budgetPlanAnalysisRepository.findByBudgetId(budget.getId());
+
+        // analysis가 없으면 백필 시도 후 재조회
+        if (analysisOpt.isEmpty()) {
+            backfillAiFields(userId, yearMonth, budget);
+            analysisOpt = budgetPlanAnalysisRepository.findByBudgetId(budget.getId());
+        }
+
+        BudgetPlanAnalysis analysis =
+                analysisOpt.orElseThrow(() -> new GeneralException(GeneralErrorCode.BUDGET_PLAN_NOT_FOUND));
+
+        Map<String, Object> observation = analysis.getObservation();
+
+        @SuppressWarnings("unchecked")
+        Map<String, Object> peerMap = observation != null && observation.get("또래") instanceof Map
+                ? (Map<String, Object>) observation.get("또래")
+                : null;
+
+        if (peerMap == null) {
+            return new PeerComparisonResponse(0, 0, List.of());
+        }
+
+        int peerGroupSize = observation.containsKey("또래인원") ? ((Number) observation.get("또래인원")).intValue() : 0;
+
+        // 해당 월 실시간 카테고리별 소비 집계
+        LocalDateTime from = yearMonth.atStartOfDay();
+        LocalDateTime to = yearMonth.plusMonths(1).atStartOfDay().minusSeconds(1);
+        List<Object[]> expenseRows = expenseRepository.sumExpensesGroupByCategory(userId, from, to);
+        Map<Integer, Long> mySpendingMap = new HashMap<>();
+        for (Object[] row : expenseRows) {
+            int catId = ((Number) row[0]).intValue();
+            long amount = ((Number) row[1]).longValue();
+            mySpendingMap.put(catId, amount);
+        }
+        long totalSpending =
+                mySpendingMap.values().stream().mapToLong(Long::longValue).sum();
+
+        List<PeerComparisonResponse.CategoryComparison> categories = new ArrayList<>();
+        for (String catName : AI_CATEGORIES) {
+            int categoryId = Categories.id(catName);
+            long myAmount = mySpendingMap.getOrDefault(categoryId, 0L);
+            long peerAmount = peerMap.get(catName) instanceof Number n ? n.longValue() : 0;
+            categories.add(new PeerComparisonResponse.CategoryComparison(
+                    categoryId, catName, myAmount, peerAmount, myAmount - peerAmount));
+        }
+
+        return new PeerComparisonResponse(peerGroupSize, totalSpending, categories);
     }
 
     /** 기존 데이터 하위 호환: BudgetPlanRequest의 AI 응답에서 aiSummary/aiTotalBudget을 백필한다. */
