@@ -5,8 +5,6 @@ import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.mock;
-import static org.mockito.Mockito.never;
-import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
 import com.planus.backend.domain.aifeedback.entity.Budget;
@@ -72,8 +70,7 @@ class HomeServiceTest {
             when(userAccountRepository.findById(USER_ID)).thenReturn(Optional.of(user));
             when(expenseRepository.sumExpensesByPeriod(eq(USER_ID), any(), any()))
                     .thenReturn(850_000L);
-            when(expenseRepository.sumIncomeByPeriod(eq(USER_ID), any(), any()))
-                    .thenReturn(200_000L);
+            when(expenseRepository.sumIncomeByPeriod(eq(USER_ID), any(), any())).thenReturn(200_000L);
             when(budgetRepository.findByUserIdAndYearMonth(USER_ID, LocalDate.of(2026, 8, 1)))
                     .thenReturn(Optional.of(budget));
 
@@ -109,8 +106,7 @@ class HomeServiceTest {
             when(userAccountRepository.findById(USER_ID)).thenReturn(Optional.of(user));
             when(expenseRepository.sumExpensesByPeriod(eq(USER_ID), any(), any()))
                     .thenReturn(400_000L);
-            when(expenseRepository.sumIncomeByPeriod(eq(USER_ID), any(), any()))
-                    .thenReturn(0L);
+            when(expenseRepository.sumIncomeByPeriod(eq(USER_ID), any(), any())).thenReturn(0L);
             when(budgetRepository.findByUserIdAndYearMonth(USER_ID, LocalDate.of(2026, 8, 1)))
                     .thenReturn(Optional.empty());
 
@@ -147,8 +143,7 @@ class HomeServiceTest {
             when(userAccountRepository.findById(USER_ID)).thenReturn(Optional.of(user));
             when(expenseRepository.sumExpensesByPeriod(eq(USER_ID), any(), any()))
                     .thenReturn(0L);
-            when(expenseRepository.sumIncomeByPeriod(eq(USER_ID), any(), any()))
-                    .thenReturn(0L);
+            when(expenseRepository.sumIncomeByPeriod(eq(USER_ID), any(), any())).thenReturn(0L);
             when(budgetRepository.findByUserIdAndYearMonth(USER_ID, LocalDate.of(2026, 8, 1)))
                     .thenReturn(Optional.of(budget));
 
@@ -178,8 +173,7 @@ class HomeServiceTest {
             when(userAccountRepository.findById(USER_ID)).thenReturn(Optional.of(user));
             when(expenseRepository.sumExpensesByPeriod(eq(USER_ID), any(), any()))
                     .thenReturn(700_000L);
-            when(expenseRepository.sumIncomeByPeriod(eq(USER_ID), any(), any()))
-                    .thenReturn(0L);
+            when(expenseRepository.sumIncomeByPeriod(eq(USER_ID), any(), any())).thenReturn(0L);
             when(budgetRepository.findByUserIdAndYearMonth(USER_ID, LocalDate.of(2026, 8, 1)))
                     .thenReturn(Optional.of(budget));
 
@@ -206,8 +200,7 @@ class HomeServiceTest {
             when(userAccountRepository.findById(USER_ID)).thenReturn(Optional.of(user));
             when(expenseRepository.sumExpensesByPeriod(eq(USER_ID), any(), any()))
                     .thenReturn(100_000L);
-            when(expenseRepository.sumIncomeByPeriod(eq(USER_ID), any(), any()))
-                    .thenReturn(0L);
+            when(expenseRepository.sumIncomeByPeriod(eq(USER_ID), any(), any())).thenReturn(0L);
             when(budgetRepository.findByUserIdAndYearMonth(USER_ID, LocalDate.of(2026, 8, 1)))
                     .thenReturn(Optional.of(budget));
 

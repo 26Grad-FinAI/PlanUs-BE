@@ -77,7 +77,11 @@ class HomeControllerTest {
                 SecurityContextHolder.getContext().setAuthentication(new UsernamePasswordAuthenticationToken(1L, null));
 
                 HomeSummaryResponse response = new HomeSummaryResponse(
-                        "2026-08", 850_000L, 2_000_000L, 42.5, 1_150_000L,
+                        "2026-08",
+                        850_000L,
+                        2_000_000L,
+                        42.5,
+                        1_150_000L,
                         new HomeSummaryResponse.IncomeSummary(3_200_000L, 3_000_000L, 200_000L),
                         new HomeSummaryResponse.ExpenseSummary(1_350_000L, 500_000L, 850_000L));
                 when(homeService.getSummary(eq(1L), eq(YearMonth.of(2026, 8)))).thenReturn(response);

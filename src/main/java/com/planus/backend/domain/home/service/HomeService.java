@@ -79,8 +79,7 @@ public class HomeService {
         var expenseSummary = new HomeSummaryResponse.ExpenseSummary(totalExpenseAll, fixedExpense, variableExpense);
 
         return new HomeSummaryResponse(
-                yearMonth.toString(), totalExpense, budget, burnRate, remainingBudget,
-                incomeSummary, expenseSummary);
+                yearMonth.toString(), totalExpense, budget, burnRate, remainingBudget, incomeSummary, expenseSummary);
     }
 
     /**
