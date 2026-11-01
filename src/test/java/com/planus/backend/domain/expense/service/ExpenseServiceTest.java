@@ -211,6 +211,56 @@ class ExpenseServiceTest {
             assertThat(response.emotion()).isEqualTo("NECESSARY");
             assertThat(response.isRecurring()).isTrue();
         }
+
+        @Test
+        @DisplayName("미래 날짜로 수정하면 isPlanned=true로 설정된다")
+        void updateExpense_futureDate_plannedTrue() {
+            Expense existing = Expense.builder()
+                    .id(1L)
+                    .userId(1L)
+                    .type("EXPENSE")
+                    .amount(15000L)
+                    .title("테스트")
+                    .expenseDate(LocalDateTime.of(2026, 8, 19, 12, 0))
+                    .categoryId(2)
+                    .recurring(false)
+                    .planned(false)
+                    .createdAt(LocalDateTime.of(2026, 8, 19, 12, 0))
+                    .build();
+            when(expenseRepository.findById(1L)).thenReturn(Optional.of(existing));
+
+            ExpenseRequest updateRequest =
+                    new ExpenseRequest(20000L, "미래 지출", LocalDateTime.of(2099, 12, 31, 12, 0), 3, null, null, null);
+
+            ExpenseResponse response = expenseService.updateExpense(1L, 1L, updateRequest);
+
+            assertThat(response.isPlanned()).isTrue();
+        }
+
+        @Test
+        @DisplayName("과거 날짜로 수정하면 isPlanned=false로 설정된다")
+        void updateExpense_pastDate_plannedFalse() {
+            Expense existing = Expense.builder()
+                    .id(1L)
+                    .userId(1L)
+                    .type("EXPENSE")
+                    .amount(15000L)
+                    .title("테스트")
+                    .expenseDate(LocalDateTime.of(2099, 12, 31, 12, 0))
+                    .categoryId(2)
+                    .recurring(false)
+                    .planned(true)
+                    .createdAt(LocalDateTime.of(2026, 8, 19, 12, 0))
+                    .build();
+            when(expenseRepository.findById(1L)).thenReturn(Optional.of(existing));
+
+            ExpenseRequest updateRequest =
+                    new ExpenseRequest(20000L, "과거 지출", LocalDateTime.of(2020, 1, 1, 12, 0), 3, null, null, null);
+
+            ExpenseResponse response = expenseService.updateExpense(1L, 1L, updateRequest);
+
+            assertThat(response.isPlanned()).isFalse();
+        }
     }
 
     @Nested

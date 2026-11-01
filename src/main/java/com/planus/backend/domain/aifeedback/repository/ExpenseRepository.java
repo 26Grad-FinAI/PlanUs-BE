@@ -4,6 +4,7 @@ import com.planus.backend.domain.aifeedback.entity.Expense;
 import java.time.LocalDateTime;
 import java.util.List;
 import org.springframework.data.jpa.repository.JpaRepository;
+import org.springframework.data.jpa.repository.Modifying;
 import org.springframework.data.jpa.repository.Query;
 
 /** {@link Expense} 리포지토리. 거래 내역 조회 및 집계 쿼리 제공. */
@@ -162,4 +163,14 @@ public interface ExpenseRepository extends JpaRepository<Expense, Long> {
      * @return 이미 등록되었으면 true
      */
     boolean existsBySourceExpenseIdAndExpenseDateBetween(Long sourceExpenseId, LocalDateTime from, LocalDateTime to);
+
+    /**
+     * 예정일이 경과한 계획 지출의 planned 플래그를 false로 일괄 갱신한다.
+     *
+     * @param now 현재 일시
+     * @return 갱신된 행 수
+     */
+    @Modifying
+    @Query("UPDATE Expense e SET e.planned = false WHERE e.planned = true AND e.expenseDate <= :now")
+    int clearExpiredPlanned(LocalDateTime now);
 }

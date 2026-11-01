@@ -5,6 +5,7 @@ import static org.assertj.core.api.Assertions.assertThat;
 import com.planus.backend.domain.aifeedback.entity.Expense;
 import com.planus.backend.domain.expense.dto.ExpenseRequest;
 import com.planus.backend.domain.expense.dto.ExpenseResponse;
+import java.time.LocalDate;
 import java.time.LocalDateTime;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Nested;
@@ -54,6 +55,39 @@ class ExpenseConverterTest {
 
             assertThat(expense.isRecurring()).isTrue();
             assertThat(expense.isPlanned()).isFalse();
+        }
+
+        @Test
+        @DisplayName("과거 날짜이면 planned=false로 매핑된다")
+        void pastDate_plannedFalse() {
+            LocalDateTime pastDate = LocalDateTime.of(2020, 1, 1, 12, 0);
+            ExpenseRequest request = new ExpenseRequest(10000L, "과거 지출", pastDate, 1, null, null, null);
+
+            Expense expense = ExpenseConverter.toExpense(1L, request);
+
+            assertThat(expense.isPlanned()).isFalse();
+        }
+
+        @Test
+        @DisplayName("오늘 날짜이면 planned=false로 매핑된다")
+        void todayDate_plannedFalse() {
+            LocalDateTime todayDate = LocalDate.now().atTime(12, 0);
+            ExpenseRequest request = new ExpenseRequest(10000L, "오늘 지출", todayDate, 1, null, null, null);
+
+            Expense expense = ExpenseConverter.toExpense(1L, request);
+
+            assertThat(expense.isPlanned()).isFalse();
+        }
+
+        @Test
+        @DisplayName("미래 날짜이면 planned=true로 매핑된다")
+        void futureDate_plannedTrue() {
+            LocalDateTime futureDate = LocalDateTime.of(2099, 12, 31, 12, 0);
+            ExpenseRequest request = new ExpenseRequest(10000L, "미래 지출", futureDate, 1, null, null, null);
+
+            Expense expense = ExpenseConverter.toExpense(1L, request);
+
+            assertThat(expense.isPlanned()).isTrue();
         }
     }
 
