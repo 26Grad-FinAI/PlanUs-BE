@@ -4,10 +4,14 @@ import com.planus.backend.domain.aifeedback.entity.Budget;
 import com.planus.backend.domain.aifeedback.entity.Expense;
 import com.planus.backend.domain.aifeedback.repository.BudgetRepository;
 import com.planus.backend.domain.aifeedback.repository.ExpenseRepository;
+import com.planus.backend.domain.aifeedback.core.Categories;
 import com.planus.backend.domain.home.dto.HomeCalendarResponse;
 import com.planus.backend.domain.home.dto.HomeCalendarResponse.DailySummary;
 import com.planus.backend.domain.home.dto.HomeDailyResponse;
 import com.planus.backend.domain.home.dto.HomeDailyResponse.TransactionDetail;
+import com.planus.backend.domain.home.dto.HomeRecentResponse;
+import com.planus.backend.domain.home.dto.HomeRecentResponse.DailyGroup;
+import com.planus.backend.domain.home.dto.HomeRecentResponse.RecentTransaction;
 import com.planus.backend.domain.home.dto.HomeSummaryResponse;
 import com.planus.backend.domain.user.entity.UserAccount;
 import com.planus.backend.domain.user.repository.UserAccountRepository;
@@ -152,6 +156,33 @@ public class HomeService {
                 .toList();
 
         return new HomeDailyResponse(date, totalExpense, totalIncome, transactions);
+    }
+
+    /**
+     * 최근 거래 10건을 날짜별로 그룹화하여 반환한다.
+     *
+     * @param userId 사용자 ID
+     * @return 날짜별 그룹화된 최근 거래 목록
+     */
+    public HomeRecentResponse getRecentTransactions(Long userId) {
+        List<Expense> recent = expenseRepository.findTop10ByUserIdOrderByExpenseDateDesc(userId);
+
+        List<DailyGroup> dailyGroups = recent.stream()
+                .collect(Collectors.groupingBy(Expense::getDate, java.util.LinkedHashMap::new, Collectors.toList()))
+                .entrySet()
+                .stream()
+                .map(entry -> {
+                    List<RecentTransaction> transactions = entry.getValue().stream()
+                            .map(e -> new RecentTransaction(
+                                    e.getTitle(),
+                                    Categories.name(e.getCategoryId()),
+                                    e.isExpense() ? -e.getAmount() : e.getAmount()))
+                            .toList();
+                    return new DailyGroup(entry.getKey(), transactions);
+                })
+                .toList();
+
+        return new HomeRecentResponse(dailyGroups);
     }
 
     private UserAccount findUserOrThrow(Long userId) {

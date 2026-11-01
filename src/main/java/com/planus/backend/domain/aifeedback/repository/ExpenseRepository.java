@@ -134,4 +134,12 @@ public interface ExpenseRepository extends JpaRepository<Expense, Long> {
             + " GROUP BY YEAR(e.expenseDate), MONTH(e.expenseDate), e.categoryId"
             + " ORDER BY YEAR(e.expenseDate), MONTH(e.expenseDate), e.categoryId")
     List<Object[]> sumExpensesGroupByMonthAndCategory(Long userId, LocalDateTime from, LocalDateTime to);
+
+    /**
+     * 사용자의 최근 거래 10건을 날짜 내림차순으로 조회한다.
+     *
+     * @param userId 사용자 ID
+     * @return 최근 거래 10건
+     */
+    List<Expense> findTop10ByUserIdOrderByExpenseDateDesc(Long userId);
 }
