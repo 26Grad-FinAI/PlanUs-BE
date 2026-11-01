@@ -2,8 +2,10 @@ package com.planus.backend.domain.aibudget.controller;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.planus.backend.domain.aibudget.client.AiBudgetClient;
+import com.planus.backend.domain.aibudget.dto.BudgetCategoryUpdateRequest;
 import com.planus.backend.domain.aibudget.dto.BudgetPlanResultResponse;
 import com.planus.backend.domain.aibudget.dto.BudgetPlanStatusResponse;
+import com.planus.backend.domain.aibudget.dto.BudgetSummaryResponse;
 import com.planus.backend.domain.aibudget.entity.BudgetPlanRequest;
 import com.planus.backend.domain.aibudget.entity.BudgetPlanStatus;
 import com.planus.backend.domain.aibudget.repository.BudgetPlanRequestRepository;
@@ -15,6 +17,7 @@ import com.planus.backend.global.apiPayload.exception.GeneralException;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.Parameter;
 import io.swagger.v3.oas.annotations.tags.Tag;
+import jakarta.validation.Valid;
 import java.time.LocalDate;
 import java.time.YearMonth;
 import lombok.RequiredArgsConstructor;
@@ -95,5 +98,34 @@ public class BudgetPlanController {
         return ApiResponse.onSuccess(
                 GeneralSuccessCode.OK,
                 new BudgetPlanResultResponse(parsed, request.getStatus().name()));
+    }
+
+    @Operation(summary = "예산 요약 조회", description = "AI 제안 예산과 사용자 수정 예산을 비교하여 요약 정보를 반환한다.")
+    @GetMapping("/summary")
+    public ApiResponse<BudgetSummaryResponse> getSummary(
+            @AuthenticationPrincipal Long userId,
+            @Parameter(description = "조회 연월 (yyyy-MM)", example = "2026-10")
+                    @RequestParam
+                    @DateTimeFormat(pattern = "yyyy-MM")
+                    YearMonth yearMonth) {
+
+        LocalDate ym = yearMonth.atDay(1);
+        BudgetSummaryResponse summary = budgetPlanService.getBudgetSummary(userId, ym);
+        return ApiResponse.onSuccess(GeneralSuccessCode.OK, summary);
+    }
+
+    @Operation(summary = "카테고리 예산 일괄 저장", description = "프론트에서 수정한 카테고리별 금액을 일괄 저장한다. 총 예산은 자동 재계산된다.")
+    @PutMapping("/categories")
+    public ApiResponse<BudgetSummaryResponse> saveCategories(
+            @AuthenticationPrincipal Long userId,
+            @Parameter(description = "조회 연월 (yyyy-MM)", example = "2026-10")
+                    @RequestParam
+                    @DateTimeFormat(pattern = "yyyy-MM")
+                    YearMonth yearMonth,
+            @Valid @RequestBody BudgetCategoryUpdateRequest request) {
+
+        LocalDate ym = yearMonth.atDay(1);
+        BudgetSummaryResponse summary = budgetPlanService.saveCategories(userId, ym, request.categories());
+        return ApiResponse.onSuccess(GeneralSuccessCode.OK, summary);
     }
 }
