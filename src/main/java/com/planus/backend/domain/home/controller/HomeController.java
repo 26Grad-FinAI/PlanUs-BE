@@ -2,6 +2,7 @@ package com.planus.backend.domain.home.controller;
 
 import com.planus.backend.domain.home.dto.HomeCalendarResponse;
 import com.planus.backend.domain.home.dto.HomeDailyResponse;
+import com.planus.backend.domain.home.dto.HomeRecentResponse;
 import com.planus.backend.domain.home.dto.HomeSummaryResponse;
 import com.planus.backend.domain.home.service.HomeService;
 import com.planus.backend.global.apiPayload.ApiResponse;
@@ -23,7 +24,7 @@ import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
 
 /** 홈 화면 관련 REST API 컨트롤러. */
-@Tag(name = "Home", description = "홈 화면 월간요약·캘린더·일별상세 API")
+@Tag(name = "Home", description = "홈 화면 월간요약·캘린더·일별상세·최근내역 API")
 @RestController
 @RequestMapping("/api/home")
 @RequiredArgsConstructor
@@ -114,5 +115,29 @@ public class HomeController {
                     @DateTimeFormat(pattern = "yyyy-MM-dd")
                     LocalDate date) {
         return ApiResponse.onSuccess(GeneralSuccessCode.OK, homeService.getDailyDetail(userId, date));
+    }
+
+    @Operation(
+            summary = "최근 거래 내역 조회",
+            description =
+                    """
+                    최근 거래 10건을 날짜별로 그룹화하여 반환한다.
+
+                    **인증:** Authorization 헤더에 Bearer 액세스 토큰 필요.
+                    **주의사항:**
+                    - 최대 10건까지 반환하며, 날짜 내림차순 정렬.
+                    - 금액은 부호 포함: 지출은 음수(-), 수입은 양수(+).
+                    - 같은 날짜의 거래는 하나의 그룹으로 묶인다.
+                    - 거래가 없으면 빈 배열을 반환한다.""")
+    @ApiResponses({
+        @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "200", description = "조회 성공"),
+        @io.swagger.v3.oas.annotations.responses.ApiResponse(
+                responseCode = "401",
+                description = "인증되지 않은 사용자",
+                content = @Content(schema = @Schema(implementation = ApiResponse.class)))
+    })
+    @GetMapping("/recent")
+    public ApiResponse<HomeRecentResponse> getRecentTransactions(@AuthenticationPrincipal Long userId) {
+        return ApiResponse.onSuccess(GeneralSuccessCode.OK, homeService.getRecentTransactions(userId));
     }
 }

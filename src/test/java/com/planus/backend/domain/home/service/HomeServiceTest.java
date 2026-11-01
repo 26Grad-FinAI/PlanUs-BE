@@ -13,6 +13,7 @@ import com.planus.backend.domain.aifeedback.repository.BudgetRepository;
 import com.planus.backend.domain.aifeedback.repository.ExpenseRepository;
 import com.planus.backend.domain.home.dto.HomeCalendarResponse;
 import com.planus.backend.domain.home.dto.HomeDailyResponse;
+import com.planus.backend.domain.home.dto.HomeRecentResponse;
 import com.planus.backend.domain.home.dto.HomeSummaryResponse;
 import com.planus.backend.domain.user.entity.UserAccount;
 import com.planus.backend.domain.user.repository.UserAccountRepository;
@@ -369,6 +370,122 @@ class HomeServiceTest {
             assertThat(response.totalExpense()).isZero();
             assertThat(response.totalIncome()).isZero();
             assertThat(response.transactions()).isEmpty();
+        }
+    }
+
+    @Nested
+    @DisplayName("getRecentTransactions 성공")
+    class GetRecentTransactionsSuccess {
+
+        @Test
+        @DisplayName("최근 거래를 날짜별로 그룹화하여 반환한다")
+        void getRecentTransactions_groupsByDate() {
+            List<Expense> expenses = List.of(
+                    Expense.builder()
+                            .id(1L)
+                            .userId(USER_ID)
+                            .type("EXPENSE")
+                            .amount(6500L)
+                            .title("커피")
+                            .categoryId(7)
+                            .expenseDate(LocalDateTime.of(2026, 8, 22, 14, 0))
+                            .build(),
+                    Expense.builder()
+                            .id(2L)
+                            .userId(USER_ID)
+                            .type("EXPENSE")
+                            .amount(15000L)
+                            .title("점심 식사")
+                            .categoryId(7)
+                            .expenseDate(LocalDateTime.of(2026, 8, 22, 12, 0))
+                            .build(),
+                    Expense.builder()
+                            .id(3L)
+                            .userId(USER_ID)
+                            .type("INCOME")
+                            .amount(30000L)
+                            .title("용돈")
+                            .categoryId(10)
+                            .expenseDate(LocalDateTime.of(2026, 8, 21, 9, 0))
+                            .build());
+            when(expenseRepository.findTop10ByUserIdOrderByExpenseDateDescIdDesc(USER_ID))
+                    .thenReturn(expenses);
+
+            HomeRecentResponse response = homeService.getRecentTransactions(USER_ID);
+
+            assertThat(response.dailyGroups()).hasSize(2);
+
+            // 첫 번째 그룹: 8/22 (최신)
+            assertThat(response.dailyGroups().get(0).date()).isEqualTo(LocalDate.of(2026, 8, 22));
+            assertThat(response.dailyGroups().get(0).transactions()).hasSize(2);
+
+            // 두 번째 그룹: 8/21
+            assertThat(response.dailyGroups().get(1).date()).isEqualTo(LocalDate.of(2026, 8, 21));
+            assertThat(response.dailyGroups().get(1).transactions()).hasSize(1);
+        }
+
+        @Test
+        @DisplayName("지출은 음수, 수입은 양수로 금액이 반환된다")
+        void getRecentTransactions_signedAmounts() {
+            List<Expense> expenses = List.of(
+                    Expense.builder()
+                            .id(1L)
+                            .userId(USER_ID)
+                            .type("EXPENSE")
+                            .amount(6500L)
+                            .title("커피")
+                            .categoryId(7)
+                            .expenseDate(LocalDateTime.of(2026, 8, 22, 14, 0))
+                            .build(),
+                    Expense.builder()
+                            .id(2L)
+                            .userId(USER_ID)
+                            .type("INCOME")
+                            .amount(30000L)
+                            .title("용돈")
+                            .categoryId(10)
+                            .expenseDate(LocalDateTime.of(2026, 8, 22, 9, 0))
+                            .build());
+            when(expenseRepository.findTop10ByUserIdOrderByExpenseDateDescIdDesc(USER_ID))
+                    .thenReturn(expenses);
+
+            HomeRecentResponse response = homeService.getRecentTransactions(USER_ID);
+
+            var transactions = response.dailyGroups().get(0).transactions();
+            assertThat(transactions.get(0).amount()).isEqualTo(-6500L);
+            assertThat(transactions.get(1).amount()).isEqualTo(30000L);
+        }
+
+        @Test
+        @DisplayName("카테고리명이 올바르게 매핑된다")
+        void getRecentTransactions_categoryNameMapped() {
+            List<Expense> expenses = List.of(Expense.builder()
+                    .id(1L)
+                    .userId(USER_ID)
+                    .type("EXPENSE")
+                    .amount(5000L)
+                    .title("버스")
+                    .categoryId(4)
+                    .expenseDate(LocalDateTime.of(2026, 8, 22, 8, 0))
+                    .build());
+            when(expenseRepository.findTop10ByUserIdOrderByExpenseDateDescIdDesc(USER_ID))
+                    .thenReturn(expenses);
+
+            HomeRecentResponse response = homeService.getRecentTransactions(USER_ID);
+
+            assertThat(response.dailyGroups().get(0).transactions().get(0).categoryName())
+                    .isEqualTo("교통");
+        }
+
+        @Test
+        @DisplayName("거래가 없으면 빈 배열을 반환한다")
+        void getRecentTransactions_noTransactions_returnsEmpty() {
+            when(expenseRepository.findTop10ByUserIdOrderByExpenseDateDescIdDesc(USER_ID))
+                    .thenReturn(Collections.emptyList());
+
+            HomeRecentResponse response = homeService.getRecentTransactions(USER_ID);
+
+            assertThat(response.dailyGroups()).isEmpty();
         }
     }
 
