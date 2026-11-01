@@ -408,7 +408,13 @@ public class BudgetPlanService {
                 analysisOpt.orElseThrow(() -> new GeneralException(GeneralErrorCode.BUDGET_PLAN_NOT_FOUND));
 
         Map<String, Object> observation = analysis.getObservation();
-        if (observation == null || !observation.containsKey("또래")) {
+
+        @SuppressWarnings("unchecked")
+        Map<String, Object> peerMap = observation != null && observation.get("또래") instanceof Map
+                ? (Map<String, Object>) observation.get("또래")
+                : null;
+
+        if (peerMap == null) {
             return new PeerComparisonResponse(0, 0, List.of());
         }
 
@@ -427,14 +433,11 @@ public class BudgetPlanService {
         long totalSpending =
                 mySpendingMap.values().stream().mapToLong(Long::longValue).sum();
 
-        @SuppressWarnings("unchecked")
-        Map<String, Object> peerMap = (Map<String, Object>) observation.get("또래");
-
         List<PeerComparisonResponse.CategoryComparison> categories = new ArrayList<>();
         for (String catName : AI_CATEGORIES) {
             int categoryId = Categories.id(catName);
             long myAmount = mySpendingMap.getOrDefault(categoryId, 0L);
-            long peerAmount = peerMap.containsKey(catName) ? ((Number) peerMap.get(catName)).longValue() : 0;
+            long peerAmount = peerMap.get(catName) instanceof Number n ? n.longValue() : 0;
             categories.add(new PeerComparisonResponse.CategoryComparison(
                     categoryId, catName, myAmount, peerAmount, myAmount - peerAmount));
         }
