@@ -16,6 +16,8 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.planus.backend.domain.auth.service.AuthService;
 import com.planus.backend.domain.user.dto.FixedExpenseItem;
+import com.planus.backend.domain.user.dto.SavingsStatusResponse;
+import com.planus.backend.domain.user.dto.SavingsStatusResponse.MonthlyRecord;
 import com.planus.backend.domain.user.dto.UserProfileGetResponse;
 import com.planus.backend.domain.user.dto.UserProfileRequest;
 import com.planus.backend.domain.user.dto.UserProfileResponse;
@@ -284,6 +286,65 @@ class UserControllerTest {
             mockMvc.perform(delete("/api/users/me"))
                     .andExpect(status().isNotFound())
                     .andExpect(jsonPath("$.isSuccess").value(false));
+        }
+    }
+
+    @Nested
+    @DisplayName("GET /api/users/me/savings-status")
+    class GetSavingsStatus {
+
+        @Nested
+        @DisplayName("성공")
+        class Success {
+
+            @Test
+            @DisplayName("200 OK와 총 저축 금액·월별 기록을 반환한다")
+            void getSavingsStatus_success_returns200() throws Exception {
+                SecurityContextHolder.getContext()
+                        .setAuthentication(new UsernamePasswordAuthenticationToken(1L, null));
+
+                SavingsStatusResponse response = new SavingsStatusResponse(
+                        1_800_000L,
+                        List.of(
+                                new MonthlyRecord("2026-09", 1_200_000L),
+                                new MonthlyRecord("2026-10", -400_000L),
+                                new MonthlyRecord("2026-11", 1_000_000L)));
+                when(userService.getSavingsStatus(1L)).thenReturn(response);
+
+                mockMvc.perform(get("/api/users/me/savings-status"))
+                        .andExpect(status().isOk())
+                        .andExpect(jsonPath("$.isSuccess").value(true))
+                        .andExpect(jsonPath("$.result.totalSavings").value(1_800_000L))
+                        .andExpect(jsonPath("$.result.monthlyRecords").isArray())
+                        .andExpect(jsonPath("$.result.monthlyRecords.length()").value(3))
+                        .andExpect(jsonPath("$.result.monthlyRecords[0].yearMonth").value("2026-09"))
+                        .andExpect(jsonPath("$.result.monthlyRecords[0].savings").value(1_200_000L))
+                        .andExpect(jsonPath("$.result.monthlyRecords[1].yearMonth").value("2026-10"))
+                        .andExpect(jsonPath("$.result.monthlyRecords[1].savings").value(-400_000L))
+                        .andExpect(jsonPath("$.result.monthlyRecords[2].yearMonth").value("2026-11"))
+                        .andExpect(jsonPath("$.result.monthlyRecords[2].savings").value(1_000_000L));
+
+                verify(userService).getSavingsStatus(1L);
+            }
+        }
+
+        @Nested
+        @DisplayName("실패")
+        class Failure {
+
+            @Test
+            @DisplayName("존재하지 않는 userId이면 404를 반환한다")
+            void getSavingsStatus_userNotFound_returns404() throws Exception {
+                SecurityContextHolder.getContext()
+                        .setAuthentication(new UsernamePasswordAuthenticationToken(999L, null));
+                when(userService.getSavingsStatus(999L))
+                        .thenThrow(new GeneralException(GeneralErrorCode.NOT_FOUND));
+
+                mockMvc.perform(get("/api/users/me/savings-status"))
+                        .andExpect(status().isNotFound())
+                        .andExpect(jsonPath("$.isSuccess").value(false))
+                        .andExpect(jsonPath("$.code").value("COMMON_404_001"));
+            }
         }
     }
 

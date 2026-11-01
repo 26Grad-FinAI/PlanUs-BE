@@ -1,6 +1,9 @@
 package com.planus.backend.domain.user.service;
 
+import com.planus.backend.domain.aifeedback.repository.ExpenseRepository;
 import com.planus.backend.domain.user.converter.UserConverter;
+import com.planus.backend.domain.user.dto.SavingsStatusResponse;
+import com.planus.backend.domain.user.dto.SavingsStatusResponse.MonthlyRecord;
 import com.planus.backend.domain.user.dto.UserProfileGetResponse;
 import com.planus.backend.domain.user.dto.UserProfileRequest;
 import com.planus.backend.domain.user.dto.UserProfileResponse;
@@ -9,6 +12,14 @@ import com.planus.backend.domain.user.entity.UserAccount;
 import com.planus.backend.domain.user.repository.UserAccountRepository;
 import com.planus.backend.global.apiPayload.code.GeneralErrorCode;
 import com.planus.backend.global.apiPayload.exception.GeneralException;
+import java.time.LocalDate;
+import java.time.LocalDateTime;
+import java.time.LocalTime;
+import java.time.YearMonth;
+import java.util.ArrayList;
+import java.util.HashMap;
+import java.util.List;
+import java.util.Map;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -19,6 +30,7 @@ import org.springframework.transaction.annotation.Transactional;
 public class UserService {
 
     private final UserAccountRepository userAccountRepository;
+    private final ExpenseRepository expenseRepository;
 
     /**
      * 사용자 프로필을 저장하고 가용예산을 반환한다.
@@ -101,5 +113,61 @@ public class UserService {
                 .orElseThrow(() -> new GeneralException(GeneralErrorCode.NOT_FOUND));
 
         return UserConverter.toProfileGetResponse(user);
+    }
+
+    /**
+     * 앱 사용 시점(회원가입)부터 현재까지의 저축현황을 조회한다.
+     *
+     * <p>월별 저축액 = (프로필 월소득 + 추가수입) - (프로필 고정지출 + 변동지출)
+     *
+     * @param userId JWT 필터가 주입한 사용자 ID
+     * @return 총 저축 금액 및 월별 저축 기록
+     */
+    @Transactional(readOnly = true)
+    public SavingsStatusResponse getSavingsStatus(Long userId) {
+        UserAccount user = userAccountRepository
+                .findById(userId)
+                .orElseThrow(() -> new GeneralException(GeneralErrorCode.NOT_FOUND));
+
+        YearMonth startMonth = YearMonth.from(user.getCreatedAt());
+        YearMonth currentMonth = YearMonth.now();
+
+        LocalDateTime from = startMonth.atDay(1).atStartOfDay();
+        LocalDateTime to = currentMonth.atEndOfMonth().atTime(LocalTime.MAX);
+
+        // 월별 지출·수입 합계를 한 번에 조회
+        Map<String, Long> expenseByMonth = toMonthMap(
+                expenseRepository.sumExpensesGroupByMonth(userId, from, to));
+        Map<String, Long> incomeByMonth = toMonthMap(
+                expenseRepository.sumIncomeGroupByMonth(userId, from, to));
+
+        long monthlyIncome = user.getMonthlyIncome();
+        long fixedExpense = user.totalFixedExpenses();
+
+        List<MonthlyRecord> records = new ArrayList<>();
+        long totalSavings = 0;
+
+        for (YearMonth ym = startMonth; !ym.isAfter(currentMonth); ym = ym.plusMonths(1)) {
+            String key = ym.toString();
+            long additionalIncome = incomeByMonth.getOrDefault(key, 0L);
+            long variableExpense = expenseByMonth.getOrDefault(key, 0L);
+
+            long savings = (monthlyIncome + additionalIncome) - (fixedExpense + variableExpense);
+            totalSavings += savings;
+            records.add(new MonthlyRecord(key, savings));
+        }
+
+        return new SavingsStatusResponse(totalSavings, records);
+    }
+
+    private Map<String, Long> toMonthMap(List<Object[]> rows) {
+        Map<String, Long> map = new HashMap<>();
+        for (Object[] row : rows) {
+            int year = ((Number) row[0]).intValue();
+            int month = ((Number) row[1]).intValue();
+            long amount = ((Number) row[2]).longValue();
+            map.put(YearMonth.of(year, month).toString(), amount);
+        }
+        return map;
     }
 }
