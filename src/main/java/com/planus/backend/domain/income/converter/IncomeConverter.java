@@ -1,6 +1,7 @@
 package com.planus.backend.domain.income.converter;
 
 import com.planus.backend.domain.aifeedback.entity.Expense;
+import com.planus.backend.domain.income.dto.IncomeDetailResponse;
 import com.planus.backend.domain.income.dto.IncomeRequest;
 import com.planus.backend.domain.income.dto.IncomeResponse;
 import java.time.LocalDateTime;
@@ -48,5 +49,20 @@ public class IncomeConverter {
                 expense.getCategoryId(),
                 expense.getMemo(),
                 expense.getCreatedAt());
+    }
+
+    /**
+     * Expense 엔티티를 수입 상세 조회 응답 DTO로 변환한다.
+     *
+     * @param expense 저장된 Expense 엔티티
+     * @return 수입 상세 조회 응답 DTO
+     */
+    public static IncomeDetailResponse toIncomeDetailResponse(Expense expense) {
+        return new IncomeDetailResponse(
+                expense.getTitle(),
+                expense.getAmount(),
+                "수입",
+                expense.getCategoryId(),
+                expense.getMemo());
     }
 }

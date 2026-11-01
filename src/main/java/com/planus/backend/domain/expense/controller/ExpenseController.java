@@ -1,5 +1,6 @@
 package com.planus.backend.domain.expense.controller;
 
+import com.planus.backend.domain.expense.dto.ExpenseDetailResponse;
 import com.planus.backend.domain.expense.dto.ExpenseRequest;
 import com.planus.backend.domain.expense.dto.ExpenseResponse;
 import com.planus.backend.domain.expense.service.ExpenseService;
@@ -25,6 +26,42 @@ import org.springframework.web.bind.annotation.*;
 public class ExpenseController {
 
     private final ExpenseService expenseService;
+
+    @Operation(
+            summary = "지출 상세 조회",
+            description =
+                    """
+                    지출 내역을 상세 조회한다.
+
+                    **인증:** Authorization 헤더에 Bearer 액세스 토큰 필요.
+                    **주의사항:**
+                    - 본인의 지출만 조회 가능하다 (타인의 지출 조회 시 403 응답).
+                    - 수입 내역을 이 API로 조회할 수 없다 (400 응답).""")
+    @ApiResponses({
+        @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "200", description = "조회 성공"),
+        @io.swagger.v3.oas.annotations.responses.ApiResponse(
+                responseCode = "400",
+                description = "수입 내역에 대한 잘못된 요청",
+                content = @Content(schema = @Schema(implementation = ApiResponse.class))),
+        @io.swagger.v3.oas.annotations.responses.ApiResponse(
+                responseCode = "401",
+                description = "인증되지 않은 사용자",
+                content = @Content(schema = @Schema(implementation = ApiResponse.class))),
+        @io.swagger.v3.oas.annotations.responses.ApiResponse(
+                responseCode = "403",
+                description = "본인의 지출이 아님",
+                content = @Content(schema = @Schema(implementation = ApiResponse.class))),
+        @io.swagger.v3.oas.annotations.responses.ApiResponse(
+                responseCode = "404",
+                description = "지출 내역을 찾을 수 없음",
+                content = @Content(schema = @Schema(implementation = ApiResponse.class)))
+    })
+    @GetMapping("/{expenseId}")
+    public ApiResponse<ExpenseDetailResponse> getExpense(
+            @AuthenticationPrincipal Long userId,
+            @Parameter(description = "조회할 지출 ID", example = "1") @PathVariable Long expenseId) {
+        return ApiResponse.onSuccess(GeneralSuccessCode.OK, expenseService.getExpense(userId, expenseId));
+    }
 
     @Operation(
             summary = "지출 등록",

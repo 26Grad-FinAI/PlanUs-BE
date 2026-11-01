@@ -1,5 +1,6 @@
 package com.planus.backend.domain.income.controller;
 
+import com.planus.backend.domain.income.dto.IncomeDetailResponse;
 import com.planus.backend.domain.income.dto.IncomeRequest;
 import com.planus.backend.domain.income.dto.IncomeResponse;
 import com.planus.backend.domain.income.service.IncomeService;
@@ -25,6 +26,42 @@ import org.springframework.web.bind.annotation.*;
 public class IncomeController {
 
     private final IncomeService incomeService;
+
+    @Operation(
+            summary = "수입 상세 조회",
+            description =
+                    """
+                    수입 내역을 상세 조회한다.
+
+                    **인증:** Authorization 헤더에 Bearer 액세스 토큰 필요.
+                    **주의사항:**
+                    - 본인의 수입만 조회 가능하다 (타인의 수입 조회 시 403 응답).
+                    - 지출 내역을 이 API로 조회할 수 없다 (400 응답).""")
+    @ApiResponses({
+        @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "200", description = "조회 성공"),
+        @io.swagger.v3.oas.annotations.responses.ApiResponse(
+                responseCode = "400",
+                description = "지출 내역에 대한 잘못된 요청",
+                content = @Content(schema = @Schema(implementation = ApiResponse.class))),
+        @io.swagger.v3.oas.annotations.responses.ApiResponse(
+                responseCode = "401",
+                description = "인증되지 않은 사용자",
+                content = @Content(schema = @Schema(implementation = ApiResponse.class))),
+        @io.swagger.v3.oas.annotations.responses.ApiResponse(
+                responseCode = "403",
+                description = "본인의 수입이 아님",
+                content = @Content(schema = @Schema(implementation = ApiResponse.class))),
+        @io.swagger.v3.oas.annotations.responses.ApiResponse(
+                responseCode = "404",
+                description = "수입 내역을 찾을 수 없음",
+                content = @Content(schema = @Schema(implementation = ApiResponse.class)))
+    })
+    @GetMapping("/{incomeId}")
+    public ApiResponse<IncomeDetailResponse> getIncome(
+            @AuthenticationPrincipal Long userId,
+            @Parameter(description = "조회할 수입 ID", example = "1") @PathVariable Long incomeId) {
+        return ApiResponse.onSuccess(GeneralSuccessCode.OK, incomeService.getIncome(userId, incomeId));
+    }
 
     @Operation(
             summary = "수입 등록",
