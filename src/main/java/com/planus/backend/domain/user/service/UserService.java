@@ -12,6 +12,7 @@ import com.planus.backend.domain.user.entity.UserAccount;
 import com.planus.backend.domain.user.repository.UserAccountRepository;
 import com.planus.backend.global.apiPayload.code.GeneralErrorCode;
 import com.planus.backend.global.apiPayload.exception.GeneralException;
+import java.time.Clock;
 import java.time.LocalDateTime;
 import java.time.LocalTime;
 import java.time.YearMonth;
@@ -30,6 +31,7 @@ public class UserService {
 
     private final UserAccountRepository userAccountRepository;
     private final ExpenseRepository expenseRepository;
+    private final Clock clock;
 
     /**
      * 사용자 프로필을 저장하고 가용예산을 반환한다.
@@ -129,7 +131,7 @@ public class UserService {
                 .orElseThrow(() -> new GeneralException(GeneralErrorCode.NOT_FOUND));
 
         YearMonth startMonth = YearMonth.from(user.getCreatedAt());
-        YearMonth currentMonth = YearMonth.now();
+        YearMonth currentMonth = YearMonth.now(clock);
 
         LocalDateTime from = startMonth.atDay(1).atStartOfDay();
         LocalDateTime to = currentMonth.atEndOfMonth().atTime(LocalTime.MAX);

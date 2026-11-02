@@ -20,7 +20,10 @@ import com.planus.backend.domain.user.entity.UserAccount;
 import com.planus.backend.domain.user.repository.UserAccountRepository;
 import com.planus.backend.global.apiPayload.code.GeneralErrorCode;
 import com.planus.backend.global.apiPayload.exception.GeneralException;
+import java.time.Clock;
+import java.time.Instant;
 import java.time.LocalDateTime;
+import java.time.ZoneId;
 import java.util.List;
 import java.util.Optional;
 import org.junit.jupiter.api.BeforeEach;
@@ -30,6 +33,9 @@ import org.junit.jupiter.api.Test;
 
 class UserServiceTest {
 
+    private static final Clock FIXED_CLOCK =
+            Clock.fixed(Instant.parse("2026-11-15T00:00:00Z"), ZoneId.of("Asia/Seoul"));
+
     private UserAccountRepository userAccountRepository;
     private ExpenseRepository expenseRepository;
     private UserService userService;
@@ -38,7 +44,7 @@ class UserServiceTest {
     void setUp() {
         userAccountRepository = mock(UserAccountRepository.class);
         expenseRepository = mock(ExpenseRepository.class);
-        userService = new UserService(userAccountRepository, expenseRepository);
+        userService = new UserService(userAccountRepository, expenseRepository, FIXED_CLOCK);
     }
 
     @Nested
