@@ -2,6 +2,7 @@ package com.planus.backend.domain.user.controller;
 
 import com.planus.backend.domain.aibudget.dto.FcmTokenRequest;
 import com.planus.backend.domain.auth.service.AuthService;
+import com.planus.backend.domain.user.dto.SavingsStatusResponse;
 import com.planus.backend.domain.user.dto.UserProfileGetResponse;
 import com.planus.backend.domain.user.dto.UserProfileRequest;
 import com.planus.backend.domain.user.dto.UserProfileResponse;
@@ -110,6 +111,29 @@ public class UserController {
     @GetMapping("/me/profile")
     public ApiResponse<UserProfileGetResponse> getProfile(@AuthenticationPrincipal Long userId) {
         return ApiResponse.onSuccess(GeneralSuccessCode.OK, userService.getProfile(userId));
+    }
+
+    @Operation(
+            summary = "저축현황 조회",
+            description =
+                    """
+                    앱 사용 시점(회원가입)부터 현재까지의 저축현황을 조회한다.
+
+                    **인증:** Authorization 헤더에 Bearer 액세스 토큰 필요.
+                    **계산 규칙:**
+                    - 월별 저축액 = (프로필 월소득 + 추가수입) - (프로필 고정지출 + 변동지출)
+                    - 양수(+): 저축 성공, 음수(-): 초과 지출
+                    - totalSavings: 전체 기간 월별 저축액의 합산""")
+    @ApiResponses({
+        @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "200", description = "조회 성공"),
+        @io.swagger.v3.oas.annotations.responses.ApiResponse(
+                responseCode = "401",
+                description = "인증되지 않은 사용자",
+                content = @Content(schema = @Schema(implementation = ApiResponse.class)))
+    })
+    @GetMapping("/me/savings-status")
+    public ApiResponse<SavingsStatusResponse> getSavingsStatus(@AuthenticationPrincipal Long userId) {
+        return ApiResponse.onSuccess(GeneralSuccessCode.OK, userService.getSavingsStatus(userId));
     }
 
     @Operation(summary = "FCM 디바이스 토큰 등록", description = "푸시 알림을 위한 FCM 디바이스 토큰을 등록한다.")
