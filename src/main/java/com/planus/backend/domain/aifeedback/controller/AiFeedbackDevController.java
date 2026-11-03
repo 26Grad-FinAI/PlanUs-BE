@@ -5,6 +5,7 @@ import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.Parameter;
 import io.swagger.v3.oas.annotations.tags.Tag;
 import java.time.LocalDate;
+import java.time.YearMonth;
 import java.util.HashMap;
 import java.util.Map;
 import org.slf4j.Logger;
@@ -70,6 +71,40 @@ public class AiFeedbackDevController {
                     .orElse(Map.of("created", false, "reason", "생성 조건 미충족(예산 초과·이상치·카테고리 초과 없음)"));
         } catch (Exception e) {
             log.error("주간 피드백 수동 실행 실패 — userId={}, weekEnd={}", userId, weekEnd, e);
+            return Map.of("created", false, "error", "피드백 생성 중 오류가 발생했습니다.");
+        }
+    }
+
+    @Operation(
+            summary = "월간 피드백 수동 실행",
+            description =
+                    """
+                    월말 결산 AI 피드백 생성을 수동으로 실행한다. 스케줄러를 기다리지 않고 검증할 때 사용한다.
+
+                    **yearMonth 형식:** yyyy-MM (예: 2026-10)
+                    **응답 필드:**
+                    - created=true: 피드백 생성 성공. id, feedback 포함.
+                    - created=false: generateMonthEnd가 Optional.empty를 반환한 경우 또는 오류 발생. reason 또는 error 필드에 상세 사유 포함.
+                    **주의사항:**
+                    - dev/local 프로필에서만 활성화된다. 운영 환경에서는 접근 불가.""")
+    @GetMapping("/run-month-end")
+    public Map<String, Object> runMonthEnd(
+            @Parameter(description = "대상 사용자 ID", example = "5") @RequestParam Long userId,
+            @Parameter(description = "결산 대상 연월", example = "2026-10") @RequestParam @DateTimeFormat(pattern = "yyyy-MM")
+                    YearMonth yearMonth) {
+        try {
+            return feedbackService
+                    .generateMonthEnd(userId, yearMonth)
+                    .<Map<String, Object>>map(fb -> {
+                        Map<String, Object> response = new HashMap<>();
+                        response.put("created", true);
+                        response.put("id", fb.getId());
+                        response.put("feedback", fb.getFeedbackText());
+                        return response;
+                    })
+                    .orElse(Map.of("created", false, "reason", "생성 조건 미충족(사용자·예산·지출 없음)"));
+        } catch (Exception e) {
+            log.error("월간 피드백 수동 실행 실패 — userId={}, yearMonth={}", userId, yearMonth, e);
             return Map.of("created", false, "error", "피드백 생성 중 오류가 발생했습니다.");
         }
     }

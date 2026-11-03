@@ -12,6 +12,7 @@ import com.planus.backend.domain.aifeedback.core.*;
 import com.planus.backend.domain.aifeedback.core.PacingComparator.PacingResult;
 import com.planus.backend.domain.aifeedback.core.PacingComparator.PastMonth;
 import com.planus.backend.domain.aifeedback.entity.*;
+import com.planus.backend.domain.aifeedback.event.FeedbackCreatedEvent;
 import com.planus.backend.domain.aifeedback.llm.FeedbackRenderer;
 import com.planus.backend.domain.aifeedback.llm.FeedbackRenderer.ActionSummary;
 import com.planus.backend.domain.aifeedback.llm.FeedbackRenderer.CategoryOverspend;
@@ -29,6 +30,7 @@ import java.time.temporal.ChronoUnit;
 import java.util.*;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import org.springframework.context.ApplicationEventPublisher;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.support.TransactionTemplate;
 
@@ -92,6 +94,7 @@ public class AiFeedbackService {
     private final ObjectMapper objectMapper;
     private final Clock clock;
     private final TransactionTemplate tx;
+    private final ApplicationEventPublisher eventPublisher;
 
     public AiFeedbackService(
             UserAccountRepository userRepo,
@@ -116,7 +119,8 @@ public class AiFeedbackService {
             AiFeedbackProperties p,
             ObjectMapper objectMapper,
             Clock clock,
-            TransactionTemplate tx) {
+            TransactionTemplate tx,
+            ApplicationEventPublisher eventPublisher) {
         this.userRepo = userRepo;
         this.expenseRepo = expenseRepo;
         this.budgetRepo = budgetRepo;
@@ -140,6 +144,7 @@ public class AiFeedbackService {
         this.objectMapper = objectMapper;
         this.clock = clock;
         this.tx = tx;
+        this.eventPublisher = eventPublisher;
     }
 
     /**
@@ -545,7 +550,7 @@ public class AiFeedbackService {
         saveMonthEndVerification(userId, monthStart, predictedTotal, actualTotal, mape, catActual, catBudget, now);
 
         // ── [5] AiFeedback(MONTHLY) 멱등 upsert ──
-        return Optional.ofNullable(tx.execute(status -> {
+        Optional<AiFeedback> result = Optional.ofNullable(tx.execute(status -> {
             AiFeedback existing = feedbackRepo
                     .findByUserIdAndPeriodTypeAndPeriodStartAndPeriodEnd(userId, "MONTHLY", monthStart, monthEnd)
                     .orElse(null);
@@ -579,6 +584,9 @@ public class AiFeedbackService {
                     .createdAt(now)
                     .build());
         }));
+
+        // 월간 피드백은 enrichedActions가 없으므로(payload="{}") 시뮬레이션 이벤트를 발행하지 않는다.
+        return result;
     }
 
     /**
@@ -711,6 +719,8 @@ public class AiFeedbackService {
         profileUpdater.update(profileEntity, overspend.keySet(), reactions, recentFeedbacks, isLowData);
         userProfileRepo.save(profileEntity);
 
+        eventPublisher.publishEvent(
+                new FeedbackCreatedEvent(userId, YearMonth.from(monthStart).toString()));
         return fb;
     }
 
