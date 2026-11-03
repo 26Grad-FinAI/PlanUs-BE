@@ -12,6 +12,7 @@ import com.planus.backend.domain.aifeedback.core.*;
 import com.planus.backend.domain.aifeedback.core.PacingComparator.PacingResult;
 import com.planus.backend.domain.aifeedback.core.PacingComparator.PastMonth;
 import com.planus.backend.domain.aifeedback.entity.*;
+import com.planus.backend.domain.aifeedback.event.FeedbackCreatedEvent;
 import com.planus.backend.domain.aifeedback.llm.FeedbackRenderer;
 import com.planus.backend.domain.aifeedback.llm.FeedbackRenderer.ActionSummary;
 import com.planus.backend.domain.aifeedback.llm.FeedbackRenderer.CategoryOverspend;
@@ -20,7 +21,6 @@ import com.planus.backend.domain.aifeedback.llm.FeedbackRenderer.FeedbackContext
 import com.planus.backend.domain.aifeedback.llm.FeedbackRenderer.MonthEndContext;
 import com.planus.backend.domain.aifeedback.llm.FeedbackRenderer.TransactionHighlight;
 import com.planus.backend.domain.aifeedback.llm.FeedbackRenderer.WeekEmotionSummary;
-import com.planus.backend.domain.aifeedback.event.FeedbackCreatedEvent;
 import com.planus.backend.domain.aifeedback.profile.ProfileUpdater;
 import com.planus.backend.domain.aifeedback.repository.*;
 import com.planus.backend.domain.user.entity.UserAccount;
@@ -444,9 +444,8 @@ public class AiFeedbackService {
         final Map<Integer, Long> finalOverspend = overspend;
         final boolean finalIsLowData = isLowData;
 
-        Optional<AiFeedback> result;
         try {
-            result = Optional.ofNullable(tx.execute(status -> upsertFeedbackAndProfile(
+            return Optional.ofNullable(tx.execute(status -> upsertFeedbackAndProfile(
                     userId,
                     weekStart,
                     weekEnd,
@@ -461,7 +460,7 @@ public class AiFeedbackService {
                     finalIsLowData)));
         } catch (org.springframework.dao.DataIntegrityViolationException e) {
             log.info("피드백 중복 삽입 감지 — 재조회 후 갱신: userId={}, weekEnd={}", userId, weekEnd);
-            result = Optional.ofNullable(tx.execute(status -> upsertFeedbackAndProfile(
+            return Optional.ofNullable(tx.execute(status -> upsertFeedbackAndProfile(
                     userId,
                     weekStart,
                     weekEnd,
@@ -475,10 +474,6 @@ public class AiFeedbackService {
                     reactions,
                     finalIsLowData)));
         }
-
-        result.ifPresent(fb -> eventPublisher.publishEvent(
-                new FeedbackCreatedEvent(userId, YearMonth.from(monthStart).toString())));
-        return result;
     }
 
     /**
@@ -590,8 +585,7 @@ public class AiFeedbackService {
                     .build());
         }));
 
-        result.ifPresent(fb -> eventPublisher.publishEvent(
-                new FeedbackCreatedEvent(userId, yearMonth.toString())));
+        // 월간 피드백은 enrichedActions가 없으므로(payload="{}") 시뮬레이션 이벤트를 발행하지 않는다.
         return result;
     }
 
@@ -725,6 +719,8 @@ public class AiFeedbackService {
         profileUpdater.update(profileEntity, overspend.keySet(), reactions, recentFeedbacks, isLowData);
         userProfileRepo.save(profileEntity);
 
+        eventPublisher.publishEvent(
+                new FeedbackCreatedEvent(userId, YearMonth.from(monthStart).toString()));
         return fb;
     }
 

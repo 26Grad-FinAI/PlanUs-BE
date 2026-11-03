@@ -90,9 +90,7 @@ public class AiFeedbackDevController {
     @GetMapping("/run-month-end")
     public Map<String, Object> runMonthEnd(
             @Parameter(description = "대상 사용자 ID", example = "5") @RequestParam Long userId,
-            @Parameter(description = "결산 대상 연월", example = "2026-10")
-                    @RequestParam
-                    @DateTimeFormat(pattern = "yyyy-MM")
+            @Parameter(description = "결산 대상 연월", example = "2026-10") @RequestParam @DateTimeFormat(pattern = "yyyy-MM")
                     YearMonth yearMonth) {
         try {
             return feedbackService
