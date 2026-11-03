@@ -1,6 +1,13 @@
 spring:
   profiles:
     active: ${SPRING_PROFILES_ACTIVE:dev}
+  ai:
+    anthropic:
+      api-key: ${ANTHROPIC_API_KEY:}
+      chat:
+        options:
+          model: claude-sonnet-4-5
+          max-tokens: 800
   jpa:
     hibernate:
       ddl-auto: none          # 스키마는 Flyway가 담당
@@ -10,6 +17,8 @@ spring:
 
 planus:
   ai:
+    llm:
+      api-key: ${ANTHROPIC_API_KEY:}
     budget:
       base-url: ${RUNPOD_ENDPOINT:https://8gcw31a7figzda.api.runpod.ai}
       api-key: ${RUNPOD_API_KEY:}

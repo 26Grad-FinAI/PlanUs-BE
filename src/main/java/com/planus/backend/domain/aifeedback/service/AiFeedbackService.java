@@ -3,6 +3,8 @@ package com.planus.backend.domain.aifeedback.service;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.planus.backend.domain.aifeedback.action.ActionPlan;
 import com.planus.backend.domain.aifeedback.action.SavingsActionCalculator;
+import com.planus.backend.domain.aifeedback.ai.ActionEnricher;
+import com.planus.backend.domain.aifeedback.ai.EnrichedAction;
 import com.planus.backend.domain.aifeedback.cause.CauseSignalAssembler;
 import com.planus.backend.domain.aifeedback.cause.CauseSignals;
 import com.planus.backend.domain.aifeedback.config.AiFeedbackProperties;
@@ -84,6 +86,7 @@ public class AiFeedbackService {
     private final FeedbackTypeResolver feedbackTypeResolver;
     private final CauseSignalAssembler causeAssembler;
     private final SavingsActionCalculator savingsCalculator;
+    private final ActionEnricher actionEnricher;
     private final ProfileUpdater profileUpdater;
     private final AiFeedbackProperties p;
     private final ObjectMapper objectMapper;
@@ -108,6 +111,7 @@ public class AiFeedbackService {
             FeedbackTypeResolver feedbackTypeResolver,
             CauseSignalAssembler causeAssembler,
             SavingsActionCalculator savingsCalculator,
+            ActionEnricher actionEnricher,
             ProfileUpdater profileUpdater,
             AiFeedbackProperties p,
             ObjectMapper objectMapper,
@@ -130,6 +134,7 @@ public class AiFeedbackService {
         this.feedbackTypeResolver = feedbackTypeResolver;
         this.causeAssembler = causeAssembler;
         this.savingsCalculator = savingsCalculator;
+        this.actionEnricher = actionEnricher;
         this.profileUpdater = profileUpdater;
         this.p = p;
         this.objectMapper = objectMapper;
@@ -200,6 +205,7 @@ public class AiFeedbackService {
         Map<Integer, Long> overspend = Map.of();
         Map<Integer, CauseSignals> causeSignalsByCategory = Map.of();
         List<ActionPlan> actions = List.of();
+        List<EnrichedAction> enrichedActions = List.of();
         long predictedMonthEnd = 0;
         long savingsImpact = 0;
         double burnRate = 0;
@@ -268,6 +274,16 @@ public class AiFeedbackService {
                                 .toList(),
                         reactions,
                         sensitiveAreas);
+            }
+
+            // ── [7.5] Spring AI 행동 강화 ──
+            if (!actions.isEmpty()) {
+                try {
+                    enrichedActions = actionEnricher.enrich(userId, actions);
+                } catch (Exception e) {
+                    log.warn("Spring AI 행동 강화 실패, 기본 actions 사용: userId={}", userId, e);
+                    enrichedActions = actionEnricher.toBasicEnriched(actions);
+                }
             }
 
             // overallConfidence: bandWidth + 이상치 신뢰도 기반
@@ -416,7 +432,7 @@ public class AiFeedbackService {
         LocalDateTime now = LocalDateTime.now(clock);
 
         // ── [10] 페이로드 JSON (버전 포함) ──
-        String payload = buildPayload(feedbackType, pacing, overspend, actions, predictedMonthEnd);
+        String payload = buildPayload(feedbackType, pacing, overspend, actions, enrichedActions, predictedMonthEnd);
 
         // ── [11+12] 멱등 upsert + 프로필 갱신 (단일 트랜잭션) ──
         // 동시 실행 시 INSERT 유니크 위반이 발생할 수 있으므로 재시도로 흡수한다.
@@ -1013,6 +1029,7 @@ public class AiFeedbackService {
             PacingResult pacing,
             Map<Integer, Long> overspend,
             List<ActionPlan> actions,
+            List<EnrichedAction> enrichedActions,
             long predictedMonthEnd) {
         try {
             Map<String, Object> payload = new LinkedHashMap<>();
@@ -1040,6 +1057,25 @@ public class AiFeedbackService {
                                 return m;
                             })
                             .toList());
+            if (enrichedActions != null && !enrichedActions.isEmpty()) {
+                payload.put(
+                        "enrichedActions",
+                        enrichedActions.stream()
+                                .map(a -> {
+                                    Map<String, Object> m = new LinkedHashMap<>();
+                                    m.put("categoryId", a.categoryId());
+                                    m.put("reductionWon", a.reductionWon());
+                                    m.put("dominantFactor", a.dominantFactor());
+                                    m.put("feasibilityScore", a.feasibilityScore());
+                                    m.put("actionType", a.actionType());
+                                    m.put("currentBehavior", a.currentBehavior());
+                                    m.put("targetBehavior", a.targetBehavior());
+                                    m.put("contextInsight", a.contextInsight());
+                                    m.put("behaviorFeasibility", a.behaviorFeasibility());
+                                    return m;
+                                })
+                                .toList());
+            }
             return objectMapper.writeValueAsString(payload);
         } catch (Exception e) {
             log.warn("페이로드 직렬화 실패", e);

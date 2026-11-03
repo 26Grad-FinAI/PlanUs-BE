@@ -503,8 +503,7 @@ class WalkForwardValidationTest {
                     int categoryId = Integer.parseInt(cols[2].trim());
                     String emotion = cols[3].trim();
                     boolean isRecurring = "TRUE".equalsIgnoreCase(cols[4].trim());
-                    boolean isPlanned = "TRUE".equalsIgnoreCase(cols[5].trim());
-                    String memo = cols.length > 6 ? cols[6].trim() : "";
+                    String memo = cols.length > 5 ? cols[5].trim() : "";
 
                     result.add(Expense.builder()
                             .id(id++)
@@ -516,7 +515,7 @@ class WalkForwardValidationTest {
                             .memo(memo)
                             .emotion(emotion)
                             .recurring(isRecurring)
-                            .planned(isPlanned)
+                            .planned(false)
                             .build());
                 } catch (Exception e) {
                     skipped++;

@@ -54,7 +54,13 @@ public enum GeneralErrorCode implements BaseErrorCode {
     BUDGET_PLAN_NOT_FOUND(HttpStatus.NOT_FOUND, "BUDGET_404_003", "해당 월의 예산 산출 요청이 존재하지 않습니다."),
     BUDGET_PLAN_NOT_COMPLETED(HttpStatus.BAD_REQUEST, "BUDGET_400_001", "예산 산출이 아직 완료되지 않았습니다."),
     PROFILE_NOT_COMPLETED(HttpStatus.BAD_REQUEST, "BUDGET_400_002", "프로필 입력이 완료되지 않았습니다."),
-    AI_BUDGET_SERVICE_UNAVAILABLE(HttpStatus.SERVICE_UNAVAILABLE, "BUDGET_503_001", "AI 예산 산출 서비스가 일시적으로 불가합니다.");
+    AI_BUDGET_SERVICE_UNAVAILABLE(HttpStatus.SERVICE_UNAVAILABLE, "BUDGET_503_001", "AI 예산 산출 서비스가 일시적으로 불가합니다."),
+
+    // Savings Simulation
+    FEEDBACK_NOT_FOUND(HttpStatus.NOT_FOUND, "SIMULATION_404_001", "해당 월의 피드백을 찾을 수 없습니다."),
+    NO_ENRICHED_ACTIONS(HttpStatus.NOT_FOUND, "SIMULATION_404_002", "절약 제안이 없습니다."),
+    INVALID_CATEGORY_SELECTION(HttpStatus.BAD_REQUEST, "SIMULATION_400_001", "유효하지 않은 카테고리가 선택되었습니다."),
+    BUDGET_EXCEEDED(HttpStatus.CONFLICT, "SIMULATION_409_001", "감축 후 예산이 가용예산을 초과합니다.");
 
     private final HttpStatus httpStatus;
     private final String code;

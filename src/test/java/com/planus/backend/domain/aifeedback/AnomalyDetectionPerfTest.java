@@ -62,6 +62,7 @@ class AnomalyDetectionPerfTest {
                 null, // feedbackTypeResolver
                 null, // causeAssembler
                 null, // savingsCalculator
+                null, // actionEnricher
                 null, // profileUpdater
                 props,
                 null, // objectMapper
