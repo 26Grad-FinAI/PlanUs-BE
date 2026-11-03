@@ -62,8 +62,7 @@ public class SavingsAnalysisTools {
 
     @Tool(description = "카테고리의 요일별 지출 분포를 조회한다")
     public Map<String, Long> getDayOfWeekDistribution(
-            @ToolParam(description = "카테고리 ID") int categoryId,
-            ToolContext toolContext) {
+            @ToolParam(description = "카테고리 ID") int categoryId, ToolContext toolContext) {
 
         Long userId = (Long) toolContext.getContext().get("userId");
 
@@ -89,8 +88,7 @@ public class SavingsAnalysisTools {
 
     @Tool(description = "카테고리의 감정 태그별 거래 비율과 금액을 조회한다")
     public Map<String, EmotionStat> getEmotionDistribution(
-            @ToolParam(description = "카테고리 ID") int categoryId,
-            ToolContext toolContext) {
+            @ToolParam(description = "카테고리 ID") int categoryId, ToolContext toolContext) {
 
         Long userId = (Long) toolContext.getContext().get("userId");
 

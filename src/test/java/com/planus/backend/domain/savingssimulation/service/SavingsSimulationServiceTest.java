@@ -420,8 +420,7 @@ class SavingsSimulationServiceTest {
                         .build();
                 when(budgetCatRepo.findByBudgetId(10L)).thenReturn(List.of(cat7, cat5));
 
-                when(simulationRepo.save(any(SavingSimulation.class)))
-                        .thenAnswer(inv -> inv.getArgument(0));
+                when(simulationRepo.save(any(SavingSimulation.class))).thenAnswer(inv -> inv.getArgument(0));
 
                 ApplyRequest request = new ApplyRequest("2026-11", List.of(7, 5));
                 ApplyResponse result = service.apply(1L, request);
@@ -487,8 +486,7 @@ class SavingsSimulationServiceTest {
                         .build();
                 when(budgetCatRepo.findByBudgetId(10L)).thenReturn(List.of(cat7));
 
-                when(simulationRepo.save(any(SavingSimulation.class)))
-                        .thenAnswer(inv -> inv.getArgument(0));
+                when(simulationRepo.save(any(SavingSimulation.class))).thenAnswer(inv -> inv.getArgument(0));
 
                 ApplyRequest request = new ApplyRequest("2026-11", List.of(7));
                 ApplyResponse result = service.apply(1L, request);

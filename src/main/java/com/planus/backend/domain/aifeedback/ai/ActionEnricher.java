@@ -93,8 +93,15 @@ public class ActionEnricher {
                     }
                     double bf = Math.max(0.0, Math.min(1.0, e.behaviorFeasibility()));
                     return new EnrichedAction(
-                            a.categoryId(), a.reductionWon(), a.dominantFactor(), a.feasibilityScore(),
-                            e.actionType(), e.currentBehavior(), e.targetBehavior(), e.contextInsight(), bf);
+                            a.categoryId(),
+                            a.reductionWon(),
+                            a.dominantFactor(),
+                            a.feasibilityScore(),
+                            e.actionType(),
+                            e.currentBehavior(),
+                            e.targetBehavior(),
+                            e.contextInsight(),
+                            bf);
                 })
                 .toList();
     }
