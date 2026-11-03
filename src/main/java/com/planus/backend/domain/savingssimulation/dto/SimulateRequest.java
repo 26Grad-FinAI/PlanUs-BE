@@ -10,4 +10,4 @@ import java.util.List;
  * @param yearMonth           대상 연월 (yyyy-MM)
  * @param selectedCategoryIds 시뮬레이션할 카테고리 ID 목록
  */
-public record SimulateRequest(@NotNull String yearMonth, @NotEmpty List<Integer> selectedCategoryIds) {}
+public record SimulateRequest(@NotNull String yearMonth, @NotEmpty List<@NotNull Integer> selectedCategoryIds) {}

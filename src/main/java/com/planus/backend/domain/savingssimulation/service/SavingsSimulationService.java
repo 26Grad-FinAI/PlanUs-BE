@@ -13,6 +13,9 @@ import com.planus.backend.domain.aifeedback.repository.BudgetRepository;
 import com.planus.backend.domain.aifeedback.repository.ExpenseRepository;
 import com.planus.backend.domain.savingssimulation.dto.*;
 import com.planus.backend.domain.savingssimulation.dto.SimulateResponse.DisplayType;
+import com.planus.backend.domain.savingssimulation.entity.SavingSimulation;
+import com.planus.backend.domain.savingssimulation.entity.SavingSimulationItem;
+import com.planus.backend.domain.savingssimulation.repository.SavingSimulationRepository;
 import com.planus.backend.domain.user.entity.UserAccount;
 import com.planus.backend.domain.user.repository.UserAccountRepository;
 import com.planus.backend.global.apiPayload.code.GeneralErrorCode;
@@ -49,6 +52,7 @@ public class SavingsSimulationService {
     private final BudgetCategoryRepository budgetCatRepo;
     private final ExpenseRepository expenseRepo;
     private final UserAccountRepository userRepo;
+    private final SavingSimulationRepository simulationRepo;
     private final ObjectMapper objectMapper;
 
     /**
@@ -97,9 +101,9 @@ public class SavingsSimulationService {
         Map<Integer, EnrichedAction> actionMap =
                 enriched.stream().collect(Collectors.toMap(EnrichedAction::categoryId, a -> a, (a, b) -> a));
 
-        // 선택된 카테고리 검증
+        // 선택된 카테고리 검증 (중복 제거)
         List<SuggestResponse.ActionCard> selectedCards = new ArrayList<>();
-        for (int catId : request.selectedCategoryIds()) {
+        for (int catId : request.selectedCategoryIds().stream().distinct().toList()) {
             EnrichedAction action = actionMap.get(catId);
             if (action == null) {
                 throw new GeneralException(GeneralErrorCode.INVALID_CATEGORY_SELECTION);
@@ -178,6 +182,8 @@ public class SavingsSimulationService {
     /**
      * 시뮬레이션 결과를 예산에 반영한다.
      *
+     * <p>동일 피드백에 대해 이미 적용된 시뮬레이션이 있으면 {@code ALREADY_APPLIED} 예외를 던져 멱등성을 보장한다.
+     *
      * @param userId  사용자 ID
      * @param request 예산 반영 요청
      * @return 반영 결과
@@ -187,9 +193,17 @@ public class SavingsSimulationService {
         UserAccount user =
                 userRepo.findById(userId).orElseThrow(() -> new GeneralException(GeneralErrorCode.NOT_FOUND));
 
-        List<EnrichedAction> enriched = loadEnrichedActions(userId, request.yearMonth());
+        AiFeedback feedback = loadFeedback(userId, request.yearMonth());
+        List<EnrichedAction> enriched = parseEnrichedActions(feedback, request.yearMonth());
         Map<Integer, EnrichedAction> actionMap =
                 enriched.stream().collect(Collectors.toMap(EnrichedAction::categoryId, a -> a, (a, b) -> a));
+
+        // 멱등성 검사: 동일 피드백에 대해 이미 적용되었는지 확인
+        simulationRepo
+                .findByUserIdAndFeedbackIdAndIsAppliedTrue(userId, feedback.getId())
+                .ifPresent(existing -> {
+                    throw new GeneralException(GeneralErrorCode.ALREADY_APPLIED);
+                });
 
         LocalDate monthStart = parseYearMonth(request.yearMonth());
         Budget budget = budgetRepo
@@ -203,7 +217,7 @@ public class SavingsSimulationService {
         List<ApplyResponse.CategoryChange> changes = new ArrayList<>();
         long totalReduction = 0;
 
-        for (int catId : request.selectedCategoryIds()) {
+        for (int catId : request.selectedCategoryIds().stream().distinct().toList()) {
             EnrichedAction action = actionMap.get(catId);
             if (action == null) {
                 throw new GeneralException(GeneralErrorCode.INVALID_CATEGORY_SELECTION);
@@ -215,7 +229,7 @@ public class SavingsSimulationService {
             }
 
             long before = bc.getAmount();
-            long newAmount = Math.max(before - action.reductionWon(), MIN_BUDGET_WON);
+            long newAmount = Math.min(before, Math.max(before - action.reductionWon(), MIN_BUDGET_WON));
             long actualReduction = before - newAmount;
 
             bc.modifyAmount(newAmount);
@@ -231,6 +245,27 @@ public class SavingsSimulationService {
         }
         budget.updateTotalBudget(newTotal);
 
+        // 적용 이력 저장
+        SavingSimulation simulation = SavingSimulation.builder()
+                .userId(userId)
+                .feedbackId(feedback.getId())
+                .yearMonth(monthStart)
+                .type("BUDGET_REDUCTION")
+                .isApplied(true)
+                .totalSavingAmount(totalReduction)
+                .build();
+
+        for (ApplyResponse.CategoryChange change : changes) {
+            long savingAmount = change.before() - change.after();
+            SavingSimulationItem item = SavingSimulationItem.builder()
+                    .categoryId((long) change.categoryId())
+                    .savingAmount(savingAmount)
+                    .annualSaving(savingAmount * 12)
+                    .build();
+            simulation.addItem(item);
+        }
+        simulationRepo.save(simulation);
+
         long monthlySavings = available - newTotal + user.getMonthlySavingsGoal();
         return new ApplyResponse(true, changes, newTotal, monthlySavings);
     }
@@ -238,17 +273,23 @@ public class SavingsSimulationService {
     // ── 내부 메서드 ──
 
     private List<EnrichedAction> loadEnrichedActions(Long userId, String yearMonth) {
+        AiFeedback feedback = loadFeedback(userId, yearMonth);
+        return parseEnrichedActions(feedback, yearMonth);
+    }
+
+    private AiFeedback loadFeedback(Long userId, String yearMonth) {
         LocalDate monthStart = parseYearMonth(yearMonth);
 
-        // 해당 월의 최신 WEEKLY 피드백에서 payload 추출
         List<AiFeedback> feedbacks = feedbackRepo.findByUserIdAndPeriodTypeOrderByPeriodStartDesc(userId, "WEEKLY");
 
-        AiFeedback latest = feedbacks.stream()
+        return feedbacks.stream()
                 .filter(f -> f.getYearMonth().equals(monthStart))
                 .findFirst()
                 .orElseThrow(() -> new GeneralException(GeneralErrorCode.FEEDBACK_NOT_FOUND));
+    }
 
-        String payload = latest.getPayload();
+    private List<EnrichedAction> parseEnrichedActions(AiFeedback feedback, String yearMonth) {
+        String payload = feedback.getPayload();
         if (payload == null || payload.isBlank()) {
             throw new GeneralException(GeneralErrorCode.NO_ENRICHED_ACTIONS);
         }
@@ -284,13 +325,16 @@ public class SavingsSimulationService {
         } catch (GeneralException e) {
             throw e;
         } catch (Exception e) {
-            log.warn("피드백 payload 파싱 실패: userId={}, yearMonth={}", userId, yearMonth, e);
+            log.warn("피드백 payload 파싱 실패: userId={}, yearMonth={}", feedback.getUserId(), yearMonth, e);
             throw new GeneralException(GeneralErrorCode.NO_ENRICHED_ACTIONS);
         }
     }
 
     private LocalDate parseYearMonth(String yearMonth) {
-        YearMonth ym = YearMonth.parse(yearMonth, YM_FORMATTER);
-        return ym.atDay(1);
+        try {
+            return YearMonth.parse(yearMonth, YM_FORMATTER).atDay(1);
+        } catch (java.time.format.DateTimeParseException e) {
+            throw new GeneralException(GeneralErrorCode.BAD_REQUEST);
+        }
     }
 }

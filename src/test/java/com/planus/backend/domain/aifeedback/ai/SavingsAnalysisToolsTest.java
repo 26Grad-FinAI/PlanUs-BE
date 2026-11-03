@@ -13,6 +13,7 @@ import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Nested;
 import org.junit.jupiter.api.Test;
+import org.springframework.ai.chat.model.ToolContext;
 
 class SavingsAnalysisToolsTest {
 
@@ -23,6 +24,10 @@ class SavingsAnalysisToolsTest {
     void setUp() {
         expenseRepository = mock(ExpenseRepository.class);
         tools = new SavingsAnalysisTools(expenseRepository);
+    }
+
+    private ToolContext toolContext(Long userId) {
+        return new ToolContext(Map.of("userId", userId));
     }
 
     private Expense variableExpense(long amount, String emotion, LocalDateTime date) {
@@ -53,7 +58,7 @@ class SavingsAnalysisToolsTest {
             when(expenseRepository.findByUserIdAndCategoryIdAndExpenseDateBetween(eq(1L), eq(7), any(), any()))
                     .thenReturn(expenses);
 
-            SavingsAnalysisTools.FrequencyStats result = tools.getCategoryFrequency(1L, 7, 4);
+            SavingsAnalysisTools.FrequencyStats result = tools.getCategoryFrequency(7, 4, toolContext(1L));
 
             assertThat(result.weeklyAvgCount()).isEqualTo(3.0 / 4); // 3건 / 4주
             assertThat(result.avgAmountPerTransaction()).isEqualTo(20000); // (10000+20000+30000) / 3
@@ -65,7 +70,7 @@ class SavingsAnalysisToolsTest {
             when(expenseRepository.findByUserIdAndCategoryIdAndExpenseDateBetween(eq(1L), eq(7), any(), any()))
                     .thenReturn(List.of());
 
-            SavingsAnalysisTools.FrequencyStats result = tools.getCategoryFrequency(1L, 7, 4);
+            SavingsAnalysisTools.FrequencyStats result = tools.getCategoryFrequency(7, 4, toolContext(1L));
 
             assertThat(result.weeklyAvgCount()).isEqualTo(0);
             assertThat(result.avgAmountPerTransaction()).isEqualTo(0);
@@ -88,7 +93,7 @@ class SavingsAnalysisToolsTest {
             when(expenseRepository.findByUserIdAndCategoryIdAndExpenseDateBetween(eq(1L), eq(7), any(), any()))
                     .thenReturn(List.of(recurring, variable));
 
-            SavingsAnalysisTools.FrequencyStats result = tools.getCategoryFrequency(1L, 7, 4);
+            SavingsAnalysisTools.FrequencyStats result = tools.getCategoryFrequency(7, 4, toolContext(1L));
 
             assertThat(result.weeklyAvgCount()).isEqualTo(1.0 / 4); // 변동 1건만
             assertThat(result.avgAmountPerTransaction()).isEqualTo(10000);
@@ -111,7 +116,7 @@ class SavingsAnalysisToolsTest {
             when(expenseRepository.findByUserIdAndCategoryIdAndExpenseDateBetween(eq(1L), eq(7), any(), any()))
                     .thenReturn(expenses);
 
-            Map<String, Long> result = tools.getDayOfWeekDistribution(1L, 7);
+            Map<String, Long> result = tools.getDayOfWeekDistribution(7, toolContext(1L));
 
             assertThat(result).containsEntry("MONDAY", 10000L);
             assertThat(result).containsEntry("FRIDAY", 35000L); // 20000 + 15000
@@ -135,7 +140,7 @@ class SavingsAnalysisToolsTest {
             when(expenseRepository.findByUserIdAndCategoryIdAndExpenseDateBetween(eq(1L), eq(7), any(), any()))
                     .thenReturn(expenses);
 
-            Map<String, SavingsAnalysisTools.EmotionStat> result = tools.getEmotionDistribution(1L, 7);
+            Map<String, SavingsAnalysisTools.EmotionStat> result = tools.getEmotionDistribution(7, toolContext(1L));
 
             assertThat(result).containsKey("SATISFIED");
             assertThat(result.get("SATISFIED").count()).isEqualTo(1);
@@ -156,7 +161,7 @@ class SavingsAnalysisToolsTest {
             when(expenseRepository.findByUserIdAndCategoryIdAndExpenseDateBetween(eq(1L), eq(7), any(), any()))
                     .thenReturn(List.of());
 
-            Map<String, SavingsAnalysisTools.EmotionStat> result = tools.getEmotionDistribution(1L, 7);
+            Map<String, SavingsAnalysisTools.EmotionStat> result = tools.getEmotionDistribution(7, toolContext(1L));
 
             assertThat(result).isEmpty();
         }

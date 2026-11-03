@@ -2,6 +2,7 @@ package com.planus.backend.domain.aifeedback.ai;
 
 import com.planus.backend.domain.aifeedback.action.ActionPlan;
 import java.util.List;
+import java.util.Map;
 import java.util.stream.Collectors;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -66,13 +67,36 @@ public class ActionEnricher {
             return toBasicEnriched(actions);
         }
         String userPrompt = buildUserPrompt(userId, actions);
-        return chatClient
+        List<EnrichedAction> llm = chatClient
                 .prompt()
                 .system(SYSTEM_PROMPT)
                 .user(userPrompt)
                 .tools(tools)
+                .toolContext(Map.of("userId", userId))
                 .call()
-                .entity(new ParameterizedTypeReference<>() {});
+                .entity(new ParameterizedTypeReference<List<EnrichedAction>>() {});
+        return mergeBehavior(actions, llm);
+    }
+
+    /**
+     * LLM 응답에서 행동 필드만 가져오고, 금액·카테고리 값은 원본 ActionPlan에서 사용한다.
+     */
+    private List<EnrichedAction> mergeBehavior(List<ActionPlan> base, List<EnrichedAction> llm) {
+        Map<Integer, EnrichedAction> byCat = llm == null
+                ? Map.of()
+                : llm.stream().collect(Collectors.toMap(EnrichedAction::categoryId, a -> a, (a, b) -> a));
+        return base.stream()
+                .map(a -> {
+                    EnrichedAction e = byCat.get(a.categoryId());
+                    if (e == null) {
+                        return toBasicEnriched(List.of(a)).get(0);
+                    }
+                    double bf = Math.max(0.0, Math.min(1.0, e.behaviorFeasibility()));
+                    return new EnrichedAction(
+                            a.categoryId(), a.reductionWon(), a.dominantFactor(), a.feasibilityScore(),
+                            e.actionType(), e.currentBehavior(), e.targetBehavior(), e.contextInsight(), bf);
+                })
+                .toList();
     }
 
     /**

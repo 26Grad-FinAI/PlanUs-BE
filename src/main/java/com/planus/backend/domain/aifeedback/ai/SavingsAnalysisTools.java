@@ -10,6 +10,7 @@ import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import lombok.RequiredArgsConstructor;
+import org.springframework.ai.chat.model.ToolContext;
 import org.springframework.ai.tool.annotation.Tool;
 import org.springframework.ai.tool.annotation.ToolParam;
 import org.springframework.stereotype.Component;
@@ -33,12 +34,15 @@ public class SavingsAnalysisTools {
 
     @Tool(description = "카테고리의 주간 거래 빈도와 건당 평균 금액을 조회한다")
     public FrequencyStats getCategoryFrequency(
-            @ToolParam(description = "사용자 ID") Long userId,
             @ToolParam(description = "카테고리 ID") int categoryId,
-            @ToolParam(description = "조회 주 수") int weeks) {
+            @ToolParam(description = "조회 주 수") int weeks,
+            ToolContext toolContext) {
+
+        Long userId = (Long) toolContext.getContext().get("userId");
+        int safeWeeks = Math.max(weeks, 1);
 
         LocalDate end = LocalDate.now();
-        LocalDate start = end.minusWeeks(weeks);
+        LocalDate start = end.minusWeeks(safeWeeks);
         LocalDateTime from = start.atStartOfDay();
         LocalDateTime to = end.atTime(LocalTime.MAX);
 
@@ -51,14 +55,17 @@ public class SavingsAnalysisTools {
             return new FrequencyStats(0, 0);
         }
 
-        double weeklyAvg = (double) variable.size() / weeks;
+        double weeklyAvg = (double) variable.size() / safeWeeks;
         long avgAmount = variable.stream().mapToLong(Expense::getAmount).sum() / variable.size();
         return new FrequencyStats(weeklyAvg, avgAmount);
     }
 
     @Tool(description = "카테고리의 요일별 지출 분포를 조회한다")
     public Map<String, Long> getDayOfWeekDistribution(
-            @ToolParam(description = "사용자 ID") Long userId, @ToolParam(description = "카테고리 ID") int categoryId) {
+            @ToolParam(description = "카테고리 ID") int categoryId,
+            ToolContext toolContext) {
+
+        Long userId = (Long) toolContext.getContext().get("userId");
 
         LocalDate end = LocalDate.now();
         LocalDate start = end.minusWeeks(8);
@@ -82,7 +89,10 @@ public class SavingsAnalysisTools {
 
     @Tool(description = "카테고리의 감정 태그별 거래 비율과 금액을 조회한다")
     public Map<String, EmotionStat> getEmotionDistribution(
-            @ToolParam(description = "사용자 ID") Long userId, @ToolParam(description = "카테고리 ID") int categoryId) {
+            @ToolParam(description = "카테고리 ID") int categoryId,
+            ToolContext toolContext) {
+
+        Long userId = (Long) toolContext.getContext().get("userId");
 
         LocalDate end = LocalDate.now();
         LocalDate start = end.minusWeeks(8);

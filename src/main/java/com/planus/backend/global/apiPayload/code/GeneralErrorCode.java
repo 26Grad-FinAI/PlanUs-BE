@@ -60,7 +60,8 @@ public enum GeneralErrorCode implements BaseErrorCode {
     FEEDBACK_NOT_FOUND(HttpStatus.NOT_FOUND, "SIMULATION_404_001", "해당 월의 피드백을 찾을 수 없습니다."),
     NO_ENRICHED_ACTIONS(HttpStatus.NOT_FOUND, "SIMULATION_404_002", "절약 제안이 없습니다."),
     INVALID_CATEGORY_SELECTION(HttpStatus.BAD_REQUEST, "SIMULATION_400_001", "유효하지 않은 카테고리가 선택되었습니다."),
-    BUDGET_EXCEEDED(HttpStatus.CONFLICT, "SIMULATION_409_001", "감축 후 예산이 가용예산을 초과합니다.");
+    BUDGET_EXCEEDED(HttpStatus.CONFLICT, "SIMULATION_409_001", "감축 후 예산이 가용예산을 초과합니다."),
+    ALREADY_APPLIED(HttpStatus.CONFLICT, "SIMULATION_409_002", "이미 적용된 시뮬레이션입니다.");
 
     private final HttpStatus httpStatus;
     private final String code;

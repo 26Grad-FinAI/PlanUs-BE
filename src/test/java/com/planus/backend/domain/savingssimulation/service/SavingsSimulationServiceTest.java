@@ -14,6 +14,8 @@ import com.planus.backend.domain.aifeedback.repository.BudgetRepository;
 import com.planus.backend.domain.aifeedback.repository.ExpenseRepository;
 import com.planus.backend.domain.savingssimulation.dto.*;
 import com.planus.backend.domain.savingssimulation.dto.SimulateResponse.DisplayType;
+import com.planus.backend.domain.savingssimulation.entity.SavingSimulation;
+import com.planus.backend.domain.savingssimulation.repository.SavingSimulationRepository;
 import com.planus.backend.domain.user.entity.UserAccount;
 import com.planus.backend.domain.user.repository.UserAccountRepository;
 import com.planus.backend.global.apiPayload.code.GeneralErrorCode;
@@ -35,6 +37,7 @@ class SavingsSimulationServiceTest {
     private BudgetCategoryRepository budgetCatRepo;
     private ExpenseRepository expenseRepo;
     private UserAccountRepository userRepo;
+    private SavingSimulationRepository simulationRepo;
     private ObjectMapper objectMapper;
 
     private SavingsSimulationService service;
@@ -46,10 +49,11 @@ class SavingsSimulationServiceTest {
         budgetCatRepo = mock(BudgetCategoryRepository.class);
         expenseRepo = mock(ExpenseRepository.class);
         userRepo = mock(UserAccountRepository.class);
+        simulationRepo = mock(SavingSimulationRepository.class);
         objectMapper = new ObjectMapper();
 
         service = new SavingsSimulationService(
-                feedbackRepo, budgetRepo, budgetCatRepo, expenseRepo, userRepo, objectMapper);
+                feedbackRepo, budgetRepo, budgetCatRepo, expenseRepo, userRepo, simulationRepo, objectMapper);
     }
 
     // ── 공통 헬퍼 ──
@@ -172,10 +176,12 @@ class SavingsSimulationServiceTest {
 
                 SuggestResponse result = service.suggest(1L, "2026-11");
 
-                // reductionWon >= 10000 필터: categoryId=7(40000) 통과, categoryId=5(5000) 제외
-                assertThat(result.actions()).hasSize(1);
+                // reductionWon >= 1_000 필터: categoryId=7(40000), categoryId=5(5000) 모두 통과
+                assertThat(result.actions()).hasSize(2);
                 assertThat(result.actions().get(0).categoryId()).isEqualTo(7);
                 assertThat(result.actions().get(0).actionType()).isNull(); // fallback이므로 null
+                assertThat(result.actions().get(1).categoryId()).isEqualTo(5);
+                assertThat(result.actions().get(1).actionType()).isNull();
             }
 
             @Test
@@ -390,6 +396,9 @@ class SavingsSimulationServiceTest {
                 when(feedbackRepo.findByUserIdAndPeriodTypeOrderByPeriodStartDesc(1L, "WEEKLY"))
                         .thenReturn(List.of(feedbackWith(payload)));
 
+                when(simulationRepo.findByUserIdAndFeedbackIdAndIsAppliedTrue(1L, 1L))
+                        .thenReturn(Optional.empty());
+
                 Budget budget = Budget.builder()
                         .id(10L)
                         .userId(1L)
@@ -410,6 +419,9 @@ class SavingsSimulationServiceTest {
                         .amount(100_000)
                         .build();
                 when(budgetCatRepo.findByBudgetId(10L)).thenReturn(List.of(cat7, cat5));
+
+                when(simulationRepo.save(any(SavingSimulation.class)))
+                        .thenAnswer(inv -> inv.getArgument(0));
 
                 ApplyRequest request = new ApplyRequest("2026-11", List.of(7, 5));
                 ApplyResponse result = service.apply(1L, request);
@@ -440,6 +452,9 @@ class SavingsSimulationServiceTest {
                 assertThat(cat7.getAmount()).isEqualTo(160_000);
                 assertThat(cat5.getAmount()).isEqualTo(80_000);
                 assertThat(budget.getTotalBudget()).isEqualTo(1_540_000);
+
+                // 시뮬레이션 이력 저장 확인
+                verify(simulationRepo).save(any(SavingSimulation.class));
             }
 
             @Test
@@ -451,6 +466,9 @@ class SavingsSimulationServiceTest {
                 String payload = buildPayloadWithEnrichedActions();
                 when(feedbackRepo.findByUserIdAndPeriodTypeOrderByPeriodStartDesc(1L, "WEEKLY"))
                         .thenReturn(List.of(feedbackWith(payload)));
+
+                when(simulationRepo.findByUserIdAndFeedbackIdAndIsAppliedTrue(1L, 1L))
+                        .thenReturn(Optional.empty());
 
                 Budget budget = Budget.builder()
                         .id(10L)
@@ -468,6 +486,9 @@ class SavingsSimulationServiceTest {
                         .amount(30_000)
                         .build();
                 when(budgetCatRepo.findByBudgetId(10L)).thenReturn(List.of(cat7));
+
+                when(simulationRepo.save(any(SavingSimulation.class)))
+                        .thenAnswer(inv -> inv.getArgument(0));
 
                 ApplyRequest request = new ApplyRequest("2026-11", List.of(7));
                 ApplyResponse result = service.apply(1L, request);
@@ -494,6 +515,9 @@ class SavingsSimulationServiceTest {
                 when(feedbackRepo.findByUserIdAndPeriodTypeOrderByPeriodStartDesc(1L, "WEEKLY"))
                         .thenReturn(List.of(feedbackWith(payload)));
 
+                when(simulationRepo.findByUserIdAndFeedbackIdAndIsAppliedTrue(1L, 1L))
+                        .thenReturn(Optional.empty());
+
                 when(budgetRepo.findByUserIdAndYearMonth(1L, LocalDate.of(2026, 11, 1)))
                         .thenReturn(Optional.empty());
 
@@ -514,6 +538,9 @@ class SavingsSimulationServiceTest {
                 String payload = buildPayloadWithEnrichedActions();
                 when(feedbackRepo.findByUserIdAndPeriodTypeOrderByPeriodStartDesc(1L, "WEEKLY"))
                         .thenReturn(List.of(feedbackWith(payload)));
+
+                when(simulationRepo.findByUserIdAndFeedbackIdAndIsAppliedTrue(1L, 1L))
+                        .thenReturn(Optional.empty());
 
                 Budget budget = Budget.builder()
                         .id(10L)
@@ -545,6 +572,9 @@ class SavingsSimulationServiceTest {
                 when(feedbackRepo.findByUserIdAndPeriodTypeOrderByPeriodStartDesc(1L, "WEEKLY"))
                         .thenReturn(List.of(feedbackWith(payload)));
 
+                when(simulationRepo.findByUserIdAndFeedbackIdAndIsAppliedTrue(1L, 1L))
+                        .thenReturn(Optional.empty());
+
                 Budget budget = Budget.builder()
                         .id(10L)
                         .userId(1L)
@@ -562,6 +592,33 @@ class SavingsSimulationServiceTest {
                         .isInstanceOf(GeneralException.class)
                         .satisfies(ex -> assertThat(((GeneralException) ex).getErrorCode())
                                 .isEqualTo(GeneralErrorCode.INVALID_CATEGORY_SELECTION));
+            }
+
+            @Test
+            @DisplayName("동일 피드백에 대해 이미 적용된 시뮬레이션이 있으면 ALREADY_APPLIED 예외")
+            void alreadyApplied() throws Exception {
+                UserAccount user = userWithGoal(3_000_000, 0, 500_000);
+                when(userRepo.findById(1L)).thenReturn(Optional.of(user));
+
+                String payload = buildPayloadWithEnrichedActions();
+                when(feedbackRepo.findByUserIdAndPeriodTypeOrderByPeriodStartDesc(1L, "WEEKLY"))
+                        .thenReturn(List.of(feedbackWith(payload)));
+
+                SavingSimulation existing = SavingSimulation.builder()
+                        .id(100L)
+                        .userId(1L)
+                        .feedbackId(1L)
+                        .isApplied(true)
+                        .build();
+                when(simulationRepo.findByUserIdAndFeedbackIdAndIsAppliedTrue(1L, 1L))
+                        .thenReturn(Optional.of(existing));
+
+                ApplyRequest request = new ApplyRequest("2026-11", List.of(7, 5));
+
+                assertThatThrownBy(() -> service.apply(1L, request))
+                        .isInstanceOf(GeneralException.class)
+                        .satisfies(ex -> assertThat(((GeneralException) ex).getErrorCode())
+                                .isEqualTo(GeneralErrorCode.ALREADY_APPLIED));
             }
         }
     }

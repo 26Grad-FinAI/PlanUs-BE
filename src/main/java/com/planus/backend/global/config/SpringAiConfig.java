@@ -2,7 +2,7 @@ package com.planus.backend.global.config;
 
 import org.springframework.ai.model.anthropic.autoconfigure.AnthropicChatAutoConfiguration;
 import org.springframework.ai.model.chat.client.autoconfigure.ChatClientAutoConfiguration;
-import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
+import org.springframework.boot.autoconfigure.condition.ConditionalOnExpression;
 import org.springframework.context.annotation.Configuration;
 import org.springframework.context.annotation.Import;
 
@@ -14,6 +14,6 @@ import org.springframework.context.annotation.Import;
  * 기본 fallback 로직을 사용한다.
  */
 @Configuration
-@ConditionalOnProperty(name = "spring.ai.anthropic.api-key")
+@ConditionalOnExpression("!'${spring.ai.anthropic.api-key:}'.isBlank()")
 @Import({AnthropicChatAutoConfiguration.class, ChatClientAutoConfiguration.class})
 public class SpringAiConfig {}
