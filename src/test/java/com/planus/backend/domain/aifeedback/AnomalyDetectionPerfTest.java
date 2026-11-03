@@ -67,7 +67,8 @@ class AnomalyDetectionPerfTest {
                 props,
                 null, // objectMapper
                 Clock.systemDefaultZone(),
-                null); // tx
+                null, // tx
+                null); // eventPublisher
 
         detectMethod = AiFeedbackService.class.getDeclaredMethod(
                 "detectAllAnomalies", List.class, LocalDate.class, LocalDate.class, Map.class);

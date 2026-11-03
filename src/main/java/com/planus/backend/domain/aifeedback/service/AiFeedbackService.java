@@ -20,6 +20,7 @@ import com.planus.backend.domain.aifeedback.llm.FeedbackRenderer.FeedbackContext
 import com.planus.backend.domain.aifeedback.llm.FeedbackRenderer.MonthEndContext;
 import com.planus.backend.domain.aifeedback.llm.FeedbackRenderer.TransactionHighlight;
 import com.planus.backend.domain.aifeedback.llm.FeedbackRenderer.WeekEmotionSummary;
+import com.planus.backend.domain.aifeedback.event.FeedbackCreatedEvent;
 import com.planus.backend.domain.aifeedback.profile.ProfileUpdater;
 import com.planus.backend.domain.aifeedback.repository.*;
 import com.planus.backend.domain.user.entity.UserAccount;
@@ -29,6 +30,7 @@ import java.time.temporal.ChronoUnit;
 import java.util.*;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import org.springframework.context.ApplicationEventPublisher;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.support.TransactionTemplate;
 
@@ -92,6 +94,7 @@ public class AiFeedbackService {
     private final ObjectMapper objectMapper;
     private final Clock clock;
     private final TransactionTemplate tx;
+    private final ApplicationEventPublisher eventPublisher;
 
     public AiFeedbackService(
             UserAccountRepository userRepo,
@@ -116,7 +119,8 @@ public class AiFeedbackService {
             AiFeedbackProperties p,
             ObjectMapper objectMapper,
             Clock clock,
-            TransactionTemplate tx) {
+            TransactionTemplate tx,
+            ApplicationEventPublisher eventPublisher) {
         this.userRepo = userRepo;
         this.expenseRepo = expenseRepo;
         this.budgetRepo = budgetRepo;
@@ -140,6 +144,7 @@ public class AiFeedbackService {
         this.objectMapper = objectMapper;
         this.clock = clock;
         this.tx = tx;
+        this.eventPublisher = eventPublisher;
     }
 
     /**
@@ -439,8 +444,9 @@ public class AiFeedbackService {
         final Map<Integer, Long> finalOverspend = overspend;
         final boolean finalIsLowData = isLowData;
 
+        Optional<AiFeedback> result;
         try {
-            return Optional.ofNullable(tx.execute(status -> upsertFeedbackAndProfile(
+            result = Optional.ofNullable(tx.execute(status -> upsertFeedbackAndProfile(
                     userId,
                     weekStart,
                     weekEnd,
@@ -455,7 +461,7 @@ public class AiFeedbackService {
                     finalIsLowData)));
         } catch (org.springframework.dao.DataIntegrityViolationException e) {
             log.info("피드백 중복 삽입 감지 — 재조회 후 갱신: userId={}, weekEnd={}", userId, weekEnd);
-            return Optional.ofNullable(tx.execute(status -> upsertFeedbackAndProfile(
+            result = Optional.ofNullable(tx.execute(status -> upsertFeedbackAndProfile(
                     userId,
                     weekStart,
                     weekEnd,
@@ -469,6 +475,10 @@ public class AiFeedbackService {
                     reactions,
                     finalIsLowData)));
         }
+
+        result.ifPresent(fb -> eventPublisher.publishEvent(
+                new FeedbackCreatedEvent(userId, YearMonth.from(monthStart).toString())));
+        return result;
     }
 
     /**
@@ -545,7 +555,7 @@ public class AiFeedbackService {
         saveMonthEndVerification(userId, monthStart, predictedTotal, actualTotal, mape, catActual, catBudget, now);
 
         // ── [5] AiFeedback(MONTHLY) 멱등 upsert ──
-        return Optional.ofNullable(tx.execute(status -> {
+        Optional<AiFeedback> result = Optional.ofNullable(tx.execute(status -> {
             AiFeedback existing = feedbackRepo
                     .findByUserIdAndPeriodTypeAndPeriodStartAndPeriodEnd(userId, "MONTHLY", monthStart, monthEnd)
                     .orElse(null);
@@ -579,6 +589,10 @@ public class AiFeedbackService {
                     .createdAt(now)
                     .build());
         }));
+
+        result.ifPresent(fb -> eventPublisher.publishEvent(
+                new FeedbackCreatedEvent(userId, yearMonth.toString())));
+        return result;
     }
 
     /**

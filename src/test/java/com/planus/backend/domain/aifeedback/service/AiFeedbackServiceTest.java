@@ -114,7 +114,8 @@ class AiFeedbackServiceTest {
                 props,
                 objectMapper,
                 FIXED_CLOCK,
-                tx);
+                tx,
+                mock(org.springframework.context.ApplicationEventPublisher.class));
     }
 
     // ── 공통 stub ──
