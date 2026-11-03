@@ -44,13 +44,21 @@ public class GeneralExceptionAdvice {
 
     /**
      * DB UNIQUE 제약 위반 시 발생하는 {@link DataIntegrityViolationException}을 처리한다.
-     * <p>이메일 중복 등 동시 요청으로 인한 무결성 위반을 409로 응답한다.</p>
+     * <p>제약 조건 이름에 따라 적절한 에러 코드를 반환한다.</p>
      */
     @ExceptionHandler(DataIntegrityViolationException.class)
     public ResponseEntity<ApiResponse<?>> handleDataIntegrityViolation(DataIntegrityViolationException ex) {
-        BaseErrorCode ec = GeneralErrorCode.EMAIL_DUPLICATE;
-        log.warn("[DataIntegrityViolation] {}", ex.getMessage());
+        BaseErrorCode ec = resolveDataIntegrityErrorCode(ex);
+        log.warn("[DataIntegrityViolation] code={}, {}", ec.getCode(), ex.getMessage());
         return ResponseEntity.status(ec.getHttpStatus()).body(ApiResponse.onFailure(ec, List.of()));
+    }
+
+    private BaseErrorCode resolveDataIntegrityErrorCode(DataIntegrityViolationException ex) {
+        String message = ex.getMostSpecificCause().getMessage();
+        if (message != null && message.contains("uk_saving_sim_user_feedback")) {
+            return GeneralErrorCode.ALREADY_APPLIED;
+        }
+        return GeneralErrorCode.EMAIL_DUPLICATE;
     }
 
     /**

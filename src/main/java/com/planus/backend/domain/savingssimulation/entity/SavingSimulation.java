@@ -9,6 +9,8 @@ import lombok.AllArgsConstructor;
 import lombok.Builder;
 import lombok.Getter;
 import lombok.NoArgsConstructor;
+import org.hibernate.annotations.JdbcTypeCode;
+import org.hibernate.type.SqlTypes;
 
 /** 절약 시뮬레이션 적용 이력 엔티티. saving_simulations 테이블 매핑. */
 @Entity
@@ -52,6 +54,7 @@ public class SavingSimulation {
     @Column(name = "reduced_months")
     private Integer reducedMonths;
 
+    @JdbcTypeCode(SqlTypes.JSON)
     @Column(name = "ai_raw_result", columnDefinition = "JSONB")
     private String aiRawResult;
 
