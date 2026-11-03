@@ -109,6 +109,7 @@ class AiFeedbackServiceTest {
                 feedbackTypeResolver,
                 causeAssembler,
                 savingsCalculator,
+                mock(com.planus.backend.domain.aifeedback.ai.ActionEnricher.class),
                 profileUpdater,
                 props,
                 objectMapper,

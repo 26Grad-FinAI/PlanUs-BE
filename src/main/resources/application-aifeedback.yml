@@ -18,6 +18,14 @@ spring:
     locations: classpath:db/migration
     baseline-on-migrate: true
 
+  ai:
+    anthropic:
+      api-key: ${ANTHROPIC_API_KEY}
+      chat:
+        options:
+          model: claude-sonnet-4-5
+          max-tokens: 800
+
 planus:
   ai:
     weekly-cron: "0 0 9 * * MON"

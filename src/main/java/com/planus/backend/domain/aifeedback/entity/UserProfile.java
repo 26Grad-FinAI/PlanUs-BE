@@ -6,6 +6,8 @@ import lombok.AllArgsConstructor;
 import lombok.Builder;
 import lombok.Getter;
 import lombok.NoArgsConstructor;
+import org.hibernate.annotations.JdbcTypeCode;
+import org.hibernate.type.SqlTypes;
 
 /**
  * 사용자 누적 해석 프로필 엔티티. {@code user_profile} 테이블 매핑.
@@ -33,10 +35,12 @@ public class UserProfile {
     private Long userId;
 
     @Column(name = "repeat_patterns", nullable = false, columnDefinition = "JSONB")
+    @JdbcTypeCode(SqlTypes.JSON)
     @Builder.Default
     private String repeatPatterns = "{}";
 
     @Column(name = "sensitive_areas", nullable = false, columnDefinition = "JSONB")
+    @JdbcTypeCode(SqlTypes.JSON)
     @Builder.Default
     private String sensitiveAreas = "[]";
 

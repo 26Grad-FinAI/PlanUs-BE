@@ -7,6 +7,8 @@ import lombok.AllArgsConstructor;
 import lombok.Builder;
 import lombok.Getter;
 import lombok.NoArgsConstructor;
+import org.hibernate.annotations.JdbcTypeCode;
+import org.hibernate.type.SqlTypes;
 
 /**
  * AI 주간/월간 소비 피드백 엔티티. {@code ai_feedbacks} 테이블 매핑.
@@ -64,6 +66,7 @@ public class AiFeedback {
     @Column(name = "feedback_type", length = 20)
     private String feedbackType;
 
+    @JdbcTypeCode(SqlTypes.JSON)
     @Column(name = "payload", columnDefinition = "JSONB")
     private String payload;
 

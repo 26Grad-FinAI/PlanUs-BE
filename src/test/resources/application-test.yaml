@@ -1,4 +1,7 @@
 spring:
+  ai:
+    anthropic:
+      api-key: test-dummy-key-not-used
   mail:
     host: localhost
     port: 25
