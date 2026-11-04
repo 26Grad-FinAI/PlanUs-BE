@@ -1,8 +1,6 @@
 package com.planus.backend.domain.expense.batch;
 
-import static org.assertj.core.api.Assertions.assertThat;
 import static org.mockito.ArgumentMatchers.any;
-import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
@@ -11,7 +9,6 @@ import static org.mockito.Mockito.when;
 import com.planus.backend.domain.aifeedback.entity.Expense;
 import com.planus.backend.domain.aifeedback.repository.ExpenseRepository;
 import java.time.Clock;
-import java.time.Instant;
 import java.time.LocalDate;
 import java.time.LocalDateTime;
 import java.time.ZoneId;
@@ -120,6 +117,47 @@ class RecurringExpenseSchedulerTest {
 
             verify(itemProcessor).process(source, TODAY);
         }
+
+        @Test
+        @DisplayName("최신 복사본이 거래일을 앞당겨도 id가 가장 큰 복사본 기준으로 판단한다")
+        void latestCopyWithEarlierDate_usesIdOrder() {
+            Expense source = sourceExpense(1L, 15);
+            // id=10: recurring=true, 9월 15일
+            // id=20: recurring=false, 거래일을 8월 1일로 앞당김 (id가 더 크므로 최신)
+            Expense latestById = copyExpense(20L, 1L, false, LocalDateTime.of(2026, 8, 1, 3, 0));
+
+            when(expenseRepository.findByRecurringAndTypeAndSourceExpenseIdIsNull(true, "EXPENSE"))
+                    .thenReturn(List.of(source));
+            when(expenseRepository.findLatestCopyBySourceExpenseId(1L)).thenReturn(latestById);
+
+            scheduler.executeRecurringExpenses();
+
+            verify(itemProcessor, never()).process(any(Expense.class), any(LocalDate.class));
+        }
+    }
+
+    @Nested
+    @DisplayName("복사본 조회 실패 격리")
+    class CopyLookupFailureIsolation {
+
+        @Test
+        @DisplayName("복사본 조회에서 예외가 발생해도 다음 원본을 계속 처리한다")
+        void copyLookupException_continuesNextSource() {
+            Expense source1 = sourceExpense(1L, 15);
+            Expense source2 = sourceExpense(2L, 15);
+
+            when(expenseRepository.findByRecurringAndTypeAndSourceExpenseIdIsNull(true, "EXPENSE"))
+                    .thenReturn(List.of(source1, source2));
+            when(expenseRepository.findLatestCopyBySourceExpenseId(1L))
+                    .thenThrow(new RuntimeException("DB 오류"));
+            when(expenseRepository.findLatestCopyBySourceExpenseId(2L)).thenReturn(null);
+            when(itemProcessor.process(source2, TODAY)).thenReturn(true);
+
+            scheduler.executeRecurringExpenses();
+
+            verify(itemProcessor, never()).process(source1, TODAY);
+            verify(itemProcessor).process(source2, TODAY);
+        }
     }
 
     @Nested
@@ -129,8 +167,6 @@ class RecurringExpenseSchedulerTest {
         @Test
         @DisplayName("원본 지출일이 오늘 이후이면 스킵한다")
         void futureSource_skips() {
-            Expense futureSource = sourceExpense(2L, 15);
-            // 원본 날짜가 오늘(10/15)과 같으면 isBefore가 false이므로 스킵
             Expense todaySource = Expense.builder()
                     .id(2L)
                     .userId(1L)
@@ -155,12 +191,10 @@ class RecurringExpenseSchedulerTest {
         @Test
         @DisplayName("원본 지출일이 오늘과 다른 날이면 스킵한다")
         void differentDay_skips() {
-            // 원본은 20일, 오늘은 15일
             Expense source = sourceExpense(3L, 20);
 
             when(expenseRepository.findByRecurringAndTypeAndSourceExpenseIdIsNull(true, "EXPENSE"))
                     .thenReturn(List.of(source));
-            when(expenseRepository.findLatestCopyBySourceExpenseId(3L)).thenReturn(null);
 
             scheduler.executeRecurringExpenses();
 
