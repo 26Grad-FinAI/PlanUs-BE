@@ -66,6 +66,13 @@ public class RecurringExpenseScheduler {
             }
 
             try {
+                // 최신 복사본이 존재하고 recurring=false이면 스킵
+                Expense latestCopy = expenseRepository.findLatestCopyBySourceExpenseId(source.getId());
+                if (latestCopy != null && !latestCopy.isRecurring()) {
+                    skipped++;
+                    continue;
+                }
+
                 if (itemProcessor.process(source, today)) {
                     created++;
                 } else {
