@@ -1,7 +1,8 @@
 -- =====================================================================
 -- V28: 레거시 테이블 정리 + category 테이블 제거
 -- 코드에서 사용하지 않는 테이블 8개를 DROP하고,
--- category FK를 CHECK 제약으로 대체한다.
+-- category FK를 CHECK 제약(NOT VALID)으로 대체한다.
+-- CHECK 검증은 V29에서 별도 수행하여 테이블 잠금 시간을 최소화한다.
 -- =====================================================================
 
 -- -------------------------------------------------------
@@ -46,29 +47,31 @@ ALTER TABLE memo_question_queue
     DROP CONSTRAINT fk_memo_question_queue_category;
 
 -- -------------------------------------------------------
--- 4단계: CHECK 제약으로 category_id 유효성 보장 (1~10)
--- Categories.java의 코드 상수와 동일한 범위
+-- 4단계: CHECK 제약을 NOT VALID로 추가 (1~10)
+-- NOT VALID: 기존 행을 스캔하지 않으므로 테이블 잠금 최소화
+-- 새로 INSERT/UPDATE되는 행에 대해서만 즉시 검증
+-- 기존 데이터 검증은 V29에서 VALIDATE CONSTRAINT로 별도 수행
 -- -------------------------------------------------------
 ALTER TABLE expense
-    ADD CONSTRAINT chk_expense_category CHECK (category_id BETWEEN 1 AND 10);
+    ADD CONSTRAINT chk_expense_category CHECK (category_id BETWEEN 1 AND 10) NOT VALID;
 
 ALTER TABLE budget_category
-    ADD CONSTRAINT chk_budget_category_category CHECK (category_id BETWEEN 1 AND 10);
+    ADD CONSTRAINT chk_budget_category_category CHECK (category_id BETWEEN 1 AND 10) NOT VALID;
 
 ALTER TABLE ai_feedbacks
-    ADD CONSTRAINT chk_ai_feedbacks_category CHECK (category_id BETWEEN 1 AND 10);
+    ADD CONSTRAINT chk_ai_feedbacks_category CHECK (category_id BETWEEN 1 AND 10) NOT VALID;
 
 ALTER TABLE user_reactions
-    ADD CONSTRAINT chk_user_reactions_category CHECK (category_id BETWEEN 1 AND 10);
+    ADD CONSTRAINT chk_user_reactions_category CHECK (category_id BETWEEN 1 AND 10) NOT VALID;
 
 ALTER TABLE saving_simulation_items
-    ADD CONSTRAINT chk_ssi_category CHECK (category_id BETWEEN 1 AND 10);
+    ADD CONSTRAINT chk_ssi_category CHECK (category_id BETWEEN 1 AND 10) NOT VALID;
 
 ALTER TABLE budget_snapshot_category
-    ADD CONSTRAINT chk_bsc_category CHECK (category_id BETWEEN 1 AND 10);
+    ADD CONSTRAINT chk_bsc_category CHECK (category_id BETWEEN 1 AND 10) NOT VALID;
 
 ALTER TABLE memo_question_queue
-    ADD CONSTRAINT chk_mqq_category CHECK (category_id BETWEEN 1 AND 10);
+    ADD CONSTRAINT chk_mqq_category CHECK (category_id BETWEEN 1 AND 10) NOT VALID;
 
 -- -------------------------------------------------------
 -- 5단계: category 테이블 DROP
