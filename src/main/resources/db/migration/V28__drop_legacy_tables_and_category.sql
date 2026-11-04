@@ -25,26 +25,26 @@ DROP TABLE IF EXISTS persona_templates;
 -- 3단계: 활성 테이블의 category FK 제거
 -- -------------------------------------------------------
 ALTER TABLE expense
-    DROP CONSTRAINT fk_expense_category;
+    DROP CONSTRAINT IF EXISTS fk_expense_category;
 
 ALTER TABLE budget_category
-    DROP CONSTRAINT fk_budget_category_category;
+    DROP CONSTRAINT IF EXISTS fk_budget_category_category;
 
 ALTER TABLE ai_feedbacks
-    DROP CONSTRAINT fk_ai_feedbacks_category;
+    DROP CONSTRAINT IF EXISTS fk_ai_feedbacks_category;
 
 ALTER TABLE user_reactions
-    DROP CONSTRAINT fk_user_reactions_category;
+    DROP CONSTRAINT IF EXISTS fk_user_reactions_category;
 
 ALTER TABLE saving_simulation_items
-    DROP CONSTRAINT fk_saving_simulation_items_category;
+    DROP CONSTRAINT IF EXISTS fk_saving_simulation_items_category;
 
 -- V17에서 추가된 category FK 2개도 제거
 ALTER TABLE budget_snapshot_category
-    DROP CONSTRAINT fk_budget_snapshot_category_category;
+    DROP CONSTRAINT IF EXISTS fk_budget_snapshot_category_category;
 
 ALTER TABLE memo_question_queue
-    DROP CONSTRAINT fk_memo_question_queue_category;
+    DROP CONSTRAINT IF EXISTS fk_memo_question_queue_category;
 
 -- -------------------------------------------------------
 -- 4단계: CHECK 제약을 NOT VALID로 추가 (1~10)

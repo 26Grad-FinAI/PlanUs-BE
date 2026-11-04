@@ -11,7 +11,7 @@ import org.flywaydb.core.api.migration.Context;
  * Java 마이그레이션으로 분리하여 비트랜잭션 모드로 실행한다.
  * 이를 통해 운영 DB에서 인덱스 생성 중 쓰기 차단을 방지한다.
  */
-public class V27_1__add_expense_indexes_concurrently extends BaseJavaMigration {
+public class V30__add_expense_indexes_concurrently extends BaseJavaMigration {
 
     @Override
     public boolean canExecuteInTransaction() {
