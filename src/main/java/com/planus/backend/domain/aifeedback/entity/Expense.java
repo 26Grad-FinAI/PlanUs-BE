@@ -12,7 +12,13 @@ import lombok.NoArgsConstructor;
 
 /** 거래(수입/지출) 엔티티. expense 테이블 매핑. */
 @Entity
-@Table(name = "expense", indexes = @Index(name = "idx_expense_user_date", columnList = "user_id, expense_date"))
+@Table(
+        name = "expense",
+        indexes = {
+            @Index(name = "idx_expense_user_date", columnList = "user_id, expense_date"),
+            @Index(name = "idx_expense_user_type_date", columnList = "user_id, type, expense_date"),
+            @Index(name = "idx_expense_user_category_date", columnList = "user_id, category_id, expense_date")
+        })
 @Getter
 @NoArgsConstructor
 @AllArgsConstructor

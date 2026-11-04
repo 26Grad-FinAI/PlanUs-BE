@@ -8,7 +8,7 @@ import lombok.NoArgsConstructor;
 
 /** 사용자 피드백 반응(유용/비유용·거부 사유) 엔티티. user_reactions 테이블 매핑. */
 @Entity
-@Table(name = "user_reactions")
+@Table(name = "user_reactions", indexes = @Index(name = "idx_ur_user_id", columnList = "user_id"))
 @Getter
 @NoArgsConstructor
 @AllArgsConstructor

@@ -19,8 +19,7 @@ import lombok.NoArgsConstructor;
         uniqueConstraints =
                 @UniqueConstraint(
                         name = "uk_bsc_snapshot_category",
-                        columnNames = {"snapshot_id", "category_id"}),
-        indexes = @Index(name = "idx_bsc_snapshot", columnList = "snapshot_id"))
+                        columnNames = {"snapshot_id", "category_id"}))
 @Getter
 @NoArgsConstructor
 @AllArgsConstructor
