@@ -8,7 +8,12 @@ import lombok.NoArgsConstructor;
 
 /** 카테고리별 예산 배분 엔티티. budget_category 테이블 매핑. */
 @Entity
-@Table(name = "budget_category")
+@Table(
+        name = "budget_category",
+        uniqueConstraints =
+                @UniqueConstraint(
+                        name = "uk_bc_budget_category",
+                        columnNames = {"budget_id", "category_id"}))
 @Getter
 @NoArgsConstructor
 @AllArgsConstructor

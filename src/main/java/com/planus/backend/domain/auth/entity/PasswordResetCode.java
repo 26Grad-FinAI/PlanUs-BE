@@ -6,6 +6,7 @@ import jakarta.persistence.EntityListeners;
 import jakarta.persistence.GeneratedValue;
 import jakarta.persistence.GenerationType;
 import jakarta.persistence.Id;
+import jakarta.persistence.Index;
 import jakarta.persistence.Table;
 import java.time.LocalDateTime;
 import lombok.AllArgsConstructor;
@@ -17,7 +18,7 @@ import org.springframework.data.jpa.domain.support.AuditingEntityListener;
 
 /** 비밀번호 재설정 인증코드 엔티티. */
 @Entity
-@Table(name = "password_reset_code")
+@Table(name = "password_reset_code", indexes = @Index(name = "idx_prc_email_verified", columnList = "email, verified"))
 @EntityListeners(AuditingEntityListener.class)
 @Getter
 @NoArgsConstructor

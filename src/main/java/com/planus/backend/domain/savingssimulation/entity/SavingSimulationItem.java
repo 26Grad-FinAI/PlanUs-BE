@@ -10,7 +10,7 @@ import lombok.Setter;
 
 /** 절약 시뮬레이션 항목 엔티티. saving_simulation_items 테이블 매핑. */
 @Entity
-@Table(name = "saving_simulation_items")
+@Table(name = "saving_simulation_items", indexes = @Index(name = "idx_ssi_simulation_id", columnList = "simulation_id"))
 @Getter
 @NoArgsConstructor
 @AllArgsConstructor
