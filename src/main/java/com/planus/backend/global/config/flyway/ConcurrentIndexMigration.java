@@ -1,8 +1,10 @@
 package com.planus.backend.global.config.flyway;
 
+import java.sql.PreparedStatement;
 import java.sql.ResultSet;
 import java.sql.SQLException;
 import java.sql.Statement;
+import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 import org.flywaydb.core.api.migration.BaseJavaMigration;
 import org.flywaydb.core.api.migration.Context;
@@ -27,7 +29,7 @@ public abstract class ConcurrentIndexMigration extends BaseJavaMigration {
     public static final String LOCK_TIMEOUT_PLACEHOLDER = "cicLockTimeout";
     public static final String DEFAULT_LOCK_TIMEOUT = "30s";
 
-    private static final Pattern LOCK_TIMEOUT_FORMAT = Pattern.compile("\\d+(ms|s|min)?");
+    private static final Pattern LOCK_TIMEOUT_FORMAT = Pattern.compile("(\\d+)(ms|s|min)?");
 
     @Override
     public final boolean canExecuteInTransaction() {
@@ -60,15 +62,20 @@ public abstract class ConcurrentIndexMigration extends BaseJavaMigration {
     /** lock_timeout이 설정된 세션에서 CIC 작업을 수행한다. */
     protected abstract void migrateConcurrently(Statement stmt) throws Exception;
 
-    /** 인덱스가 존재하면서 INVALID 상태이면 삭제한다 — 이전 CIC 실행이 중단된 경우 대비. */
+    /**
+     * 인덱스가 존재하면서 INVALID 상태이면 삭제한다 — 이전 CIC 실행이 중단된 경우 대비.
+     *
+     * <p>조회는 {@code to_regclass}로 대상을 찾는다. {@code DROP INDEX}와 같은 search_path 규칙으로 이름을 해석하므로, 다른 스키마에
+     * 같은 이름의 INVALID 인덱스가 있어도 search_path의 VALID 인덱스를 잘못 삭제하지 않는다.
+     */
     protected final void dropIfInvalid(Statement stmt, String indexName) throws SQLException {
         boolean invalid;
-        try (ResultSet rs = stmt.executeQuery("SELECT 1 FROM pg_index i"
-                + " JOIN pg_class c ON c.oid = i.indexrelid"
-                + " WHERE c.relname = '"
-                + indexName
-                + "' AND NOT i.indisvalid")) {
-            invalid = rs.next();
+        try (PreparedStatement query = stmt.getConnection()
+                .prepareStatement("SELECT NOT i.indisvalid FROM pg_index i WHERE i.indexrelid = to_regclass(?)")) {
+            query.setString(1, indexName);
+            try (ResultSet rs = query.executeQuery()) {
+                invalid = rs.next() && rs.getBoolean(1);
+            }
         }
         if (invalid) {
             stmt.execute("DROP INDEX CONCURRENTLY IF EXISTS " + indexName);
@@ -76,11 +83,23 @@ public abstract class ConcurrentIndexMigration extends BaseJavaMigration {
     }
 
     private static String resolveLockTimeout(Context context) {
-        String configured = context.getConfiguration().getPlaceholders().get(LOCK_TIMEOUT_PLACEHOLDER);
+        return normalizeLockTimeout(context.getConfiguration().getPlaceholders().get(LOCK_TIMEOUT_PLACEHOLDER));
+    }
+
+    /**
+     * placeholder 값을 검증한다. 값이 없으면 기본값을 쓰고, 0은 거부한다 — PostgreSQL에서 {@code lock_timeout = 0}은 타임아웃
+     * 비활성화라서 보호 장치가 조용히 꺼진다.
+     */
+    static String normalizeLockTimeout(String configured) {
         String lockTimeout = configured == null || configured.isBlank() ? DEFAULT_LOCK_TIMEOUT : configured.trim();
-        if (!LOCK_TIMEOUT_FORMAT.matcher(lockTimeout).matches()) {
+        Matcher matcher = LOCK_TIMEOUT_FORMAT.matcher(lockTimeout);
+        if (!matcher.matches()) {
             throw new IllegalArgumentException(
                     "잘못된 " + LOCK_TIMEOUT_PLACEHOLDER + " 값: '" + lockTimeout + "' (예: 30s, 500ms, 1min)");
+        }
+        if (matcher.group(1).chars().allMatch(ch -> ch == '0')) {
+            throw new IllegalArgumentException(
+                    LOCK_TIMEOUT_PLACEHOLDER + "는 0일 수 없습니다 (0은 lock_timeout 비활성화): '" + lockTimeout + "'");
         }
         return lockTimeout;
     }
