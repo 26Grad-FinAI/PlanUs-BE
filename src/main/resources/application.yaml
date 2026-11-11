@@ -14,6 +14,12 @@ spring:
     properties:
       hibernate:
         auto_quote_keyword: true
+  flyway:
+    postgresql:
+      # 기본값(true)이면 Flyway가 트랜잭션 advisory lock을 잡은 채 마이그레이션을 실행하여
+      # V30의 CREATE INDEX CONCURRENTLY가 그 트랜잭션 종료를 무한 대기(교착)한다.
+      # 세션 레벨 lock을 사용하도록 변경한다.
+      transactional-lock: false
 
 planus:
   ai:
