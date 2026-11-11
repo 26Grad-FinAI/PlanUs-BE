@@ -170,6 +170,13 @@ public interface ExpenseRepository extends JpaRepository<Expense, Long> {
     List<Expense> findByRecurringAndTypeAndSourceExpenseIdIsNull(boolean recurring, String type);
 
     /**
+     * 원본 지출의 가장 최근 복사본을 생성 순서(id) 기준으로 조회한다.
+     * 복사본이 없으면 null을 반환한다.
+     */
+    @Query("SELECT e FROM Expense e WHERE e.sourceExpenseId = :sourceId ORDER BY e.id DESC LIMIT 1")
+    Expense findLatestCopyBySourceExpenseId(Long sourceId);
+
+    /**
      * 특정 원본 지출에 대해 지정 기간 내 자동 등록된 반복 지출이 존재하는지 확인한다.
      *
      * @param sourceExpenseId 원본 지출 ID
