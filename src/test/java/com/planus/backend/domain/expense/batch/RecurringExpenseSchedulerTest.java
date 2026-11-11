@@ -26,6 +26,7 @@ class RecurringExpenseSchedulerTest {
 
     /** 2026-10-15 03:00 KST 고정 시계 */
     private static final LocalDate TODAY = LocalDate.of(2026, 10, 15);
+
     private static final Clock FIXED_CLOCK =
             Clock.fixed(TODAY.atTime(3, 0).atZone(ZoneId.of("Asia/Seoul")).toInstant(), ZoneId.of("Asia/Seoul"));
 
@@ -148,8 +149,7 @@ class RecurringExpenseSchedulerTest {
 
             when(expenseRepository.findByRecurringAndTypeAndSourceExpenseIdIsNull(true, "EXPENSE"))
                     .thenReturn(List.of(source1, source2));
-            when(expenseRepository.findLatestCopyBySourceExpenseId(1L))
-                    .thenThrow(new RuntimeException("DB 오류"));
+            when(expenseRepository.findLatestCopyBySourceExpenseId(1L)).thenThrow(new RuntimeException("DB 오류"));
             when(expenseRepository.findLatestCopyBySourceExpenseId(2L)).thenReturn(null);
             when(itemProcessor.process(source2, TODAY)).thenReturn(true);
 
