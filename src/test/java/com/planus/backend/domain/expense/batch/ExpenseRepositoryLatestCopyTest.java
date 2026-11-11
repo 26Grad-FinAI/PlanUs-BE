@@ -5,8 +5,12 @@ import static org.assertj.core.api.Assertions.assertThat;
 import com.planus.backend.TestcontainersConfig;
 import com.planus.backend.domain.aifeedback.entity.Expense;
 import com.planus.backend.domain.aifeedback.repository.ExpenseRepository;
+import com.planus.backend.domain.user.entity.AuthProvider;
+import com.planus.backend.domain.user.entity.UserAccount;
+import com.planus.backend.domain.user.repository.UserAccountRepository;
 import java.time.LocalDateTime;
 import org.junit.jupiter.api.AfterEach;
+import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -22,9 +26,26 @@ class ExpenseRepositoryLatestCopyTest {
     @Autowired
     private ExpenseRepository expenseRepository;
 
+    @Autowired
+    private UserAccountRepository userAccountRepository;
+
+    private Long userId;
+
+    @BeforeEach
+    void setUp() {
+        // expense.user_id → "user".id FK를 만족시키기 위해 사용자를 먼저 생성한다.
+        UserAccount user = userAccountRepository.save(UserAccount.builder()
+                .email("latest-copy@example.com")
+                .password("$2a$10$dummyhashfortest000000000000000000000000000000000000000")
+                .provider(AuthProvider.LOCAL)
+                .build());
+        userId = user.getId();
+    }
+
     @AfterEach
     void tearDown() {
         expenseRepository.deleteAll();
+        userAccountRepository.deleteAll();
     }
 
     @Test
@@ -32,7 +53,7 @@ class ExpenseRepositoryLatestCopyTest {
     void findLatestCopy_returnsHighestId_regardlessOfExpenseDate() {
         // 원본 지출
         Expense source = expenseRepository.save(Expense.builder()
-                .userId(1L)
+                .userId(userId)
                 .type("EXPENSE")
                 .amount(50000L)
                 .title("월세")
@@ -45,7 +66,7 @@ class ExpenseRepositoryLatestCopyTest {
 
         // 첫 번째 복사본: 9월 15일, recurring=true
         Expense copy1 = expenseRepository.save(Expense.builder()
-                .userId(1L)
+                .userId(userId)
                 .type("EXPENSE")
                 .amount(50000L)
                 .title("월세")
@@ -59,7 +80,7 @@ class ExpenseRepositoryLatestCopyTest {
 
         // 두 번째 복사본: recurring=false, 거래일을 8월 1일로 앞당김 (id는 copy1보다 큼)
         Expense copy2 = expenseRepository.save(Expense.builder()
-                .userId(1L)
+                .userId(userId)
                 .type("EXPENSE")
                 .amount(50000L)
                 .title("월세")
@@ -82,7 +103,7 @@ class ExpenseRepositoryLatestCopyTest {
     @DisplayName("복사본이 없으면 null을 반환한다")
     void findLatestCopy_noCopies_returnsNull() {
         Expense source = expenseRepository.save(Expense.builder()
-                .userId(1L)
+                .userId(userId)
                 .type("EXPENSE")
                 .amount(50000L)
                 .title("월세")
