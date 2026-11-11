@@ -23,7 +23,8 @@ jobs:
   verify:
     name: 코드 및 테스트 검증
     runs-on: ubuntu-24.04
-    timeout-minutes: 20
+    # 평소 약 2분 소요. 멈춤(hang)을 20분이 아니라 빠르게 드러내기 위해 여유를 두고 8분으로 제한한다 (#109)
+    timeout-minutes: 8
     permissions:
       contents: read
       issues: read
