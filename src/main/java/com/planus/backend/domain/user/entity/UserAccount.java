@@ -65,7 +65,6 @@ public class UserAccount {
 
     private Integer age;
     private String gender;
-    private String residence;
 
     @Column(name = "home_ownership")
     private Boolean homeOwnership;
@@ -102,19 +101,13 @@ public class UserAccount {
 
     /** 프로필 입력 완료 여부. 필수 필드가 모두 채워진 경우에만 완료로 판단한다. */
     public boolean isProfileCompleted() {
-        return age != null
-                && monthlyIncome > 0
-                && gender != null
-                && residence != null
-                && employmentStatus != null
-                && homeOwnership != null;
+        return age != null && monthlyIncome > 0 && gender != null && employmentStatus != null && homeOwnership != null;
     }
 
     /** 사용자 프로필 정보를 최초 저장하거나 갱신한다. */
     public void updateProfile(
             Integer age,
             String gender,
-            String residence,
             long monthlyIncome,
             List<FixedExpenseItem> monthlyFixedExpenses,
             long monthlySavingsGoal,
@@ -123,7 +116,6 @@ public class UserAccount {
             String selfIntroduction) {
         this.age = age;
         this.gender = gender;
-        this.residence = residence;
         this.monthlyIncome = monthlyIncome;
         this.monthlyFixedExpenses = monthlyFixedExpenses;
         this.monthlySavingsGoal = monthlySavingsGoal;

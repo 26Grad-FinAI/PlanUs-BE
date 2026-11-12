@@ -70,7 +70,7 @@ class UserControllerTest {
         class Success {
 
             @Test
-            @DisplayName("올바른 요청 시 201과 userId·nickname·availableBudget을 반환한다")
+            @DisplayName("거주지가 없는 요청도 201과 완료된 프로필을 반환한다")
             void saveProfile_success_returns201() throws Exception {
                 SecurityContextHolder.getContext().setAuthentication(new UsernamePasswordAuthenticationToken(1L, null));
 
@@ -137,7 +137,7 @@ class UserControllerTest {
         class Success {
 
             @Test
-            @DisplayName("올바른 요청 시 200과 userId·availableBudget·message·updatedAt을 반환한다")
+            @DisplayName("거주지가 없는 수정 요청도 200과 갱신된 가용예산을 반환한다")
             void updateProfile_success_returns200() throws Exception {
                 SecurityContextHolder.getContext().setAuthentication(new UsernamePasswordAuthenticationToken(1L, null));
 
@@ -212,7 +212,6 @@ class UserControllerTest {
                         "김스펜드",
                         28,
                         "MALE",
-                        "서울특별시",
                         3_000_000L,
                         List.of(new FixedExpenseItem("월세", 700_000L), new FixedExpenseItem("보험", 300_000L)),
                         1_000_000L,
@@ -356,7 +355,6 @@ class UserControllerTest {
         return new UserProfileRequest(
                 30,
                 "MALE",
-                "서울",
                 3_000_000L,
                 List.of(new FixedExpenseItem("월세", 700_000L), new FixedExpenseItem("보험", 300_000L)),
                 500_000L,
