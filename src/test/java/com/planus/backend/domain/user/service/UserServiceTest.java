@@ -68,10 +68,9 @@ class UserServiceTest {
             UserAccount user = spy(UserAccount.builder().id(1L).nickname("김스펜드").build());
             when(userAccountRepository.findById(1L)).thenReturn(Optional.of(user));
 
-            UserProfileResponse response = userService.saveProfile(1L, profileRequest(null));
+            UserProfileResponse response = userService.saveProfile(1L, validRequest());
 
             assertThat(response.profileCompleted()).isTrue();
-            assertThat(user.getResidence()).isNull();
         }
 
         @Test
@@ -98,7 +97,6 @@ class UserServiceTest {
                     .updateProfile(
                             30,
                             "MALE",
-                            "서울",
                             3_000_000L,
                             List.of(new FixedExpenseItem("월세", 700_000L), new FixedExpenseItem("보험", 300_000L)),
                             500_000L,
@@ -127,17 +125,6 @@ class UserServiceTest {
     @Nested
     @DisplayName("updateProfile 성공")
     class UpdateProfileSuccess {
-
-        @Test
-        @DisplayName("거주지를 생략하면 기존 거주지를 유지한다")
-        void updateProfile_preservesResidenceWhenOmitted() {
-            UserAccount user = UserAccount.builder().id(1L).residence("부산").build();
-            when(userAccountRepository.findById(1L)).thenReturn(Optional.of(user));
-
-            userService.updateProfile(1L, profileRequest(null));
-
-            assertThat(user.getResidence()).isEqualTo("부산");
-        }
 
         @Test
         @DisplayName("프로필 수정 후 변경된 가용예산을 반환한다")
@@ -173,7 +160,6 @@ class UserServiceTest {
                     .updateProfile(
                             30,
                             "MALE",
-                            "서울",
                             3_000_000L,
                             List.of(new FixedExpenseItem("월세", 700_000L), new FixedExpenseItem("보험", 300_000L)),
                             500_000L,
@@ -212,7 +198,6 @@ class UserServiceTest {
                     .nickname("김스펜드")
                     .age(28)
                     .gender("MALE")
-                    .residence("서울특별시")
                     .monthlyIncome(3_000_000L)
                     .monthlyFixedExpenses(
                             List.of(new FixedExpenseItem("월세", 700_000L), new FixedExpenseItem("보험", 300_000L)))
@@ -362,14 +347,9 @@ class UserServiceTest {
     }
 
     private UserProfileRequest validRequest() {
-        return profileRequest("서울");
-    }
-
-    private UserProfileRequest profileRequest(String residence) {
         return new UserProfileRequest(
                 30,
                 "MALE",
-                residence,
                 3_000_000L,
                 List.of(new FixedExpenseItem("월세", 700_000L), new FixedExpenseItem("보험", 300_000L)),
                 500_000L,

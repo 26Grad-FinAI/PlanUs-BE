@@ -14,7 +14,6 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
-import com.fasterxml.jackson.databind.node.ObjectNode;
 import com.planus.backend.domain.auth.service.AuthService;
 import com.planus.backend.domain.user.dto.FixedExpenseItem;
 import com.planus.backend.domain.user.dto.SavingsStatusResponse;
@@ -81,7 +80,7 @@ class UserControllerTest {
 
                 mockMvc.perform(post("/api/users/me/profile")
                                 .contentType(MediaType.APPLICATION_JSON)
-                                .content(requestWithoutResidence()))
+                                .content(objectMapper.writeValueAsString(validRequest())))
                         .andExpect(status().isCreated())
                         .andExpect(jsonPath("$.isSuccess").value(true))
                         .andExpect(jsonPath("$.result.userId").value(1L))
@@ -148,7 +147,7 @@ class UserControllerTest {
 
                 mockMvc.perform(put("/api/users/me/profile")
                                 .contentType(MediaType.APPLICATION_JSON)
-                                .content(requestWithoutResidence()))
+                                .content(objectMapper.writeValueAsString(validRequest())))
                         .andExpect(status().isOk())
                         .andExpect(jsonPath("$.isSuccess").value(true))
                         .andExpect(jsonPath("$.result.userId").value(1L))
@@ -213,7 +212,6 @@ class UserControllerTest {
                         "김스펜드",
                         28,
                         "MALE",
-                        "서울특별시",
                         3_000_000L,
                         List.of(new FixedExpenseItem("월세", 700_000L), new FixedExpenseItem("보험", 300_000L)),
                         1_000_000L,
@@ -353,17 +351,10 @@ class UserControllerTest {
         }
     }
 
-    private String requestWithoutResidence() {
-        ObjectNode body = objectMapper.valueToTree(validRequest());
-        body.remove("residence");
-        return body.toString();
-    }
-
     private UserProfileRequest validRequest() {
         return new UserProfileRequest(
                 30,
                 "MALE",
-                "서울",
                 3_000_000L,
                 List.of(new FixedExpenseItem("월세", 700_000L), new FixedExpenseItem("보험", 300_000L)),
                 500_000L,

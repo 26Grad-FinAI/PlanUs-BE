@@ -11,7 +11,6 @@ public record UserProfileGetResponse(
         @Schema(description = "닉네임", example = "홍길동") String nickname,
         @Schema(description = "나이", example = "25") Integer age,
         @Schema(description = "성별", example = "MALE") String gender,
-        @Schema(description = "거주지", example = "서울") String residence,
         @Schema(description = "월 소득 (원)", example = "3000000") long monthlyIncome,
         @Schema(description = "월 고정지출 항목 목록") List<FixedExpenseItem> monthlyFixedExpenses,
         @Schema(description = "월 고정지출 합계 (원)", example = "1000000") long totalFixedExpenses,

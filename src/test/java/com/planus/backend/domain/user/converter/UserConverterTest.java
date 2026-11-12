@@ -64,7 +64,6 @@ class UserConverterTest {
                     .nickname("김스펜드")
                     .age(30)
                     .gender("MALE")
-                    .residence("서울")
                     .monthlyIncome(3_000_000L)
                     .monthlyFixedExpenses(FIXED_EXPENSES_1M)
                     .monthlySavingsGoal(500_000L)
@@ -106,7 +105,6 @@ class UserConverterTest {
                     .nickname("김스펜드")
                     .age(28)
                     .gender("MALE")
-                    .residence("서울특별시")
                     .monthlyIncome(3_000_000L)
                     .monthlyFixedExpenses(FIXED_EXPENSES_1M)
                     .monthlySavingsGoal(500_000L)
@@ -121,7 +119,6 @@ class UserConverterTest {
             assertThat(response.nickname()).isEqualTo("김스펜드");
             assertThat(response.age()).isEqualTo(28);
             assertThat(response.gender()).isEqualTo("MALE");
-            assertThat(response.residence()).isEqualTo("서울특별시");
             assertThat(response.monthlyIncome()).isEqualTo(3_000_000L);
             assertThat(response.totalFixedExpenses()).isEqualTo(1_000_000L);
             assertThat(response.availableBudget()).isEqualTo(1_500_000L);
@@ -137,7 +134,6 @@ class UserConverterTest {
                     .nickname("김스펜드")
                     .age(28)
                     .gender("MALE")
-                    .residence("서울특별시")
                     .monthlyIncome(3_000_000L)
                     .monthlyFixedExpenses(FIXED_EXPENSES_1M)
                     .monthlySavingsGoal(500_000L)
