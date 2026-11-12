@@ -4,6 +4,7 @@ import static org.assertj.core.api.Assertions.assertThat;
 import static org.mockito.ArgumentMatchers.anyString;
 import static org.mockito.Mockito.*;
 
+import com.planus.backend.domain.aifeedback.cause.CauseSignals;
 import com.planus.backend.domain.aifeedback.core.BandWidth;
 import com.planus.backend.domain.aifeedback.core.Confidence;
 import com.planus.backend.domain.aifeedback.core.FeedbackType;
@@ -336,6 +337,110 @@ class FeedbackRendererTest {
         }
     }
 
+    // ── 배수 표기 (#111, exp1: 한 건 배수를 카테고리 전체에 붙인 표현이 주간 응답의 51%) ──
+
+    @Nested
+    @DisplayName("배수 표기 — 무엇의 배수인지 프롬프트에 명시")
+    class MultiplierNotationTest {
+
+        private String capturedUserPrompt(FeedbackContext ctx) {
+            LlmClient client = mock(LlmClient.class);
+            when(llmProvider.getIfAvailable()).thenReturn(client);
+            when(client.complete(anyString(), anyString())).thenReturn("기록을 잘 남기고 계세요.");
+            renderer.render(ctx);
+            var captor = org.mockito.ArgumentCaptor.forClass(String.class);
+            verify(client).complete(anyString(), captor.capture());
+            return captor.getValue();
+        }
+
+        private String capturedSystemPrompt(FeedbackContext ctx) {
+            LlmClient client = mock(LlmClient.class);
+            when(llmProvider.getIfAvailable()).thenReturn(client);
+            when(client.complete(anyString(), anyString())).thenReturn("기록을 잘 남기고 계세요.");
+            renderer.render(ctx);
+            var captor = org.mockito.ArgumentCaptor.forClass(String.class);
+            verify(client).complete(captor.capture(), anyString());
+            return captor.getValue();
+        }
+
+        @Test
+        @DisplayName("단발 이상치: 한 건 금액·평소 한 건 금액·이번 주 합계를 구분해 표기 (exp1 39주차 사례)")
+        void singleTransaction_basisSpelledOut() {
+            FeedbackContext ctx = contextBuilder()
+                    .feedbackType(FeedbackType.ALERT)
+                    .anomaly(
+                            "기타", 6.83, 117_830, new FeedbackRenderer.AnomalyBasis(true, 94_000, 13_759, "오픈뱅킹출금 토스페이"))
+                    .build();
+
+            assertThat(capturedUserPrompt(ctx))
+                    .contains("- 기타: 한 건 \"오픈뱅킹출금 토스페이\" 94,000원이 평소 기타 한 건 금액(13,759원)의 6.8배 [한 건 배수]"
+                            + " / 기타 이번 주 합계: 117,830원")
+                    .doesNotContain("평소 대비 약");
+        }
+
+        @Test
+        @DisplayName("추세 이상치: 최근 4주 주당 평균 vs 그 전 4주 주당 평균으로 표기")
+        void trend_basisSpelledOut() {
+            FeedbackContext ctx = contextBuilder()
+                    .feedbackType(FeedbackType.ALERT)
+                    .anomaly("식대", 1.8, 210_000, new FeedbackRenderer.AnomalyBasis(false, 180_000, 100_000, null))
+                    .build();
+
+            assertThat(capturedUserPrompt(ctx))
+                    .contains("- 식대: 최근 4주 주당 평균 180,000원이 그 전 4주 주당 평균(100,000원)의 1.8배 [주간 금액 배수]");
+        }
+
+        @Test
+        @DisplayName("기준 정보가 없으면(과거 거래 없음) 기존 표기 유지")
+        void noBasis_legacyNotation() {
+            FeedbackContext ctx = contextBuilder()
+                    .feedbackType(FeedbackType.ALERT)
+                    .anomaly("기타", 6.83, 117_830, null)
+                    .build();
+
+            assertThat(capturedUserPrompt(ctx)).contains("- 기타: 평소 대비 약 6.8배 / 기타 이번 주 합계: 117,830원");
+        }
+
+        @Test
+        @DisplayName("초과 카테고리 배율은 금액 기준임을 명시 (exp1 33주차 '외식 횟수가 1.7배' 사례)")
+        void selfRatio_amountBasisSpelledOut() {
+            CauseSignals cs = new CauseSignals(
+                    1.7, "FREQUENCY", 0.8, 0.2, java.util.Map.of(), java.util.Map.of(), null, List.of(), false);
+            FeedbackContext ctx = contextBuilder()
+                    .feedbackType(FeedbackType.ALERT)
+                    .overspendCategories(List.of(new CategoryOverspend("식대", 191_731, 139_940, cs)))
+                    .build();
+
+            assertThat(capturedUserPrompt(ctx))
+                    .contains("(이번 주 금액이 평소 주당 금액의 1.7배) — 원인: 횟수 증가")
+                    .doesNotContain("과거 대비");
+        }
+
+        @Test
+        @DisplayName("시스템 규칙: 배수의 대상 명시 + 소수 첫째 자리까지 그대로")
+        void systemPrompt_multiplierRules() {
+            FeedbackContext ctx =
+                    contextBuilder().feedbackType(FeedbackType.ALERT).build();
+
+            assertThat(capturedSystemPrompt(ctx))
+                    .contains("'한 건' 배수는 그 거래에만 붙이고")
+                    .contains("배수는 제공된 값을 소수 첫째 자리까지 그대로 쓴다");
+        }
+
+        @Test
+        @DisplayName("프롬프트에 추가된 기준 금액(평소 한 건 금액)을 LLM이 언급해도 숫자 검증 통과")
+        void basisAmounts_allowedInVerification() {
+            FeedbackContext ctx = contextBuilder()
+                    .feedbackType(FeedbackType.ALERT)
+                    .anomaly(
+                            "기타", 6.83, 117_830, new FeedbackRenderer.AnomalyBasis(true, 94_000, 13_759, "오픈뱅킹출금 토스페이"))
+                    .build();
+
+            assertThat(renderer.verifyNumbers("토스페이 94,000원 한 건이 평소 한 건(13,759원)의 6.8배였어요.", ctx))
+                    .isTrue();
+        }
+    }
+
     // ── 측정 도구(LlmRenderMeter) 판정 검증 (#111) ──
 
     @Nested
@@ -535,6 +640,23 @@ class FeedbackRendererTest {
         private FeedbackType feedbackType = FeedbackType.POSITIVE;
         private BandWidth bandWidth = null;
         private Confidence overallConfidence = Confidence.HIGH;
+        private FeedbackRenderer.AnomalyBasis anomalyBasis = null;
+
+        FeedbackContextBuilder anomaly(
+                String categoryName, double magnitude, long weeklyAmountWon, FeedbackRenderer.AnomalyBasis basis) {
+            this.hasAnomaly = true;
+            this.anomalyCategoryName = categoryName;
+            this.anomalyMagnitude = magnitude;
+            this.anomalyWeeklyAmountWon = weeklyAmountWon;
+            this.anomalyConfidence = Confidence.HIGH;
+            this.anomalyBasis = basis;
+            return this;
+        }
+
+        FeedbackContextBuilder overspendCategories(List<CategoryOverspend> v) {
+            this.overspendCategories = v;
+            return this;
+        }
 
         FeedbackContextBuilder predictedMonthEndWon(long v) {
             this.predictedMonthEndWon = v;
@@ -589,7 +711,8 @@ class FeedbackRendererTest {
                     weekHighlights,
                     feedbackType,
                     bandWidth,
-                    overallConfidence);
+                    overallConfidence,
+                    anomalyBasis);
         }
     }
 }

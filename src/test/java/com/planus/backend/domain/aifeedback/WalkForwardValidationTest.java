@@ -625,6 +625,7 @@ class WalkForwardValidationTest {
             double anomalyMag = 0;
             Confidence anomalyConf = null;
             String anomalyEmotion = null;
+            FeedbackRenderer.AnomalyBasis anomalyBasis = null;
             for (int catId : catBudget.keySet()) {
                 if (anomalyDetector.isSpikeProne(catId)) continue;
                 long budget = catBudget.getOrDefault(catId, 100_000L);
@@ -655,6 +656,7 @@ class WalkForwardValidationTest {
                         anomalyMag = mag;
                         anomalyConf = conf;
                         anomalyEmotion = e.getEmotion();
+                        anomalyBasis = pointBasis(e, catHist);
                     }
                 }
             }
@@ -680,6 +682,7 @@ class WalkForwardValidationTest {
                         .toArray();
                 double bestMag = 0;
                 String bestEmotion = null;
+                FeedbackRenderer.AnomalyBasis bestBasis = null;
                 for (Expense e : thisWeek) {
                     if (!e.isExpense() || !Objects.equals(e.getCategoryId(), catId)) continue;
                     OptionalDouble z =
@@ -697,6 +700,7 @@ class WalkForwardValidationTest {
                     if (mag > bestMag) {
                         bestMag = mag;
                         bestEmotion = e.getEmotion();
+                        bestBasis = pointBasis(e, catHist);
                     }
                 }
                 if (bestMag > 0) {
@@ -706,7 +710,7 @@ class WalkForwardValidationTest {
                             .mapToLong(Expense::getAmount)
                             .sum();
                     additionalHighAnomalies.add(new FeedbackRenderer.AnomalyInfo(
-                            Categories.name(catId), bestMag, catWeeklyAmt, bestEmotion));
+                            Categories.name(catId), bestMag, catWeeklyAmt, bestEmotion, bestBasis));
                 }
             }
             additionalHighAnomalies.sort(Comparator.comparingDouble(FeedbackRenderer.AnomalyInfo::magnitude)
@@ -891,7 +895,8 @@ class WalkForwardValidationTest {
                     topHighlights,
                     type,
                     bw,
-                    overall);
+                    overall,
+                    anomalyBasis);
 
             System.out.printf("%n=== [검증 4] 제%d주차 (%s ~ %s) ===%n", week, weekStart, weekEnd);
             System.out.printf("예측 월말 지출  : %,d원 / 가용예산 %,d원%n", ctx.predictedMonthEndWon(), AVAILABLE_BUDGET);
@@ -1061,6 +1066,15 @@ class WalkForwardValidationTest {
         var field = obj.getClass().getDeclaredField(fieldName);
         field.setAccessible(true);
         field.set(obj, value);
+    }
+
+    /** 단발 이상치의 배수 기준 (#111) — 서비스의 Anomaly.basis()와 같은 규칙. 과거 거래가 없으면 null. */
+    private static FeedbackRenderer.AnomalyBasis pointBasis(Expense e, double[] catHist) {
+        if (catHist.length == 0) return null;
+        long baseline = Math.round(RobustStats.median(catHist));
+        if (baseline <= 0) return null;
+        String label = e.getMemo() != null && !e.getMemo().isBlank() ? e.getMemo() : e.getTitle();
+        return new FeedbackRenderer.AnomalyBasis(true, e.getAmount(), baseline, label);
     }
 
     /** budgets.csv 로드 → YearMonth → (categoryId → 예산) */

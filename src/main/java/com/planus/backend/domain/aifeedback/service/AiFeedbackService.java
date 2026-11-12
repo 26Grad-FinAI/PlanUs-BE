@@ -367,7 +367,8 @@ public class AiFeedbackService {
                             Categories.name(a.categoryId()),
                             a.magnitude(),
                             weeklyAmt,
-                            a.rep().getEmotion());
+                            a.rep().getEmotion(),
+                            a.basis());
                 })
                 .toList();
 
@@ -430,7 +431,8 @@ public class AiFeedbackService {
                 weekHighlights,
                 feedbackType,
                 bandWidth,
-                overallConfidence);
+                overallConfidence,
+                top != null ? top.basis() : null);
 
         // ── [9] 렌더링 ──
         FeedbackRenderer.Rendered out = renderer.render(ctx);
@@ -820,9 +822,9 @@ public class AiFeedbackService {
                 double[] hist = baselineHistory(catExpenses, d, cat);
                 var z = detector.checkPoint(e.getAmount(), hist, budget);
                 if (z.isPresent()) {
-                    double mag =
-                            hist.length > 0 ? e.getAmount() / Math.max(RobustStats.median(hist), 1) : z.getAsDouble();
-                    Anomaly candidate = new Anomaly(cat, e, mag, hist.length);
+                    double median = hist.length > 0 ? RobustStats.median(hist) : 0;
+                    double mag = hist.length > 0 ? e.getAmount() / Math.max(median, 1) : z.getAsDouble();
+                    Anomaly candidate = new Anomaly(cat, e, mag, hist.length, false, e.getAmount(), Math.round(median));
                     bestPerCat.merge(
                             cat,
                             candidate,
@@ -857,7 +859,7 @@ public class AiFeedbackService {
                             .max(Comparator.comparing(Expense::getExpenseDate))
                             .orElse(null);
                     if (rep != null) {
-                        Anomaly candidate = new Anomaly(cat, rep, mag, histLen);
+                        Anomaly candidate = new Anomaly(cat, rep, mag, histLen, true, Math.round(rm), Math.round(pm));
                         bestPerCat.merge(
                                 cat,
                                 candidate,
@@ -1276,7 +1278,28 @@ public class AiFeedbackService {
     }
 
     /** 이상치 탐지 결과. histLength = 8주 기준선 내 거래 건수 (Confidence 산출용). */
-    private record Anomaly(int categoryId, Expense rep, double magnitude, int histLength) {}
+    /**
+     * @param trend       true면 추세 이상치(최근 4주 vs 그 전 4주 주당 평균), false면 단발 이상치(한 건 vs 과거 한 건 중앙값)
+     * @param subjectWon  배수의 분자 — 단발: 거래 금액 / 추세: 최근 4주 주당 평균
+     * @param baselineWon 배수의 분모 — 단발: 과거 한 건 중앙값 / 추세: 그 전 4주 주당 평균
+     */
+    private record Anomaly(
+            int categoryId,
+            Expense rep,
+            double magnitude,
+            int histLength,
+            boolean trend,
+            long subjectWon,
+            long baselineWon) {
+
+        /** 프롬프트에 배수 기준을 밝히기 위한 정보 (#111). 기준값이 없으면(과거 거래 없음) null — 렌더러가 기존 표기 사용. */
+        FeedbackRenderer.AnomalyBasis basis() {
+            if (baselineWon <= 0) return null;
+            if (trend) return new FeedbackRenderer.AnomalyBasis(false, subjectWon, baselineWon, null);
+            String label = rep.getMemo() != null && !rep.getMemo().isBlank() ? rep.getMemo() : rep.getTitle();
+            return new FeedbackRenderer.AnomalyBasis(true, subjectWon, baselineWon, label);
+        }
+    }
 
     /** [3.5] 메모 질문 큐 적재 후보. */
     private record AnomalyCandidate(Expense expense, double magnitude) {}

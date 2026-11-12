@@ -69,6 +69,8 @@ public class FeedbackRenderer {
         - 초과 카테고리의 'MTD 초과' 금액은 이번 주 신규 금액을 이미 포함한 누적값이다. 두 숫자를 합산하지 않는다. '이번 주 신규'가 MTD의 일부임을 인식하고 맥락에 맞게 사용한다.
         - 초과 카테고리의 '이번 주 신규' 금액이 작으면 그 카테고리는 이번 주 원인이 아니라 이전 주 누적임을 인식하고 이번 주 피드백에서 주요 원인으로 다루지 않는다.
         - 원인 신뢰도가 '높음'이 아니면 원인을 단정하지 말고 가볍게만 언급하거나 생략한다.
+        - 배수는 무엇의 배수인지 그대로 밝힌다. '한 건' 배수는 그 거래에만 붙이고, 카테고리 전체·이번 주 합계·횟수가 그 배수만큼 늘었다고 쓰지 않는다. '주간 금액' 배수는 금액이 늘었다고만 쓰고 횟수로 바꾸지 않는다.
+        - 배수는 제공된 값을 소수 첫째 자리까지 그대로 쓴다. '두 배 가까이', '5배 이상', '약 10배'처럼 근사하지 않는다.
         - 이상 신호 거래의 감정 태그에 따라 피드백 톤을 달리한다:
           • REGRET / IMPULSE → 명확하게 절제를 권고한다. "이런 소비는 줄여가는 게 좋겠어요" 수준으로 직접적으로 말한다.
           • NECESSARY → 지출이 불가피했음을 인정하되, 해당 카테고리 예산을 조정하거나 다른 항목을 줄이는 방향을 제안한다.
@@ -251,7 +253,11 @@ public class FeedbackRenderer {
             values.add(Math.abs(c.weekTotalWon() - c.prevWeekTotalWon()));
         }
         values.add(c.anomalyWeeklyAmountWon());
-        c.additionalHighAnomalies().forEach(a -> values.add(a.weeklyAmountWon()));
+        addBasis(values, c.anomalyBasis());
+        c.additionalHighAnomalies().forEach(a -> {
+            values.add(a.weeklyAmountWon());
+            addBasis(values, a.basis());
+        });
         if (c.weekEmotion() != null) {
             c.weekEmotion().amounts().values().forEach(v -> values.add(v));
             values.add(c.weekEmotion().untaggedWon());
@@ -272,6 +278,12 @@ public class FeedbackRenderer {
             values.add(h.amountWon());
         }
         return values;
+    }
+
+    private static void addBasis(Set<Long> values, AnomalyBasis basis) {
+        if (basis == null) return;
+        values.add(basis.subjectWon());
+        values.add(basis.baselineWon());
     }
 
     /**
@@ -413,7 +425,7 @@ public class FeedbackRenderer {
                 CauseSignals cs = ov.causeSignals();
                 if (cs != null) {
                     if (cs.selfRatio() != null) {
-                        sb.append(" (과거 대비 ")
+                        sb.append(" (이번 주 금액이 평소 주당 금액의 ")
                                 .append(String.format("%.1f", cs.selfRatio()))
                                 .append("배)");
                     }
@@ -468,18 +480,13 @@ public class FeedbackRenderer {
         if (c.hasAnomaly()) {
             if (c.anomalyConfidence() == Confidence.HIGH) {
                 sb.append("\n[이상 신호 — 신뢰도 높음, 노출 가능]\n");
-                sb.append("- 카테고리: ")
-                        .append(c.anomalyCategoryName())
-                        .append(", 평소 대비 약 ")
-                        .append(String.format("%.1f", c.anomalyMagnitude()))
-                        .append("배");
-                if (c.anomalyWeeklyAmountWon() > 0) {
-                    sb.append(", 이번 주 지출: ").append(exactWon(c.anomalyWeeklyAmountWon()));
-                }
-                if (c.anomalyEmotion() != null && !c.anomalyEmotion().isBlank()) {
-                    sb.append(", 감정 태그: ").append(c.anomalyEmotion());
-                }
-                sb.append("\n");
+                appendAnomalyLine(
+                        sb,
+                        c.anomalyCategoryName(),
+                        c.anomalyMagnitude(),
+                        c.anomalyWeeklyAmountWon(),
+                        c.anomalyBasis(),
+                        c.anomalyEmotion());
             } else {
                 sb.append("\n[이상 신호 — 신뢰도 낮음/중간: 원인 단정 금지, 언급은 선택]\n");
                 if (c.anomalyEmotion() != null && !c.anomalyEmotion().isBlank()) {
@@ -492,18 +499,7 @@ public class FeedbackRenderer {
         if (!c.additionalHighAnomalies().isEmpty()) {
             sb.append("\n[추가 HIGH 이상치 — 피드백에 각각 1문장씩 자연스럽게 언급]\n");
             for (AnomalyInfo a : c.additionalHighAnomalies()) {
-                sb.append("- 카테고리: ")
-                        .append(a.categoryName())
-                        .append(", 평소 대비 약 ")
-                        .append(String.format("%.1f", a.magnitude()))
-                        .append("배");
-                if (a.weeklyAmountWon() > 0) {
-                    sb.append(", 이번 주 지출: ").append(exactWon(a.weeklyAmountWon()));
-                }
-                if (a.emotion() != null && !a.emotion().isBlank()) {
-                    sb.append(", 감정 태그: ").append(a.emotion());
-                }
-                sb.append("\n");
+                appendAnomalyLine(sb, a.categoryName(), a.magnitude(), a.weeklyAmountWon(), a.basis(), a.emotion());
             }
         }
 
@@ -600,6 +596,53 @@ public class FeedbackRenderer {
             allowed.add(r.amountWon());
         }
         return checkExtracted(text, allowed, allowManWonBracket);
+    }
+
+    /**
+     * 이상 신호 한 줄. 배수가 무엇의 배수인지(한 건 vs 주간 평균) 밝혀 LLM이 카테고리 전체가 N배라고 오해하지 않게 한다 (#111, exp1:
+     * "한 건 배수를 카테고리 전체에 붙인 표현"이 주간 응답의 51%).
+     */
+    private void appendAnomalyLine(
+            StringBuilder sb,
+            String categoryName,
+            double magnitude,
+            long weeklyAmountWon,
+            AnomalyBasis basis,
+            String emotion) {
+        String mag = String.format("%.1f", magnitude);
+        sb.append("- ").append(categoryName).append(": ");
+        if (basis == null) {
+            sb.append("평소 대비 약 ").append(mag).append("배");
+        } else if (basis.singleTransaction()) {
+            sb.append("한 건");
+            if (basis.subjectLabel() != null && !basis.subjectLabel().isBlank()) {
+                sb.append(" \"").append(basis.subjectLabel()).append("\"");
+            }
+            sb.append(" ")
+                    .append(exactWon(basis.subjectWon()))
+                    .append("이 평소 ")
+                    .append(categoryName)
+                    .append(" 한 건 금액(")
+                    .append(exactWon(basis.baselineWon()))
+                    .append(")의 ")
+                    .append(mag)
+                    .append("배 [한 건 배수]");
+        } else {
+            sb.append("최근 4주 주당 평균 ")
+                    .append(exactWon(basis.subjectWon()))
+                    .append("이 그 전 4주 주당 평균(")
+                    .append(exactWon(basis.baselineWon()))
+                    .append(")의 ")
+                    .append(mag)
+                    .append("배 [주간 금액 배수]");
+        }
+        if (weeklyAmountWon > 0) {
+            sb.append(" / ").append(categoryName).append(" 이번 주 합계: ").append(exactWon(weeklyAmountWon));
+        }
+        if (emotion != null && !emotion.isBlank()) {
+            sb.append(", 감정 태그: ").append(emotion);
+        }
+        sb.append("\n");
     }
 
     private String monthEndUserPrompt(MonthEndContext c) {
@@ -739,13 +782,25 @@ public class FeedbackRenderer {
             List<TransactionHighlight> weekHighlights,
             FeedbackType feedbackType,
             BandWidth bandWidth,
-            Confidence overallConfidence) {}
+            Confidence overallConfidence,
+            AnomalyBasis anomalyBasis) {}
+
+    /**
+     * 이상치 배수의 기준 (#111). 프롬프트에 무엇의 배수인지 밝히기 위해 전달한다.
+     *
+     * @param singleTransaction true면 단발 이상치: 한 건 금액 ÷ 과거 한 건 중앙값. false면 추세: 최근 4주 주당 평균 ÷ 그 전 4주 주당 평균
+     * @param subjectWon        배수의 분자 (한 건 금액 또는 최근 4주 주당 평균)
+     * @param baselineWon       배수의 분모 (과거 한 건 중앙값 또는 그 전 4주 주당 평균)
+     * @param subjectLabel      단발 이상치 거래의 메모·내역 (추세면 null)
+     */
+    public record AnomalyBasis(boolean singleTransaction, long subjectWon, long baselineWon, String subjectLabel) {}
 
     /**
      * PRIMARY를 제외한 추가 HIGH 이상치 정보.
      * confidence는 모두 HIGH로 필터링된 상태이므로 별도로 보관하지 않는다.
      */
-    public record AnomalyInfo(String categoryName, double magnitude, long weeklyAmountWon, String emotion) {}
+    public record AnomalyInfo(
+            String categoryName, double magnitude, long weeklyAmountWon, String emotion, AnomalyBasis basis) {}
 
     /**
      * 카테고리별 초과 예상.
