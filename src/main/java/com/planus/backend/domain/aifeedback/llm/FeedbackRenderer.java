@@ -209,7 +209,24 @@ public class FeedbackRenderer {
      */
     private static boolean isInManWonRange(long rangeStart, long original) {
         long abs = Math.abs(original);
-        return abs >= MAN_WON && abs >= rangeStart && abs < rangeStart + MAN_WON;
+        return abs >= MAN_WON && abs >= rangeStart && abs < rangeStart + manWonRangeWidth(rangeStart);
+    }
+
+    /**
+     * "N만 원대"의 구간 폭. N의 끝자리 0 개수만큼 넓힌다: "6만 원대" = 6만~6.9만, "70만 원대" = 70만~79만, "150만 원대" = 150만~159만.
+     */
+    static long manWonRangeWidth(long rangeStart) {
+        long n = rangeStart / MAN_WON;
+        long width = MAN_WON;
+        while (n > 0 && n % 10 == 0) {
+            n /= 10;
+            width *= 10;
+        }
+        return width;
+    }
+
+    private static String countSuffix(int count) {
+        return count > 1 ? " × " + count + "건" : "";
     }
 
     /**
@@ -281,6 +298,7 @@ public class FeedbackRenderer {
             if (ov.causeSignals() != null) {
                 for (MemoEvidence memo : ov.causeSignals().memos()) {
                     values.add(memo.amount());
+                    if (memo.count() > 1) values.add(memo.amount() * memo.count());
                 }
             }
         }
@@ -289,6 +307,7 @@ public class FeedbackRenderer {
         }
         for (TransactionHighlight h : c.weekHighlights()) {
             values.add(h.amountWon());
+            if (h.count() > 1) values.add(h.amountWon() * h.count());
         }
         return values;
     }
@@ -495,12 +514,15 @@ public class FeedbackRenderer {
                 // 메모 — 날짜+금액+텍스트 (LLM이 시간 맥락 판단)
                 if (cs != null && cs.hasMemo()) {
                     int shown = Math.min(3, cs.memos().size());
+                    int shownTx = cs.memos().subList(0, shown).stream()
+                            .mapToInt(MemoEvidence::count)
+                            .sum();
                     // 목록이 잘리면 LLM이 줄 수를 횟수로 착각한다 (#111, exp3 기준선: 35주차 롯데월드 4건 → "3회" 5/10)
-                    if (ov.thisWeekCount() > shown) {
+                    if (ov.thisWeekCount() > shownTx) {
                         sb.append("  메모 (이번 주 ")
                                 .append(ov.thisWeekCount())
                                 .append("건 중 ")
-                                .append(shown)
+                                .append(shownTx)
                                 .append("건만 표시):\n");
                     } else {
                         sb.append("  메모:\n");
@@ -512,6 +534,7 @@ public class FeedbackRenderer {
                                 .append(memo.text())
                                 .append("\" (")
                                 .append(exactWon(memo.amount()))
+                                .append(countSuffix(memo.count()))
                                 .append(")\n");
                     }
                 }
@@ -562,7 +585,8 @@ public class FeedbackRenderer {
                         .append("] ")
                         .append(h.categoryName())
                         .append(" ")
-                        .append(exactWon(h.amountWon()));
+                        .append(exactWon(h.amountWon()))
+                        .append(countSuffix(h.count()));
                 if (h.memo() != null && !h.memo().isBlank()) {
                     sb.append(" \"").append(h.memo()).append("\"");
                 }
@@ -900,6 +924,42 @@ public class FeedbackRenderer {
      * 이번 주 주목 거래. 이상치 감지됐거나 REGRET·IMPULSE 감정 태그가 있거나 메모가 있는 거래.
      * 금액 내림차순 상위 5건으로 제한.
      */
+    /**
+     * @param amountWon 거래 1건 금액
+     * @param count     같은 날·카테고리·금액·메모·감정으로 묶인 거래 건수 (#111)
+     */
     public record TransactionHighlight(
-            LocalDate date, String categoryName, long amountWon, String memo, String emotion) {}
+            LocalDate date, String categoryName, long amountWon, String memo, String emotion, int count) {
+
+        /** 1건짜리 주목 거래. */
+        public TransactionHighlight(LocalDate date, String categoryName, long amountWon, String memo, String emotion) {
+            this(date, categoryName, amountWon, memo, emotion, 1);
+        }
+
+        /**
+         * 동일 거래를 한 건으로 묶은 뒤 금액 내림차순 상위 {@code limit}개를 반환한다. 반드시 자르기 전에 묶어야 한다 — 상위 N개로 자른 뒤 묶으면 잘린
+         * 건수만 세어 "× 3건"처럼 틀린 횟수가 프롬프트에 들어간다.
+         */
+        public static List<TransactionHighlight> groupIdenticalTopN(List<TransactionHighlight> highlights, int limit) {
+            Map<List<Object>, TransactionHighlight> grouped = new LinkedHashMap<>();
+            for (TransactionHighlight h : highlights) {
+                List<Object> key = Arrays.asList(h.date(), h.categoryName(), h.amountWon(), h.memo(), h.emotion());
+                grouped.merge(
+                        key,
+                        h,
+                        (a, b) -> new TransactionHighlight(
+                                a.date(),
+                                a.categoryName(),
+                                a.amountWon(),
+                                a.memo(),
+                                a.emotion(),
+                                a.count() + b.count()));
+            }
+            return grouped.values().stream()
+                    .sorted(Comparator.comparingLong(TransactionHighlight::amountWon)
+                            .reversed())
+                    .limit(limit)
+                    .toList();
+        }
+    }
 }

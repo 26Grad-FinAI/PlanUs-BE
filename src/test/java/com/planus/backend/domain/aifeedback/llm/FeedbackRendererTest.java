@@ -364,6 +364,25 @@ class FeedbackRendererTest {
         }
 
         @Test
+        @DisplayName("구간 폭은 N의 끝자리 0 개수만큼: '70만 원대' = 70만~79만, '150만 원대' = 150만~159만 (exp3 38주차)")
+        void rangeWidth_followsTrailingZeros() {
+            assertThat(FeedbackRenderer.manWonRangeWidth(60_000)).isEqualTo(10_000);
+            assertThat(FeedbackRenderer.manWonRangeWidth(160_000)).isEqualTo(10_000);
+            assertThat(FeedbackRenderer.manWonRangeWidth(700_000)).isEqualTo(100_000);
+            assertThat(FeedbackRenderer.manWonRangeWidth(1_000_000)).isEqualTo(1_000_000);
+            assertThat(FeedbackRenderer.manWonRangeWidth(1_500_000)).isEqualTo(100_000);
+
+            assertThat(renderer.verifyNumbers("격차를 70만 원대로 낮출 수 있어요.", ctxWith(725_938)))
+                    .isTrue();
+            assertThat(renderer.verifyNumbers("격차를 70만 원대로 낮출 수 있어요.", ctxWith(805_000)))
+                    .isFalse();
+            assertThat(renderer.verifyNumbers("150만 원대 지출이에요.", ctxWith(1_555_000)))
+                    .isTrue();
+            assertThat(renderer.verifyNumbers("150만 원대 지출이에요.", ctxWith(1_600_000)))
+                    .isFalse();
+        }
+
+        @Test
         @DisplayName("구간 밖이면 거절: 45,900원 → '5만 원대' (만원 단위 올림 근사로는 통과하지 않음)")
         void outsideRange_rejected() {
             assertThat(renderer.verifyNumbers("5만 원대 식대가 있었어요.", ctxWith(45_900)))
@@ -498,6 +517,72 @@ class FeedbackRendererTest {
                     .contains("(이 중 이번 주 신규 116,600원, 4건)")
                     .contains("메모 (이번 주 4건 중 3건만 표시):")
                     .contains("/ 오락문화 이번 주 합계: 116,600원 (4건)");
+        }
+
+        @Test
+        @DisplayName("묶인 메모는 '× N건'으로 표기하고, 묶음이 이번 주 건수를 모두 덮으면 잘림 표기 없음")
+        void groupedMemo_countSuffix_noTruncationLabel() {
+            CauseSignals cs = new CauseSignals(
+                    11.1,
+                    "BOTH",
+                    0.5,
+                    0.5,
+                    java.util.Map.of(),
+                    java.util.Map.of(),
+                    null,
+                    List.of(new com.planus.backend.domain.aifeedback.cause.MemoEvidence(
+                            java.time.LocalDate.of(2026, 10, 2), 29_150, "체크카드 롯데월드", 4)),
+                    true);
+            FeedbackContext ctx = contextBuilder()
+                    .feedbackType(FeedbackType.ALERT)
+                    .overspendCategories(List.of(new CategoryOverspend("오락문화", 25_691, 116_600, cs, 4)))
+                    .build();
+
+            assertThat(capturedUserPrompt(ctx))
+                    .contains("[2026-10-02] \"체크카드 롯데월드\" (29,150원 × 4건)")
+                    .contains("  메모:\n")
+                    .doesNotContain("건만 표시");
+        }
+
+        @Test
+        @DisplayName("주목 거래: 자르기 전에 묶음 — 롯데월드 4건이 상위 5건 제한에 잘려 '× 3건'이 되지 않음")
+        void highlights_groupedBeforeLimit() {
+            java.time.LocalDate d = java.time.LocalDate.of(2026, 10, 2);
+            List<FeedbackRenderer.TransactionHighlight> raw = new java.util.ArrayList<>();
+            raw.add(new FeedbackRenderer.TransactionHighlight(d, "기타", 185_150, "토스 후불결제", "NECESSARY"));
+            raw.add(new FeedbackRenderer.TransactionHighlight(d, "식대", 39_500, "비에이치씨", "SATISFIED"));
+            for (int i = 0; i < 4; i++) {
+                raw.add(new FeedbackRenderer.TransactionHighlight(d, "오락문화", 29_150, "체크카드 롯데월드", "SATISFIED"));
+            }
+            raw.add(new FeedbackRenderer.TransactionHighlight(d, "기타", 25_000, "토스페이", "NECESSARY"));
+            raw.add(new FeedbackRenderer.TransactionHighlight(d, "기타", 10_000, "카카오페이", "NECESSARY"));
+
+            List<FeedbackRenderer.TransactionHighlight> top =
+                    FeedbackRenderer.TransactionHighlight.groupIdenticalTopN(raw, 5);
+
+            assertThat(top).hasSize(5);
+            assertThat(top).anySatisfy(h -> {
+                assertThat(h.memo()).isEqualTo("체크카드 롯데월드");
+                assertThat(h.count()).isEqualTo(4);
+            });
+            FeedbackContext ctx = contextBuilder()
+                    .feedbackType(FeedbackType.ALERT)
+                    .weekHighlights(top)
+                    .build();
+            assertThat(capturedUserPrompt(ctx)).contains("오락문화 29,150원 × 4건 \"체크카드 롯데월드\"");
+        }
+
+        @Test
+        @DisplayName("묶음 합계(금액 × 건수)를 LLM이 써도 숫자 검증 통과")
+        void groupedTotal_allowedInVerification() {
+            FeedbackContext ctx = contextBuilder()
+                    .feedbackType(FeedbackType.ALERT)
+                    .weekHighlights(List.of(new FeedbackRenderer.TransactionHighlight(
+                            java.time.LocalDate.of(2026, 10, 3), "기타", 10_000, "카카오페이", "NECESSARY", 2)))
+                    .build();
+
+            assertThat(renderer.verifyNumbers("카카오페이 10,000원 두 건, 합계 20,000원이 나갔어요.", ctx))
+                    .isTrue();
         }
 
         @Test

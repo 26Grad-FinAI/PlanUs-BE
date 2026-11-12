@@ -862,11 +862,8 @@ class WalkForwardValidationTest {
                             d, Categories.name(catId), e.getAmount(), e.getMemo(), e.getEmotion()));
                 }
             }
-            List<FeedbackRenderer.TransactionHighlight> topHighlights = highlights.stream()
-                    .sorted(Comparator.comparingLong(FeedbackRenderer.TransactionHighlight::amountWon)
-                            .reversed())
-                    .limit(5)
-                    .toList();
+            List<FeedbackRenderer.TransactionHighlight> topHighlights =
+                    FeedbackRenderer.TransactionHighlight.groupIdenticalTopN(highlights, 5);
 
             // 이번 주 전체 변동지출 감정 분포
             Map<String, Long> wkEmoCounts = new java.util.LinkedHashMap<>();

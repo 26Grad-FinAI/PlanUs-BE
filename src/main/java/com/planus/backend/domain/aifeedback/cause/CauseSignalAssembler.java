@@ -234,17 +234,23 @@ public class CauseSignalAssembler {
     /**
      * 메모 원문 추출. 이번 주 + 지난주 범위, 최신순 LIMIT {@value MEMO_LIMIT}.
      *
+     * <p>같은 날·같은 금액·같은 메모 거래는 LIMIT 적용 전에 한 건으로 묶고 건수를 기록한다 (#111: 같은 거래 4건이 목록에 3줄만 보여 LLM이
+     * "3회"라고 쓰던 문제).
+     *
      * <p>모든 지출 유형(고정 포함)에서 추출한다. 고정 지출에도 사용자가 메모를 남기는 경우가
      * 있고, LLM이 맥락을 파악하는 데 유용하기 때문이다.
      */
     private List<MemoEvidence> extractMemos(List<Expense> categoryExpenses, LocalDate memoStart, LocalDate weekEnd) {
-        return categoryExpenses.stream()
+        Map<List<Object>, MemoEvidence> grouped = new LinkedHashMap<>();
+        categoryExpenses.stream()
                 .filter(e -> !e.getDate().isBefore(memoStart) && !e.getDate().isAfter(weekEnd))
                 .filter(e -> e.getMemo() != null && !e.getMemo().isBlank())
                 .sorted(Comparator.comparing(Expense::getDate).reversed())
-                .limit(MEMO_LIMIT)
-                .map(e -> new MemoEvidence(e.getDate(), e.getAmount(), e.getMemo()))
-                .toList();
+                .forEach(e -> grouped.merge(
+                        List.of(e.getDate(), e.getAmount(), e.getMemo()),
+                        new MemoEvidence(e.getDate(), e.getAmount(), e.getMemo(), 1),
+                        (a, b) -> new MemoEvidence(a.date(), a.amount(), a.text(), a.count() + b.count())));
+        return grouped.values().stream().limit(MEMO_LIMIT).toList();
     }
 
     private String determineDominant(double freqContribution, double priceContribution) {

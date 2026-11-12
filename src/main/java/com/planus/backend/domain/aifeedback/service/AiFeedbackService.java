@@ -1253,11 +1253,7 @@ public class AiFeedbackService {
             }
         }
 
-        return result.stream()
-                .sorted(Comparator.comparingLong(TransactionHighlight::amountWon)
-                        .reversed())
-                .limit(5)
-                .toList();
+        return TransactionHighlight.groupIdenticalTopN(result, 5);
     }
 
     private static boolean isHighlightEmotion(String emotion) {
