@@ -283,6 +283,16 @@ public class BudgetPlanService {
             existingMap.put(bc.getCategoryId(), bc);
         }
 
+        // 기타 카테고리 예산 0원 초기화
+        if (!existingMap.containsKey(Categories.ETC_CATEGORY_ID)) {
+            budgetCategoryRepository.save(BudgetCategory.builder()
+                    .budgetId(budget.getId())
+                    .categoryId(Categories.ETC_CATEGORY_ID)
+                    .amount(0L)
+                    .aiAmount(0L)
+                    .build());
+        }
+
         for (AiBudgetResponse.Budget.Allocation alloc : response.budget().allocations()) {
             int categoryId = Categories.id(alloc.category());
             if (categoryId == Categories.ETC_CATEGORY_ID) {
