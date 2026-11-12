@@ -12,7 +12,7 @@ import java.util.List;
 public record UserProfileRequest(
         @Schema(description = "나이", example = "25") @NotNull @Positive Integer age,
         @Schema(description = "성별", example = "MALE") @NotBlank String gender,
-        @Schema(description = "거주지", example = "서울") @NotBlank String residence,
+        @Schema(description = "거주지", example = "서울") String residence,
         @Schema(description = "월 소득 (원)", example = "3000000") @NotNull Long monthlyIncome,
         @Schema(description = "월 고정지출 항목 목록") @Valid @NotNull List<@Valid FixedExpenseItem> monthlyFixedExpenses,
         @Schema(description = "월 저축 목표 (원)", example = "500000") @NotNull Long monthlySavingsGoal,

@@ -105,7 +105,6 @@ public class UserAccount {
         return age != null
                 && monthlyIncome > 0
                 && gender != null
-                && residence != null
                 && employmentStatus != null
                 && homeOwnership != null;
     }
@@ -123,7 +122,9 @@ public class UserAccount {
             String selfIntroduction) {
         this.age = age;
         this.gender = gender;
-        this.residence = residence;
+        if (residence != null && !residence.isBlank()) {
+            this.residence = residence;
+        }
         this.monthlyIncome = monthlyIncome;
         this.monthlyFixedExpenses = monthlyFixedExpenses;
         this.monthlySavingsGoal = monthlySavingsGoal;

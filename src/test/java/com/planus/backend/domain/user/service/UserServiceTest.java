@@ -63,14 +63,15 @@ class UserServiceTest {
         }
 
         @Test
-        @DisplayName("프로필 저장 후 profileCompleted가 true이다")
+        @DisplayName("거주지 없이 프로필을 저장해도 profileCompleted가 true이다")
         void saveProfile_profileCompletedIsTrue() {
             UserAccount user = spy(UserAccount.builder().id(1L).nickname("김스펜드").build());
             when(userAccountRepository.findById(1L)).thenReturn(Optional.of(user));
 
-            UserProfileResponse response = userService.saveProfile(1L, validRequest());
+            UserProfileResponse response = userService.saveProfile(1L, profileRequest(null));
 
             assertThat(response.profileCompleted()).isTrue();
+            assertThat(user.getResidence()).isNull();
         }
 
         @Test
@@ -126,6 +127,17 @@ class UserServiceTest {
     @Nested
     @DisplayName("updateProfile 성공")
     class UpdateProfileSuccess {
+
+        @Test
+        @DisplayName("거주지를 생략하면 기존 거주지를 유지한다")
+        void updateProfile_preservesResidenceWhenOmitted() {
+            UserAccount user = UserAccount.builder().id(1L).residence("부산").build();
+            when(userAccountRepository.findById(1L)).thenReturn(Optional.of(user));
+
+            userService.updateProfile(1L, profileRequest(null));
+
+            assertThat(user.getResidence()).isEqualTo("부산");
+        }
 
         @Test
         @DisplayName("프로필 수정 후 변경된 가용예산을 반환한다")
@@ -350,10 +362,14 @@ class UserServiceTest {
     }
 
     private UserProfileRequest validRequest() {
+        return profileRequest("서울");
+    }
+
+    private UserProfileRequest profileRequest(String residence) {
         return new UserProfileRequest(
                 30,
                 "MALE",
-                "서울",
+                residence,
                 3_000_000L,
                 List.of(new FixedExpenseItem("월세", 700_000L), new FixedExpenseItem("보험", 300_000L)),
                 500_000L,

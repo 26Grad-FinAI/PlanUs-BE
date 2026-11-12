@@ -14,6 +14,7 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
+import com.fasterxml.jackson.databind.node.ObjectNode;
 import com.planus.backend.domain.auth.service.AuthService;
 import com.planus.backend.domain.user.dto.FixedExpenseItem;
 import com.planus.backend.domain.user.dto.SavingsStatusResponse;
@@ -70,7 +71,7 @@ class UserControllerTest {
         class Success {
 
             @Test
-            @DisplayName("올바른 요청 시 201과 userId·nickname·availableBudget을 반환한다")
+            @DisplayName("거주지가 없는 요청도 201과 완료된 프로필을 반환한다")
             void saveProfile_success_returns201() throws Exception {
                 SecurityContextHolder.getContext().setAuthentication(new UsernamePasswordAuthenticationToken(1L, null));
 
@@ -80,7 +81,7 @@ class UserControllerTest {
 
                 mockMvc.perform(post("/api/users/me/profile")
                                 .contentType(MediaType.APPLICATION_JSON)
-                                .content(objectMapper.writeValueAsString(validRequest())))
+                                .content(requestWithoutResidence()))
                         .andExpect(status().isCreated())
                         .andExpect(jsonPath("$.isSuccess").value(true))
                         .andExpect(jsonPath("$.result.userId").value(1L))
@@ -137,7 +138,7 @@ class UserControllerTest {
         class Success {
 
             @Test
-            @DisplayName("올바른 요청 시 200과 userId·availableBudget·message·updatedAt을 반환한다")
+            @DisplayName("거주지가 없는 수정 요청도 200과 갱신된 가용예산을 반환한다")
             void updateProfile_success_returns200() throws Exception {
                 SecurityContextHolder.getContext().setAuthentication(new UsernamePasswordAuthenticationToken(1L, null));
 
@@ -147,7 +148,7 @@ class UserControllerTest {
 
                 mockMvc.perform(put("/api/users/me/profile")
                                 .contentType(MediaType.APPLICATION_JSON)
-                                .content(objectMapper.writeValueAsString(validRequest())))
+                                .content(requestWithoutResidence()))
                         .andExpect(status().isOk())
                         .andExpect(jsonPath("$.isSuccess").value(true))
                         .andExpect(jsonPath("$.result.userId").value(1L))
@@ -350,6 +351,12 @@ class UserControllerTest {
                         .andExpect(jsonPath("$.code").value("COMMON_404_001"));
             }
         }
+    }
+
+    private String requestWithoutResidence() {
+        ObjectNode body = objectMapper.valueToTree(validRequest());
+        body.remove("residence");
+        return body.toString();
     }
 
     private UserProfileRequest validRequest() {
