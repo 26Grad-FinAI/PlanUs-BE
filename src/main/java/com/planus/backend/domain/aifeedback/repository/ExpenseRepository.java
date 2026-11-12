@@ -3,6 +3,7 @@ package com.planus.backend.domain.aifeedback.repository;
 import com.planus.backend.domain.aifeedback.entity.Expense;
 import java.time.LocalDateTime;
 import java.util.List;
+import org.springframework.data.domain.Pageable;
 import org.springframework.data.jpa.repository.JpaRepository;
 import org.springframework.data.jpa.repository.Modifying;
 import org.springframework.data.jpa.repository.Query;
@@ -151,14 +152,24 @@ public interface ExpenseRepository extends JpaRepository<Expense, Long> {
             + " ORDER BY YEAR(e.expenseDate), MONTH(e.expenseDate), e.categoryId")
     List<Object[]> sumExpensesGroupByMonthAndCategory(Long userId, LocalDateTime from, LocalDateTime to);
 
-    /**
-     * 사용자의 최근 거래 10건을 날짜 내림차순, ID 내림차순으로 조회한다.
-     * 동일 expenseDate에 대해 결정적 순서를 보장하기 위해 id를 보조 정렬 기준으로 사용한다.
-     *
-     * @param userId 사용자 ID
-     * @return 최근 거래 10건
-     */
-    List<Expense> findTop10ByUserIdOrderByExpenseDateDescIdDesc(Long userId);
+    /** 지정 기간 내 사용자의 거래를 거래 일시와 ID 내림차순으로 조회한다. 종료 일시는 포함하지 않는다. */
+    @Query("SELECT e FROM Expense e WHERE e.userId = :userId"
+            + " AND e.expenseDate >= :from AND e.expenseDate < :to"
+            + " ORDER BY e.expenseDate DESC, e.id DESC")
+    List<Expense> findRecentByPeriod(Long userId, LocalDateTime from, LocalDateTime to, Pageable pageable);
+
+    /** 같은 기간에서 커서의 거래 일시와 ID보다 뒤에 오는 거래를 조회한다. */
+    @Query("SELECT e FROM Expense e WHERE e.userId = :userId"
+            + " AND e.expenseDate >= :from AND e.expenseDate < :to"
+            + " AND (e.expenseDate < :cursorDate OR (e.expenseDate = :cursorDate AND e.id < :cursorId))"
+            + " ORDER BY e.expenseDate DESC, e.id DESC")
+    List<Expense> findRecentByPeriodAfterCursor(
+            Long userId,
+            LocalDateTime from,
+            LocalDateTime to,
+            LocalDateTime cursorDate,
+            long cursorId,
+            Pageable pageable);
 
     /**
      * 원본 반복 지출을 조회한다. sourceExpenseId가 null인 recurring 지출만 대상.
