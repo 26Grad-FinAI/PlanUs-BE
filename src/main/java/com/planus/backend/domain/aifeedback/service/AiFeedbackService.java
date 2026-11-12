@@ -313,14 +313,16 @@ public class AiFeedbackService {
                 .sorted(Map.Entry.<Integer, Long>comparingByValue().reversed())
                 .map(e -> {
                     int cat = e.getKey();
-                    long thisWeekAmt = sum(
-                            window,
-                            ex -> ex.getCategoryId() == cat
-                                    && !ex.getDate().isBefore(finalWeekStart)
-                                    && !ex.getDate().isAfter(weekEnd)
-                                    && ex.isVariable());
+                    Pred thisWeekVar = ex -> ex.getCategoryId() == cat
+                            && !ex.getDate().isBefore(finalWeekStart)
+                            && !ex.getDate().isAfter(weekEnd)
+                            && ex.isVariable();
                     return new CategoryOverspend(
-                            Categories.name(cat), e.getValue(), thisWeekAmt, finalCauseSignals.get(cat));
+                            Categories.name(cat),
+                            e.getValue(),
+                            sum(window, thisWeekVar),
+                            finalCauseSignals.get(cat),
+                            count(window, thisWeekVar));
                 })
                 .toList();
 
@@ -336,14 +338,13 @@ public class AiFeedbackService {
 
         // 이상치 카테고리의 이번 주 실지출액 (LLM에 구체적 금액 제공용)
         final int anomalyCatId = top != null ? top.categoryId() : -1;
-        long anomalyWeeklyAmount = anomalyCatId >= 0
-                ? sum(
-                        window,
-                        e -> e.getCategoryId() == anomalyCatId
-                                && !e.getDate().isBefore(weekStart)
-                                && !e.getDate().isAfter(weekEnd)
-                                && e.isVariable())
-                : 0L;
+        final LocalDate anomalyWeekStart = weekStart;
+        Pred anomalyThisWeek = e -> e.getCategoryId() == anomalyCatId
+                && !e.getDate().isBefore(anomalyWeekStart)
+                && !e.getDate().isAfter(weekEnd)
+                && e.isVariable();
+        long anomalyWeeklyAmount = anomalyCatId >= 0 ? sum(window, anomalyThisWeek) : 0L;
+        int anomalyWeeklyCount = anomalyCatId >= 0 ? count(window, anomalyThisWeek) : 0;
         // 이상치 대표 거래의 감정 태그 (LLM 톤 결정용)
         String anomalyEmotion = top != null ? top.rep().getEmotion() : null;
 
@@ -357,18 +358,18 @@ public class AiFeedbackService {
                         == Confidence.HIGH)
                 .limit(MAX_HIGH_ANOMALIES - 1)
                 .map(a -> {
-                    long weeklyAmt = sum(
-                            window,
-                            e -> e.getCategoryId() == a.categoryId()
-                                    && !e.getDate().isBefore(finalWeekStart2)
-                                    && !e.getDate().isAfter(finalWeekEnd2)
-                                    && e.isVariable());
+                    Pred catThisWeek = e -> e.getCategoryId() == a.categoryId()
+                            && !e.getDate().isBefore(finalWeekStart2)
+                            && !e.getDate().isAfter(finalWeekEnd2)
+                            && e.isVariable();
+                    long weeklyAmt = sum(window, catThisWeek);
                     return new FeedbackRenderer.AnomalyInfo(
                             Categories.name(a.categoryId()),
                             a.magnitude(),
                             weeklyAmt,
                             a.rep().getEmotion(),
-                            a.basis());
+                            a.basis(),
+                            count(window, catThisWeek));
                 })
                 .toList();
 
@@ -432,7 +433,8 @@ public class AiFeedbackService {
                 feedbackType,
                 bandWidth,
                 overallConfidence,
-                top != null ? top.basis() : null);
+                top != null ? top.basis() : null,
+                anomalyWeeklyCount);
 
         // ── [9] 렌더링 ──
         FeedbackRenderer.Rendered out = renderer.render(ctx);
@@ -1264,6 +1266,12 @@ public class AiFeedbackService {
 
     private interface Pred {
         boolean test(Expense e);
+    }
+
+    private int count(List<Expense> xs, Pred f) {
+        int n = 0;
+        for (Expense e : xs) if (f.test(e)) n++;
+        return n;
     }
 
     private long sum(List<Expense> xs, Pred f) {

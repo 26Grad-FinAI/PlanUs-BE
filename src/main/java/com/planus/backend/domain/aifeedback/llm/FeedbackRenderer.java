@@ -71,6 +71,7 @@ public class FeedbackRenderer {
         - 원인 신뢰도가 '높음'이 아니면 원인을 단정하지 말고 가볍게만 언급하거나 생략한다.
         - 배수는 무엇의 배수인지 그대로 밝힌다. '한 건' 배수는 그 거래에만 붙이고, 카테고리 전체·이번 주 합계·횟수가 그 배수만큼 늘었다고 쓰지 않는다. '주간 금액' 배수는 금액이 늘었다고만 쓰고 횟수로 바꾸지 않는다.
         - 배수는 제공된 값을 소수 첫째 자리까지 그대로 쓴다. '두 배 가까이', '5배 이상', '약 10배'처럼 근사하지 않는다.
+        - 횟수(N회·N건)는 표기된 건수만 쓴다. 메모·주목 거래 목록은 일부만 보여주므로 목록 줄 수를 세어 횟수로 쓰지 않는다.
         - 이상 신호 거래의 감정 태그에 따라 피드백 톤을 달리한다:
           • REGRET / IMPULSE → 명확하게 절제를 권고한다. "이런 소비는 줄여가는 게 좋겠어요" 수준으로 직접적으로 말한다.
           • NECESSARY → 지출이 불가피했음을 인정하되, 해당 카테고리 예산을 조정하거나 다른 항목을 줄이는 방향을 제안한다.
@@ -450,7 +451,9 @@ public class FeedbackRenderer {
                         .append(exactWon(ov.overAmountWon()))
                         .append(" (이 중 이번 주 신규 ")
                         .append(exactWon(ov.thisWeekWon()))
-                        .append(")");
+                        .append(", ")
+                        .append(ov.thisWeekCount())
+                        .append("건)");
 
                 CauseSignals cs = ov.causeSignals();
                 if (cs != null) {
@@ -491,9 +494,18 @@ public class FeedbackRenderer {
 
                 // 메모 — 날짜+금액+텍스트 (LLM이 시간 맥락 판단)
                 if (cs != null && cs.hasMemo()) {
-                    sb.append("  메모:\n");
-                    for (MemoEvidence memo :
-                            cs.memos().subList(0, Math.min(3, cs.memos().size()))) {
+                    int shown = Math.min(3, cs.memos().size());
+                    // 목록이 잘리면 LLM이 줄 수를 횟수로 착각한다 (#111, exp3 기준선: 35주차 롯데월드 4건 → "3회" 5/10)
+                    if (ov.thisWeekCount() > shown) {
+                        sb.append("  메모 (이번 주 ")
+                                .append(ov.thisWeekCount())
+                                .append("건 중 ")
+                                .append(shown)
+                                .append("건만 표시):\n");
+                    } else {
+                        sb.append("  메모:\n");
+                    }
+                    for (MemoEvidence memo : cs.memos().subList(0, shown)) {
                         sb.append("    [")
                                 .append(memo.date())
                                 .append("] \"")
@@ -515,6 +527,7 @@ public class FeedbackRenderer {
                         c.anomalyCategoryName(),
                         c.anomalyMagnitude(),
                         c.anomalyWeeklyAmountWon(),
+                        c.anomalyWeeklyCount(),
                         c.anomalyBasis(),
                         c.anomalyEmotion());
             } else {
@@ -529,13 +542,20 @@ public class FeedbackRenderer {
         if (!c.additionalHighAnomalies().isEmpty()) {
             sb.append("\n[추가 HIGH 이상치 — 피드백에 각각 1문장씩 자연스럽게 언급]\n");
             for (AnomalyInfo a : c.additionalHighAnomalies()) {
-                appendAnomalyLine(sb, a.categoryName(), a.magnitude(), a.weeklyAmountWon(), a.basis(), a.emotion());
+                appendAnomalyLine(
+                        sb,
+                        a.categoryName(),
+                        a.magnitude(),
+                        a.weeklyAmountWon(),
+                        a.weeklyCount(),
+                        a.basis(),
+                        a.emotion());
             }
         }
 
         // ── 이번 주 주목 거래 ──
         if (!c.weekHighlights().isEmpty()) {
-            sb.append("\n[이번 주 주목 거래]\n");
+            sb.append("\n[이번 주 주목 거래 — 금액 상위 일부, 전체 목록 아님]\n");
             for (TransactionHighlight h : c.weekHighlights()) {
                 sb.append("- [")
                         .append(h.date())
@@ -637,6 +657,7 @@ public class FeedbackRenderer {
             String categoryName,
             double magnitude,
             long weeklyAmountWon,
+            int weeklyCount,
             AnomalyBasis basis,
             String emotion) {
         String mag = String.format("%.1f", magnitude);
@@ -668,6 +689,7 @@ public class FeedbackRenderer {
         }
         if (weeklyAmountWon > 0) {
             sb.append(" / ").append(categoryName).append(" 이번 주 합계: ").append(exactWon(weeklyAmountWon));
+            if (weeklyCount > 0) sb.append(" (").append(weeklyCount).append("건)");
         }
         if (emotion != null && !emotion.isBlank()) {
             sb.append(", 감정 태그: ").append(emotion);
@@ -813,7 +835,8 @@ public class FeedbackRenderer {
             FeedbackType feedbackType,
             BandWidth bandWidth,
             Confidence overallConfidence,
-            AnomalyBasis anomalyBasis) {}
+            AnomalyBasis anomalyBasis,
+            int anomalyWeeklyCount) {}
 
     /**
      * 이상치 배수의 기준 (#111). 프롬프트에 무엇의 배수인지 밝히기 위해 전달한다.
@@ -830,7 +853,12 @@ public class FeedbackRenderer {
      * confidence는 모두 HIGH로 필터링된 상태이므로 별도로 보관하지 않는다.
      */
     public record AnomalyInfo(
-            String categoryName, double magnitude, long weeklyAmountWon, String emotion, AnomalyBasis basis) {}
+            String categoryName,
+            double magnitude,
+            long weeklyAmountWon,
+            String emotion,
+            AnomalyBasis basis,
+            int weeklyCount) {}
 
     /**
      * 카테고리별 초과 예상.
@@ -839,7 +867,7 @@ public class FeedbackRenderer {
      * @param thisWeekWon    이번 주에 새로 발생한 해당 카테고리 변동 지출
      */
     public record CategoryOverspend(
-            String categoryName, long overAmountWon, long thisWeekWon, CauseSignals causeSignals) {}
+            String categoryName, long overAmountWon, long thisWeekWon, CauseSignals causeSignals, int thisWeekCount) {}
 
     /**
      * 이번 주 전체 변동지출의 감정 태그 분포 요약.

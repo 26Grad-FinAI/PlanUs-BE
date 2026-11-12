@@ -465,12 +465,68 @@ class FeedbackRendererTest {
                     1.7, "FREQUENCY", 0.8, 0.2, java.util.Map.of(), java.util.Map.of(), null, List.of(), false);
             FeedbackContext ctx = contextBuilder()
                     .feedbackType(FeedbackType.ALERT)
-                    .overspendCategories(List.of(new CategoryOverspend("식대", 191_731, 139_940, cs)))
+                    .overspendCategories(List.of(new CategoryOverspend("식대", 191_731, 139_940, cs, 9)))
                     .build();
 
             assertThat(capturedUserPrompt(ctx))
                     .contains("(이번 주 금액이 평소 주당 금액의 1.7배) — 원인: 횟수 증가")
                     .doesNotContain("과거 대비");
+        }
+
+        @Test
+        @DisplayName("횟수: 초과 카테고리에 이번 주 건수, 잘린 메모 목록에 'N건 중 M건만 표시' (exp3 35주차 롯데월드 4건 → '3회')")
+        void count_spelledOutAndTruncationLabeled() {
+            List<com.planus.backend.domain.aifeedback.cause.MemoEvidence> memos = List.of(
+                    new com.planus.backend.domain.aifeedback.cause.MemoEvidence(
+                            java.time.LocalDate.of(2026, 10, 2), 29_150, "체크카드 롯데월드"),
+                    new com.planus.backend.domain.aifeedback.cause.MemoEvidence(
+                            java.time.LocalDate.of(2026, 10, 2), 29_150, "체크카드 롯데월드"),
+                    new com.planus.backend.domain.aifeedback.cause.MemoEvidence(
+                            java.time.LocalDate.of(2026, 10, 2), 29_150, "체크카드 롯데월드"),
+                    new com.planus.backend.domain.aifeedback.cause.MemoEvidence(
+                            java.time.LocalDate.of(2026, 10, 2), 29_150, "체크카드 롯데월드"));
+            CauseSignals cs =
+                    new CauseSignals(11.1, "BOTH", 0.5, 0.5, java.util.Map.of(), java.util.Map.of(), null, memos, true);
+            FeedbackContext ctx = contextBuilder()
+                    .feedbackType(FeedbackType.ALERT)
+                    .overspendCategories(List.of(new CategoryOverspend("오락문화", 25_691, 116_600, cs, 4)))
+                    .anomaly("오락문화", 14.6, 116_600, new FeedbackRenderer.AnomalyBasis(true, 29_150, 2_000, "체크카드 롯데월드"))
+                    .anomalyWeeklyCount(4)
+                    .build();
+
+            assertThat(capturedUserPrompt(ctx))
+                    .contains("(이 중 이번 주 신규 116,600원, 4건)")
+                    .contains("메모 (이번 주 4건 중 3건만 표시):")
+                    .contains("/ 오락문화 이번 주 합계: 116,600원 (4건)");
+        }
+
+        @Test
+        @DisplayName("목록이 잘리지 않으면 기존 '메모:' 표기")
+        void count_notTruncated_plainMemoHeader() {
+            List<com.planus.backend.domain.aifeedback.cause.MemoEvidence> memos =
+                    List.of(new com.planus.backend.domain.aifeedback.cause.MemoEvidence(
+                            java.time.LocalDate.of(2026, 7, 5), 14_000, "체크카드 카카오T일반택시"));
+            CauseSignals cs =
+                    new CauseSignals(null, null, 0, 0, java.util.Map.of(), java.util.Map.of(), null, memos, true);
+            FeedbackContext ctx = contextBuilder()
+                    .feedbackType(FeedbackType.ALERT)
+                    .overspendCategories(List.of(new CategoryOverspend("교통", 27_100, 14_000, cs, 1)))
+                    .build();
+
+            assertThat(capturedUserPrompt(ctx)).contains("  메모:\n").doesNotContain("건만 표시");
+        }
+
+        @Test
+        @DisplayName("주목 거래는 일부 목록임을 명시 + 시스템 규칙에 '목록 줄 수를 횟수로 쓰지 않음'")
+        void highlightsLabeledAndCountRule() {
+            FeedbackContext ctx = contextBuilder()
+                    .feedbackType(FeedbackType.ALERT)
+                    .weekHighlights(List.of(new FeedbackRenderer.TransactionHighlight(
+                            java.time.LocalDate.of(2026, 10, 2), "오락문화", 29_150, "체크카드 롯데월드", "SATISFIED")))
+                    .build();
+
+            assertThat(capturedUserPrompt(ctx)).contains("[이번 주 주목 거래 — 금액 상위 일부, 전체 목록 아님]");
+            assertThat(capturedSystemPrompt(ctx)).contains("목록 줄 수를 세어 횟수로 쓰지 않는다");
         }
 
         @Test
@@ -698,6 +754,12 @@ class FeedbackRendererTest {
         private BandWidth bandWidth = null;
         private Confidence overallConfidence = Confidence.HIGH;
         private FeedbackRenderer.AnomalyBasis anomalyBasis = null;
+        private int anomalyWeeklyCount = 0;
+
+        FeedbackContextBuilder anomalyWeeklyCount(int v) {
+            this.anomalyWeeklyCount = v;
+            return this;
+        }
 
         FeedbackContextBuilder anomaly(
                 String categoryName, double magnitude, long weeklyAmountWon, FeedbackRenderer.AnomalyBasis basis) {
@@ -774,7 +836,8 @@ class FeedbackRendererTest {
                     feedbackType,
                     bandWidth,
                     overallConfidence,
-                    anomalyBasis);
+                    anomalyBasis,
+                    anomalyWeeklyCount);
         }
     }
 }

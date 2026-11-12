@@ -65,6 +65,18 @@ class WalkForwardValidationTest {
     private static final int LLM_REPEAT = Math.max(
             1, Integer.parseInt(Optional.ofNullable(System.getenv("LLM_REPEAT")).orElse("1")));
 
+    /**
+     * LLM 검증 대상 주차 제한. 환경변수 LLM_WEEKS (예: "35" 또는 "18,35"). 비어 있으면 전체 주차.
+     * 특정 상황(예: 35주차 횟수 오류)만 반복 측정해 표본을 늘릴 때 사용한다 (#111).
+     */
+    private static final Set<Integer> LLM_WEEKS = Optional.ofNullable(System.getenv("LLM_WEEKS"))
+            .filter(v -> !v.isBlank())
+            .map(v -> Arrays.stream(v.split(","))
+                    .map(String::trim)
+                    .map(Integer::parseInt)
+                    .collect(Collectors.toSet()))
+            .orElse(Set.of());
+
     // YearMonth → (categoryId → 예산)
     private static Map<YearMonth, Map<Integer, Long>> BUDGETS_BY_MONTH;
 
@@ -593,6 +605,7 @@ class WalkForwardValidationTest {
 
             FeedbackType type = feedbackTypeResolver.resolve(isLowData, savingsImpact, hasHighAnomaly, hasOverBudget);
             if (type != FeedbackType.ALERT) continue;
+            if (!LLM_WEEKS.isEmpty() && !LLM_WEEKS.contains(week)) continue;
 
             // ── overspendCategories (CauseSignalAssembler로 메모·감정 포함) ──
             LocalDate monthStart = weekEnd.withDayOfMonth(1);
@@ -614,8 +627,15 @@ class WalkForwardValidationTest {
                                     && !e.getDate().isAfter(weekEnd))
                             .mapToLong(Expense::getAmount)
                             .sum();
+                    int thisWeekCnt = (int) thisWeek.stream()
+                            .filter(e -> e.isVariable() && Objects.equals(e.getCategoryId(), entry.getKey()))
+                            .count();
                     overspend.add(new FeedbackRenderer.CategoryOverspend(
-                            Categories.name(entry.getKey()), catSpend - entry.getValue(), thisWeekAmt, cs));
+                            Categories.name(entry.getKey()),
+                            catSpend - entry.getValue(),
+                            thisWeekAmt,
+                            cs,
+                            thisWeekCnt));
                 }
             }
 
@@ -667,6 +687,11 @@ class WalkForwardValidationTest {
                             .mapToLong(Expense::getAmount)
                             .sum()
                     : 0L;
+            int anomalyWeeklyCount = anomalyCatId >= 0
+                    ? (int) thisWeek.stream()
+                            .filter(e -> e.isVariable() && Objects.equals(e.getCategoryId(), finalAnomalyCatId))
+                            .count()
+                    : 0;
 
             // ── 추가 HIGH 이상치 (primary 카테고리 제외, HIGH confidence, 최대 2개) ──
             List<FeedbackRenderer.AnomalyInfo> additionalHighAnomalies = new ArrayList<>();
@@ -710,7 +735,10 @@ class WalkForwardValidationTest {
                             .mapToLong(Expense::getAmount)
                             .sum();
                     additionalHighAnomalies.add(new FeedbackRenderer.AnomalyInfo(
-                            Categories.name(catId), bestMag, catWeeklyAmt, bestEmotion, bestBasis));
+                            Categories.name(catId), bestMag, catWeeklyAmt, bestEmotion, bestBasis, (int)
+                                    thisWeek.stream()
+                                            .filter(e -> e.isVariable() && Objects.equals(e.getCategoryId(), fCatId))
+                                            .count()));
                 }
             }
             additionalHighAnomalies.sort(Comparator.comparingDouble(FeedbackRenderer.AnomalyInfo::magnitude)
@@ -896,7 +924,8 @@ class WalkForwardValidationTest {
                     type,
                     bw,
                     overall,
-                    anomalyBasis);
+                    anomalyBasis,
+                    anomalyWeeklyCount);
 
             System.out.printf("%n=== [검증 4] 제%d주차 (%s ~ %s) ===%n", week, weekStart, weekEnd);
             System.out.printf("예측 월말 지출  : %,d원 / 가용예산 %,d원%n", ctx.predictedMonthEndWon(), AVAILABLE_BUDGET);
