@@ -253,6 +253,144 @@ class FeedbackRendererTest {
         assertThat(captor.getValue()).contains("구체적이고 확신 있는");
     }
 
+    // ── 측정 도구(LlmRenderMeter) 판정 검증 (#111) ──
+
+    @Nested
+    @DisplayName("LlmRenderMeter — 실제 렌더러 동작 기준 판정")
+    class LlmRenderMeterTest {
+
+        private static final String MATCH = "예상 지출 800,000원이에요.";
+        private static final String MISMATCH = "예상 지출 900,000원이에요."; // 12.5% 오차 → 거절
+
+        private final LlmRenderMeter meter = new LlmRenderMeter();
+
+        /** 응답을 순서대로 돌려주는 가짜 LLM. RuntimeException 원소는 던진다. */
+        private LlmClient scripted(Object... answers) {
+            java.util.Iterator<Object> it = List.of(answers).iterator();
+            return (system, user) -> {
+                Object next = it.next();
+                if (next instanceof RuntimeException e) throw e;
+                return (String) next;
+            };
+        }
+
+        private void renderOnce(LlmClient stub, String label) {
+            when(llmProvider.getIfAvailable()).thenReturn(meter.wrap(stub));
+            FeedbackContext ctx = contextBuilder()
+                    .feedbackType(FeedbackType.ALERT)
+                    .predictedMonthEndWon(800_000)
+                    .build();
+            meter.begin();
+            Rendered result = renderer.render(ctx);
+            meter.end(result.text(), label);
+        }
+
+        @Test
+        @DisplayName("1차 응답이 검증 통과 → 1차 통과, 거절 0")
+        void firstAttemptPass() {
+            renderOnce(scripted(MATCH), "case");
+
+            assertThat(meter.passedAt(1)).isEqualTo(1);
+            assertThat(meter.totalCalls()).isEqualTo(1);
+            assertThat(meter.rejectedCount()).isZero();
+            assertThat(meter.fallbackVerify() + meter.fallbackError()).isZero();
+        }
+
+        @Test
+        @DisplayName("불일치 2회 후 3차 통과 → 3차 통과, 거절 2")
+        void thirdAttemptPass() {
+            renderOnce(scripted(MISMATCH, MISMATCH, MATCH), "case");
+
+            assertThat(meter.passedAt(3)).isEqualTo(1);
+            assertThat(meter.passedAt(1)).isZero();
+            assertThat(meter.totalCalls()).isEqualTo(3);
+            assertThat(meter.rejectedCount()).isEqualTo(2);
+            assertThat(meter.responses()).isEqualTo(3);
+        }
+
+        @Test
+        @DisplayName("3회 모두 불일치 → 검증 실패 폴백, 거절 3")
+        void allMismatch_verifyFallback() {
+            renderOnce(scripted(MISMATCH, MISMATCH, MISMATCH), "case");
+
+            assertThat(meter.fallbackVerify()).isEqualTo(1);
+            assertThat(meter.fallbackError()).isZero();
+            assertThat(meter.llmTextUsed()).isZero();
+            assertThat(meter.rejectedCount()).isEqualTo(3);
+        }
+
+        @Test
+        @DisplayName("LLM 예외 → 오류 폴백, 응답·거절 0")
+        void exception_errorFallback() {
+            renderOnce(scripted(new RuntimeException("timeout")), "case");
+
+            assertThat(meter.fallbackError()).isEqualTo(1);
+            assertThat(meter.fallbackVerify()).isZero();
+            assertThat(meter.totalCalls()).isEqualTo(1);
+            assertThat(meter.responses()).isZero();
+            assertThat(meter.rejectedCount()).isZero();
+        }
+
+        @Test
+        @DisplayName("빈 응답 → 재시도 없이 오류 폴백, 빈 응답은 거절로 세지 않음")
+        void blankResponse_errorFallback() {
+            renderOnce(scripted(""), "case");
+
+            assertThat(meter.fallbackError()).isEqualTo(1);
+            assertThat(meter.totalCalls()).isEqualTo(1);
+            assertThat(meter.rejectedCount()).isZero();
+        }
+
+        @Test
+        @DisplayName("1차 불일치 후 예외 → 오류 폴백, 1차 응답은 거절로 집계")
+        void mismatchThenException_errorFallbackWithOneRejected() {
+            renderOnce(scripted(MISMATCH, new RuntimeException("timeout")), "case");
+
+            assertThat(meter.fallbackError()).isEqualTo(1);
+            assertThat(meter.totalCalls()).isEqualTo(2);
+            assertThat(meter.rejectedCount()).isEqualTo(1);
+        }
+
+        @Test
+        @DisplayName("반복 렌더 라벨에 반복 번호와 최종 결과가 붙는다")
+        void rejectedLineContainsRepAndOutcome() {
+            when(llmProvider.getIfAvailable()).thenReturn(meter.wrap(scripted(MISMATCH, MATCH)));
+            FeedbackContext ctx = contextBuilder()
+                    .feedbackType(FeedbackType.ALERT)
+                    .predictedMonthEndWon(800_000)
+                    .build();
+            meter.begin();
+            Rendered result = renderer.render(ctx);
+            meter.end(result.text(), "제18주차", 2);
+
+            assertThat(meter.rejectedLines()).containsExactly("[제18주차 r2 / 시도 1 | 최종: 2차 통과] " + MISMATCH);
+            assertThat(meter.acceptedLines()).containsExactly("[제18주차 r2 / 시도 2] " + MATCH);
+        }
+
+        @Test
+        @DisplayName("템플릿 폴백 문장은 통과 응답으로 기록하지 않는다")
+        void fallbackNotRecordedAsAccepted() {
+            renderOnce(scripted(MISMATCH, MISMATCH, MISMATCH), "case");
+
+            assertThat(meter.acceptedLines()).isEmpty();
+        }
+
+        @Test
+        @DisplayName("여러 렌더 누적 집계")
+        void accumulatesAcrossRenders() {
+            renderOnce(scripted(MATCH), "r1");
+            renderOnce(scripted(MISMATCH, MATCH), "r2");
+            renderOnce(scripted(MISMATCH, MISMATCH, MISMATCH), "r3");
+
+            assertThat(meter.renders()).isEqualTo(3);
+            assertThat(meter.totalCalls()).isEqualTo(6);
+            assertThat(meter.passedAt(1)).isEqualTo(1);
+            assertThat(meter.passedAt(2)).isEqualTo(1);
+            assertThat(meter.fallbackVerify()).isEqualTo(1);
+            assertThat(meter.rejectedCount()).isEqualTo(4);
+        }
+    }
+
     // ── 헬퍼 ──
 
     private FeedbackContext alertContext() {

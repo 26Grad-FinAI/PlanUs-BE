@@ -14,6 +14,7 @@ import com.planus.backend.domain.aifeedback.entity.Expense;
 import com.planus.backend.domain.aifeedback.llm.AnthropicLlmClient;
 import com.planus.backend.domain.aifeedback.llm.FeedbackRenderer;
 import com.planus.backend.domain.aifeedback.llm.LlmClient;
+import com.planus.backend.domain.aifeedback.llm.LlmRenderMeter;
 import java.io.BufferedReader;
 import java.io.InputStreamReader;
 import java.time.DayOfWeek;
@@ -59,6 +60,10 @@ class WalkForwardValidationTest {
     private static final long MONTHLY_INCOME = 1_200_000L; // 월 수입 120만원
     private static final long SAVINGS_GOAL = 200_000L; // 저축 목표 20만원
     private static final long AVAILABLE_BUDGET = MONTHLY_INCOME - SAVINGS_GOAL; // 가용예산 100만원
+
+    /** LLM 검증 반복 횟수. 환경변수 LLM_REPEAT로 지정 (기본 1). 숫자 후검증 통과율 측정용. */
+    private static final int LLM_REPEAT = Math.max(
+            1, Integer.parseInt(Optional.ofNullable(System.getenv("LLM_REPEAT")).orElse("1")));
 
     // YearMonth → (categoryId → 예산)
     private static Map<YearMonth, Map<Integer, Long>> BUDGETS_BY_MONTH;
@@ -538,10 +543,13 @@ class WalkForwardValidationTest {
         Assumptions.assumeTrue(apiKey != null && !apiKey.isBlank(), "ANTHROPIC_API_KEY 미설정 → 스킵");
 
         // AnthropicLlmClient 직접 생성 (리플렉션으로 @Value 필드 주입)
-        AnthropicLlmClient llmClient = new AnthropicLlmClient();
-        setField(llmClient, "apiKey", apiKey);
-        setField(llmClient, "model", "claude-sonnet-4-5");
-        setField(llmClient, "maxTokens", 600);
+        AnthropicLlmClient rawLlmClient = new AnthropicLlmClient();
+        setField(rawLlmClient, "apiKey", apiKey);
+        setField(rawLlmClient, "model", "claude-sonnet-4-5");
+        setField(rawLlmClient, "maxTokens", 600);
+        // 호출을 기록해 1차 통과 / 재시도 후 통과 / 템플릿 폴백을 집계한다 (#111)
+        LlmRenderMeter stats = new LlmRenderMeter();
+        LlmClient llmClient = stats.wrap(rawLlmClient);
 
         // ObjectProvider — getIfAvailable()만 구현
         ObjectProvider<LlmClient> provider = new ObjectProvider<>() {
@@ -906,7 +914,12 @@ class WalkForwardValidationTest {
             }
             System.out.println("-".repeat(60));
 
-            FeedbackRenderer.Rendered result = renderer.render(ctx);
+            FeedbackRenderer.Rendered result = null;
+            for (int r = 0; r < LLM_REPEAT; r++) {
+                stats.begin();
+                result = renderer.render(ctx);
+                stats.end(result.text(), "제" + week + "주차", r + 1);
+            }
             System.out.println("신뢰도 : " + result.confidence());
             System.out.println();
             System.out.println(result.text());
@@ -914,6 +927,7 @@ class WalkForwardValidationTest {
         }
 
         System.out.printf("%n총 %d개 ALERT 주차 피드백 생성 완료%n", renderedCount);
+        stats.print("[검증 4] 주간 피드백 (반복 " + LLM_REPEAT + "회)");
         assertThat(renderedCount).isGreaterThanOrEqualTo(0);
     }
 
@@ -927,10 +941,13 @@ class WalkForwardValidationTest {
         String apiKey = System.getenv("ANTHROPIC_API_KEY");
         Assumptions.assumeTrue(apiKey != null && !apiKey.isBlank(), "ANTHROPIC_API_KEY 미설정 → 스킵");
 
-        AnthropicLlmClient llmClient = new AnthropicLlmClient();
-        setField(llmClient, "apiKey", apiKey);
-        setField(llmClient, "model", "claude-sonnet-4-5");
-        setField(llmClient, "maxTokens", 600);
+        AnthropicLlmClient rawLlmClient = new AnthropicLlmClient();
+        setField(rawLlmClient, "apiKey", apiKey);
+        setField(rawLlmClient, "model", "claude-sonnet-4-5");
+        setField(rawLlmClient, "maxTokens", 600);
+        // 호출을 기록해 1차 통과 / 재시도 후 통과 / 템플릿 폴백을 집계한다 (#111)
+        LlmRenderMeter stats = new LlmRenderMeter();
+        LlmClient llmClient = stats.wrap(rawLlmClient);
 
         ObjectProvider<LlmClient> provider = new ObjectProvider<>() {
             public LlmClient getObject() {
@@ -1022,7 +1039,12 @@ class WalkForwardValidationTest {
             }
             System.out.println("-".repeat(60));
 
-            FeedbackRenderer.Rendered result = renderer.renderMonthEnd(ctx);
+            FeedbackRenderer.Rendered result = null;
+            for (int r = 0; r < LLM_REPEAT; r++) {
+                stats.begin();
+                result = renderer.renderMonthEnd(ctx);
+                stats.end(result.text(), ym + " 월말", r + 1);
+            }
             System.out.println("신뢰도 : " + result.confidence());
             System.out.println();
             System.out.println(result.text());
@@ -1030,6 +1052,7 @@ class WalkForwardValidationTest {
         }
 
         System.out.printf("%n총 %d개월 결산 피드백 생성 완료%n", renderedCount);
+        stats.print("[검증 5] 월말 결산 (반복 " + LLM_REPEAT + "회)");
         assertThat(renderedCount).isGreaterThanOrEqualTo(0);
     }
 
