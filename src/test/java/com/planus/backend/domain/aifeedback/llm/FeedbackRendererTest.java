@@ -261,6 +261,25 @@ class FeedbackRendererTest {
     class ManWonBracketTest {
 
         @Test
+        @DisplayName("천원 단위 내림·올림 + 10% 이내: 8,557원 → '8천 원'·'9천 원' 통과, '7천 원' 거절 (exp1 24주차)")
+        void cheonWonBracket() {
+            assertThat(renderer.isAllowedExpression(8_000, 8_557)).isTrue(); // 6.5%
+            assertThat(renderer.isAllowedExpression(9_000, 8_557)).isTrue(); // 5.2%
+            assertThat(renderer.isAllowedExpression(7_000, 8_557)).isFalse(); // 단위 밖
+            assertThat(renderer.isAllowedExpression(2_000, 1_500)).isFalse(); // 33%
+        }
+
+        @Test
+        @DisplayName("제안 속 예시 금액도 데이터에 없으면 거절 — 사용자 판정 (exp3 7월 결산 '예: 1만 5천원')")
+        void exampleAmountInAdvice_rejected() {
+            FeedbackContext ctx =
+                    contextBuilder().feedbackType(FeedbackType.ALERT).build();
+
+            assertThat(renderer.verifyNumbers("한 번 먹을 때 예산(예: 1만 5천원)을 정해보는 건 어떨까요?", ctx))
+                    .isFalse();
+        }
+
+        @Test
         @DisplayName("만원 단위 내림 + 수식어: 117,266원 → '11만 원 넘게' 통과 (exp0 오탐 최다 사례)")
         void floorWithQualifier_passes() {
             assertThat(renderer.isAllowedExpression(110_000, 117_266)).isTrue(); // 6.2%

@@ -61,6 +61,8 @@ public class FeedbackRenderer {
 
     private static final long MAN_WON = 10_000;
 
+    private static final long CHEON_WON = 1_000;
+
     private final ObjectProvider<LlmClient> llm;
 
     public FeedbackRenderer(ObjectProvider<LlmClient> llm) {
@@ -255,15 +257,17 @@ public class FeedbackRenderer {
     private boolean isAllowedExpression(long extracted, long original, boolean allowManWonBracket) {
         if (isWithinTolerance(extracted, original)) return true;
         long abs = Math.abs(original);
+        // 천원 단위 내림·올림 + 10% 이내 (#111 exp5 준비: 8,557원 → "8천 원 정도", 사용자 판정 기준 — 만원 단위 규칙과 동일)
+        if (allowManWonBracket && abs >= CHEON_WON && isUnitBracket(extracted, abs, CHEON_WON)) return true;
         if (abs < MAN_WON) return false;
         if (isWithinTolerance(extracted, Math.round(abs / (double) MAN_WON) * MAN_WON)) return true;
-        return allowManWonBracket && isManWonBracket(extracted, abs);
+        return allowManWonBracket && isUnitBracket(extracted, abs, MAN_WON);
     }
 
-    /** 만원 단위 내림값 또는 올림값이면서 원본과 {@link #MAN_WON_BRACKET_TOLERANCE} 이내인지. */
-    private boolean isManWonBracket(long extracted, long original) {
-        long floor = (original / MAN_WON) * MAN_WON;
-        long ceil = original % MAN_WON == 0 ? floor : floor + MAN_WON;
+    /** {@code unit} 단위 내림값 또는 올림값이면서 원본과 {@link #MAN_WON_BRACKET_TOLERANCE} 이내인지. */
+    private static boolean isUnitBracket(long extracted, long original, long unit) {
+        long floor = (original / unit) * unit;
+        long ceil = original % unit == 0 ? floor : floor + unit;
         if (extracted != floor && extracted != ceil) return false;
         return Math.abs(extracted - original) <= original * MAN_WON_BRACKET_TOLERANCE;
     }
