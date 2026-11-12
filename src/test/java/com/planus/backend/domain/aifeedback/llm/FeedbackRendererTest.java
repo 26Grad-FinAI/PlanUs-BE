@@ -747,7 +747,8 @@ class FeedbackRendererTest {
                     .contains("배수는 제공된 값을 소수 첫째 자리까지 그대로 쓴다")
                     .contains("한 건 배수에 쓰지 않는다")
                     .contains("사용자에게 보이는 문장에 쓰지 않는다")
-                    .doesNotContain("MTD");
+                    .doesNotContain("MTD")
+                    .contains("특정 결제 수단이나 거래처의 건수로 바꿔 쓰지 않는다");
         }
 
         @Test
