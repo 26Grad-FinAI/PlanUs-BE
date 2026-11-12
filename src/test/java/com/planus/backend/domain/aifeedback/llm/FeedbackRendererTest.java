@@ -679,8 +679,8 @@ class FeedbackRendererTest {
                     .build();
 
             String prompt = capturedUserPrompt(ctx);
-            assertThat(prompt).contains("- 식대: MTD 초과 +191,731원 (이 중 이번 주 신규 139,940원, 9건) [절약 액션 대상 아님]");
-            assertThat(prompt).contains("- 기타: MTD 초과 +204,821원 (이 중 이번 주 신규 58,250원, 4건)\n");
+            assertThat(prompt).contains("- 식대: 이번 달 누적 초과 +191,731원 (이 중 이번 주 신규 139,940원, 9건) [절약 액션 대상 아님]");
+            assertThat(prompt).contains("- 기타: 이번 달 누적 초과 +204,821원 (이 중 이번 주 신규 58,250원, 4건)\n");
         }
 
         @Test
@@ -745,7 +745,9 @@ class FeedbackRendererTest {
             assertThat(capturedSystemPrompt(ctx))
                     .contains("'한 건' 배수는 그 거래에만 붙이고")
                     .contains("배수는 제공된 값을 소수 첫째 자리까지 그대로 쓴다")
-                    .contains("한 건 배수에 쓰지 않는다");
+                    .contains("한 건 배수에 쓰지 않는다")
+                    .contains("사용자에게 보이는 문장에 쓰지 않는다")
+                    .doesNotContain("MTD");
         }
 
         @Test
