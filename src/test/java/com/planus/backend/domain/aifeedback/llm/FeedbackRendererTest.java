@@ -337,6 +337,69 @@ class FeedbackRendererTest {
         }
     }
 
+    // ── 금액 형식 인식 (#111, exp4: "5만 8,970원" 오인식 4건, "26만 9천 원" 미검사) ──
+
+    @Nested
+    @DisplayName("금액 형식 — 복합 표기 추출")
+    class MoneyFormatTest {
+
+        @Test
+        @DisplayName("N만 N,NNN원 / N만 N천 원 / N천 N백 원 — exp1~4 실제 문장")
+        void compoundKoreanAmounts() {
+            assertThat(renderer.extractMoneyValues("회식 5만 8,970원이 평소 한 건 금액 1만 900원의 5.4배"))
+                    .containsExactly(58_970L, 10_900L);
+            assertThat(renderer.extractMoneyValues("이번 주 지출이 26만 9천원으로, 전주보다 10만 5천원 줄었어요"))
+                    .containsExactly(269_000L, 105_000L);
+            assertThat(renderer.extractMoneyValues("저축 목표에서 5만 4,586원 멀어졌어요. 37만 4,740원을 썼어요"))
+                    .containsExactly(54_586L, 374_740L);
+            assertThat(renderer.extractMoneyValues("식료품에서 7천 8백 원, 교통에서 8천 원 정도"))
+                    .containsExactly(7_800L, 8_000L);
+            assertThat(renderer.extractMoneyValues("1만 5천 3백 원")).containsExactly(15_300L);
+        }
+
+        @Test
+        @DisplayName("기존 형식 유지: N만원, N.N만원, N,NNN원, 퍼센트 무시")
+        void existingFormatsKept() {
+            assertThat(renderer.extractMoneyValues("12만원과 5,000원, 8.4만원을 썼어요. 35%는 무시."))
+                    .containsExactly(120_000L, 5_000L, 84_000L);
+            assertThat(renderer.extractMoneyValues("5만 원 그리고 3,000원")).containsExactly(50_000L, 3_000L);
+        }
+
+        @Test
+        @DisplayName("만원 뒤 다른 숫자가 금액이 아니면 합치지 않음: '5만 원 3건'")
+        void notMergedAcrossNonMoney() {
+            assertThat(renderer.extractMoneyValues("5만 원 3건이 나갔어요")).containsExactly(50_000L);
+        }
+
+        @Test
+        @DisplayName("'5~6만 원대'는 5만~6.9만 범위 (exp3 31주차 오탐: 53,900·59,100원)")
+        void rangeWithStart() {
+            assertThat(renderer.extractMoneyMentions("FBS 출금이 5~6만 원대로 여러 건"))
+                    .containsExactly(new FeedbackRenderer.MoneyMention(60_000, true, 50_000));
+
+            FeedbackContext ctx = contextBuilder()
+                    .feedbackType(FeedbackType.ALERT)
+                    .weekHighlights(List.of(new FeedbackRenderer.TransactionHighlight(
+                            java.time.LocalDate.of(2026, 9, 6), "기타", 53_900, "FBS 출금", "NECESSARY")))
+                    .build();
+            assertThat(renderer.verifyNumbers("FBS 출금이 5~6만 원대로 여러 건 있었어요.", ctx))
+                    .isTrue();
+        }
+
+        @Test
+        @DisplayName("복합 표기도 숫자 검증: '5만 8,970원' 통과, '6만 8,970원' 거절")
+        void compoundVerified() {
+            FeedbackContext ctx = contextBuilder()
+                    .feedbackType(FeedbackType.ALERT)
+                    .weekHighlights(List.of(new FeedbackRenderer.TransactionHighlight(
+                            java.time.LocalDate.of(2026, 6, 14), "기타", 58_970, "회식", "IMPULSE")))
+                    .build();
+
+            assertThat(renderer.verifyNumbers("회식 5만 8,970원이 나갔어요.", ctx)).isTrue();
+            assertThat(renderer.verifyNumbers("회식 6만 8,970원이 나갔어요.", ctx)).isFalse();
+        }
+    }
+
     // ── "N만 원대" 범위 표현 (#111, exp2 23주차 오탐 사례) ──
 
     @Nested

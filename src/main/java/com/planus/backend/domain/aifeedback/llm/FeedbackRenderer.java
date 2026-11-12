@@ -32,10 +32,20 @@ public class FeedbackRenderer {
     private static final Logger log = LoggerFactory.getLogger(FeedbackRenderer.class);
 
     /**
-     * 금액("N만원", "N만 원", "N,NNN원") 추출 정규식. 퍼센트·배율·건수·회 등은 매칭 안 함.
-     * "만\\s*원" 으로 띄어쓰기 허용 — LLM이 "5만 원"처럼 쓰는 경우를 검증 대상으로 포함한다.
+     * 금액 추출 정규식. 퍼센트·배율·건수·회 등은 매칭 안 함. 왼쪽부터 우선 매칭하므로 복합 표기가 먼저 잡힌다.
+     *
+     * <ol>
+     *   <li>만원 단위 + 나머지: "5만 원", "8.4만원", "5만 8,970원", "26만 9천 원", "1만 5천 3백 원", "5~6만 원대"(그룹 1: 범위 시작)
+     *   <li>천 단위: "8천 원", "7천 8백 원"
+     *   <li>숫자: "5,000원"
+     * </ol>
+     *
+     * <p>#111 exp4: "5만 8,970원"을 "8,970원"으로 읽어 오탐 4건, "26만 9천 원"은 아예 미검사였다.
      */
-    private static final Pattern MONEY_PATTERN = Pattern.compile("(\\d[\\d,]*(?:\\.\\d+)?)만\\s*원|(\\d[\\d,]*)\\s*원");
+    private static final Pattern MONEY_PATTERN = Pattern.compile("(?:(\\d+)\\s*~\\s*)?(\\d[\\d,]*(?:\\.\\d+)?)만"
+            + "(?:\\s*(\\d)천)?(?:\\s*(\\d)백)?(?:\\s*(\\d[\\d,]*))?\\s*원"
+            + "|(\\d)천(?:\\s*(\\d)백)?(?:\\s*(\\d+))?\\s*원"
+            + "|(\\d[\\d,]*)\\s*원");
 
     /** 숫자 후검증 허용 오차. LLM이 자연스럽게 반올림하는 것을 허용. */
     private static final double NUMBER_TOLERANCE = 0.05;
@@ -199,7 +209,7 @@ public class FeedbackRenderer {
         // "N만 원대"는 구간 진술이므로 구간 규칙으로만 판정 (근사 규칙으로 통과시키면 45,900원 → "5만 원대"가 올림으로 통과)
         return mentions.stream().allMatch(m -> allowed.stream()
                 .anyMatch(a -> allowManWonBracket && m.manWonRange()
-                        ? isInManWonRange(m.value(), a)
+                        ? isInManWonRange(m.rangeFrom() > 0 ? m.rangeFrom() : m.value(), m.value(), a)
                         : isAllowedExpression(m.value(), a, allowManWonBracket)));
     }
 
@@ -207,9 +217,10 @@ public class FeedbackRenderer {
      * "N만 원대" 범위 표현 (#111): 원본이 [N만, N만 + 9,999] 구간이면 사실과 맞으므로 허용한다. "N만 원 정도"와 달리 상대 오차 상한(10%)을 두지
      * 않는다 — 45,900원 → "4만 원대"는 맞지만(12.9%) "4만 원 정도"는 거절. exp2에서 "6만 원대"(66,700원)·"4만 원대"(45,900원)가 오탐.
      */
-    private static boolean isInManWonRange(long rangeStart, long original) {
+    /** 원본이 [from, last + 구간 폭) 안인지. "6만 원대"는 from = last = 6만, "5~6만 원대"는 from = 5만, last = 6만. */
+    private static boolean isInManWonRange(long from, long last, long original) {
         long abs = Math.abs(original);
-        return abs >= MAN_WON && abs >= rangeStart && abs < rangeStart + manWonRangeWidth(rangeStart);
+        return abs >= MAN_WON && abs >= from && abs < last + manWonRangeWidth(last);
     }
 
     /**
@@ -331,27 +342,47 @@ public class FeedbackRenderer {
      * 텍스트 속 금액 언급.
      *
      * @param manWonRange "N만 원대"처럼 만원 단위 정수 뒤에 '대'가 붙은 범위 표현인지 ("원 대비"는 제외)
+     * @param rangeFrom   "5~6만 원대"의 시작(5만). 범위 시작이 없으면 0
      */
-    record MoneyMention(long value, boolean manWonRange) {}
+    record MoneyMention(long value, boolean manWonRange, long rangeFrom) {
+
+        MoneyMention(long value, boolean manWonRange) {
+            this(value, manWonRange, 0);
+        }
+    }
 
     List<MoneyMention> extractMoneyMentions(String text) {
         List<MoneyMention> mentions = new ArrayList<>();
         Matcher m = MONEY_PATTERN.matcher(text);
         while (m.find()) {
             try {
-                if (m.group(1) != null) {
-                    double manWon = Double.parseDouble(m.group(1).replace(",", ""));
-                    boolean range = manWon == Math.floor(manWon) && isRangeSuffix(text, m.end());
-                    mentions.add(new MoneyMention(Math.round(manWon * 10_000), range));
-                } else if (m.group(2) != null) {
-                    long won = Long.parseLong(m.group(2).replace(",", ""));
-                    mentions.add(new MoneyMention(won, false));
+                if (m.group(2) != null) {
+                    double manWon = Double.parseDouble(m.group(2).replace(",", ""));
+                    long rest = digit(m.group(3)) * 1_000 + digit(m.group(4)) * 100 + number(m.group(5));
+                    long value = Math.round(manWon * 10_000) + rest;
+                    // 범위("N만 원대")는 만원 단위 정수만 — "5만 8천 원대" 같은 표현은 범위로 보지 않는다
+                    boolean range = rest == 0 && manWon == Math.floor(manWon) && isRangeSuffix(text, m.end());
+                    long from = range && m.group(1) != null ? Long.parseLong(m.group(1)) * 10_000 : 0;
+                    mentions.add(new MoneyMention(value, range, from));
+                } else if (m.group(6) != null) {
+                    long value = digit(m.group(6)) * 1_000 + digit(m.group(7)) * 100 + number(m.group(8));
+                    mentions.add(new MoneyMention(value, false));
+                } else if (m.group(9) != null) {
+                    mentions.add(new MoneyMention(number(m.group(9)), false));
                 }
             } catch (NumberFormatException ignore) {
                 // 파싱 실패 → 무시
             }
         }
         return mentions;
+    }
+
+    private static long digit(String g) {
+        return g == null ? 0 : Long.parseLong(g);
+    }
+
+    private static long number(String g) {
+        return g == null ? 0 : Long.parseLong(g.replace(",", ""));
     }
 
     /** 금액 바로 뒤가 '대'(범위)인지. "원대비"·"원 대비"는 비교 표현이므로 제외. */
