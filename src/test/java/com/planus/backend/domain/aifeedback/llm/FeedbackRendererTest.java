@@ -668,6 +668,46 @@ class FeedbackRendererTest {
         }
 
         @Test
+        @DisplayName("절약 액션에 없는 초과 카테고리에 '[절약 액션 대상 아님]' 표시 (exp5 33주차: 만족 소비라 제외된 식대 절약액을 지어냄)")
+        void overspendWithoutAction_marked() {
+            FeedbackContext ctx = contextBuilder()
+                    .feedbackType(FeedbackType.ALERT)
+                    .overspendCategories(List.of(
+                            new CategoryOverspend("식대", 191_731, 139_940, null, 9),
+                            new CategoryOverspend("기타", 204_821, 58_250, null, 4)))
+                    .actions(List.of(new ActionSummary("기타", 73_932, null, 0.5)))
+                    .build();
+
+            String prompt = capturedUserPrompt(ctx);
+            assertThat(prompt).contains("- 식대: MTD 초과 +191,731원 (이 중 이번 주 신규 139,940원, 9건) [절약 액션 대상 아님]");
+            assertThat(prompt).contains("- 기타: MTD 초과 +204,821원 (이 중 이번 주 신규 58,250원, 4건)\n");
+        }
+
+        @Test
+        @DisplayName("절약 액션이 없는 주는 '[절약 액션] 없음' 명시 (exp5 17주차: '월 5~10만 원 아낄 수' 지어냄)")
+        void noActions_explicitlyStated() {
+            FeedbackContext ctx =
+                    contextBuilder().feedbackType(FeedbackType.ALERT).build();
+
+            assertThat(capturedUserPrompt(ctx)).contains("[절약 액션] 없음 — 절약 금액이나 절약 효과(원)를 제시하지 말 것");
+            assertThat(capturedSystemPrompt(ctx)).contains("줄이기를 권하더라도 금액을 붙이지 않는다");
+        }
+
+        @Test
+        @DisplayName("월말 결산 규칙: 개선 제안에 금액·절약 효과를 붙이지 않음 (exp2·3 3월 결산 '월 15만 원 아낄 수')")
+        void monthEnd_noSavingsAmountRule() {
+            LlmClient client = mock(LlmClient.class);
+            when(llmProvider.getIfAvailable()).thenReturn(client);
+            when(client.complete(anyString(), anyString())).thenReturn("이번 달 결산이에요.");
+            renderer.renderMonthEnd(new FeedbackRenderer.MonthEndContext(
+                    java.time.YearMonth.of(2026, 3), 1_940_547, 1_000_000, -940_547, List.of(), List.of()));
+
+            var captor = org.mockito.ArgumentCaptor.forClass(String.class);
+            verify(client).complete(captor.capture(), anyString());
+            assertThat(captor.getValue()).contains("제안에는 금액(원)이나 절약 효과를 붙이지 않는다");
+        }
+
+        @Test
         @DisplayName("목록이 잘리지 않으면 기존 '메모:' 표기")
         void count_notTruncated_plainMemoHeader() {
             List<com.planus.backend.domain.aifeedback.cause.MemoEvidence> memos =

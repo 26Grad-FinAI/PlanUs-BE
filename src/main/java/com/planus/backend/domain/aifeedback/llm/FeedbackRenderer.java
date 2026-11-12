@@ -77,7 +77,7 @@ public class FeedbackRenderer {
         - 숫자는 주어진 값만 쓴다. 과장/추측 금지. 없는 사실을 만들지 않는다.
         - 금액은 제공된 숫자를 그대로 사용할 것. 임의로 반올림하거나 바꾸지 않는다.
         - 절약 제안은 '어느 항목에서 얼마를 줄이면 저축 목표에 어떤 효과'인지 구체적으로 연결한다.
-        - [절약 액션] 항목이 없으면 절약 금액을 임의로 만들지 않는다. 이상 신호 내용만 언급한다.
+        - 절약 금액·절약 효과(원)는 [절약 액션]에 있는 카테고리와 금액만 쓴다. [절약 액션 대상 아님] 카테고리나 [절약 액션]이 없는 주에는 'N회 줄이면 N만 원', '월 N만 원 아낄 수' 같은 금액을 만들지 않는다. 줄이기를 권하더라도 금액을 붙이지 않는다.
         - 초과 카테고리의 'MTD 초과' 금액은 이번 주 신규 금액을 이미 포함한 누적값이다. 두 숫자를 합산하지 않는다. '이번 주 신규'가 MTD의 일부임을 인식하고 맥락에 맞게 사용한다.
         - 초과 카테고리의 '이번 주 신규' 금액이 작으면 그 카테고리는 이번 주 원인이 아니라 이전 주 누적임을 인식하고 이번 주 피드백에서 주요 원인으로 다루지 않는다.
         - 원인 신뢰도가 '높음'이 아니면 원인을 단정하지 말고 가볍게만 언급하거나 생략한다.
@@ -100,7 +100,7 @@ public class FeedbackRenderer {
         너는 한국 20대를 위한 친근하고 간결한 가계부 코치다. 이번 달 결산 피드백을 작성한다. 규칙:
         - 이번 달 확정 지출과 가용예산을 비교해서 결산한다.
         - 잘 아낀 카테고리가 있으면 칭찬한다.
-        - 다음 달 개선할 것을 1가지만 구체적으로 제안한다.
+        - 다음 달 개선할 것을 1가지만 구체적으로 제안한다. 제안에는 금액(원)이나 절약 효과를 붙이지 않는다 — 결산 데이터에 없는 절약 금액을 만들지 않는다.
         - 숫자는 주어진 값만 쓴다. 없는 사실을 만들지 않는다.
         - 금액은 제공된 숫자를 그대로 사용할 것. 임의로 반올림하거나 바꾸지 않는다.
         - 항상 '~요/~어요' 체 존댓말로 일관되게 작성한다.
@@ -498,6 +498,8 @@ public class FeedbackRenderer {
         // ── 초과 카테고리 + 원인 [5] ──
         if (!c.overspendCategories().isEmpty()) {
             sb.append("\n[초과 예상 카테고리]\n");
+            Set<String> actionCategories = new HashSet<>();
+            c.actions().forEach(a -> actionCategories.add(a.categoryName()));
             for (CategoryOverspend ov : c.overspendCategories()) {
                 sb.append("- ")
                         .append(ov.categoryName())
@@ -529,6 +531,10 @@ public class FeedbackRenderer {
                     if (cs.repeatStreak() != null && cs.repeatStreak() >= 1) {
                         sb.append(" [").append(cs.repeatStreak()).append("주 연속 초과]");
                     }
+                }
+                // 절약 액션 계산기가 제외한 카테고리(만족 소비 비중 70%+, 필수·민감 카테고리 등)임을 알린다 (#111: LLM이 식대 절약액을 지어냄)
+                if (!actionCategories.contains(ov.categoryName())) {
+                    sb.append(" [절약 액션 대상 아님]");
                 }
                 sb.append("\n");
 
@@ -633,7 +639,10 @@ public class FeedbackRenderer {
         }
 
         // ── 절약 액션 [6] ──
-        if (!c.actions().isEmpty()) {
+        if (c.actions().isEmpty()) {
+            // 액션이 없는 주에도 LLM이 "주 1~2회 줄이면 월 5~10만 원" 같은 금액을 지어냄 (#111 exp5 17주차)
+            sb.append("\n[절약 액션] 없음 — 절약 금액이나 절약 효과(원)를 제시하지 말 것\n");
+        } else {
             sb.append("\n[절약 액션]\n");
             for (ActionSummary a : c.actions()) {
                 sb.append("- ")
