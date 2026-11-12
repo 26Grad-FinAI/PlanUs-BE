@@ -193,10 +193,22 @@ public class FeedbackRenderer {
      * @param allowed 프롬프트에 제공한 원본 금액 (반올림하지 않은 값)
      */
     private boolean checkExtracted(String text, Set<Long> allowed, boolean allowManWonBracket) {
-        List<Long> extracted = extractMoneyValues(text);
-        if (extracted.isEmpty()) return true;
-        return extracted.stream()
-                .allMatch(v -> allowed.stream().anyMatch(a -> isAllowedExpression(v, a, allowManWonBracket)));
+        List<MoneyMention> mentions = extractMoneyMentions(text);
+        if (mentions.isEmpty()) return true;
+        // "N만 원대"는 구간 진술이므로 구간 규칙으로만 판정 (근사 규칙으로 통과시키면 45,900원 → "5만 원대"가 올림으로 통과)
+        return mentions.stream().allMatch(m -> allowed.stream()
+                .anyMatch(a -> allowManWonBracket && m.manWonRange()
+                        ? isInManWonRange(m.value(), a)
+                        : isAllowedExpression(m.value(), a, allowManWonBracket)));
+    }
+
+    /**
+     * "N만 원대" 범위 표현 (#111): 원본이 [N만, N만 + 9,999] 구간이면 사실과 맞으므로 허용한다. "N만 원 정도"와 달리 상대 오차 상한(10%)을 두지
+     * 않는다 — 45,900원 → "4만 원대"는 맞지만(12.9%) "4만 원 정도"는 거절. exp2에서 "6만 원대"(66,700원)·"4만 원대"(45,900원)가 오탐.
+     */
+    private static boolean isInManWonRange(long rangeStart, long original) {
+        long abs = Math.abs(original);
+        return abs >= MAN_WON && abs >= rangeStart && abs < rangeStart + MAN_WON;
     }
 
     /**
@@ -292,22 +304,40 @@ public class FeedbackRenderer {
      * 정규식이 "원" 접미사 있는 것만 매칭 → 퍼센트·배율·건수 무시.
      */
     List<Long> extractMoneyValues(String text) {
-        List<Long> values = new ArrayList<>();
+        return extractMoneyMentions(text).stream().map(MoneyMention::value).toList();
+    }
+
+    /**
+     * 텍스트 속 금액 언급.
+     *
+     * @param manWonRange "N만 원대"처럼 만원 단위 정수 뒤에 '대'가 붙은 범위 표현인지 ("원 대비"는 제외)
+     */
+    record MoneyMention(long value, boolean manWonRange) {}
+
+    List<MoneyMention> extractMoneyMentions(String text) {
+        List<MoneyMention> mentions = new ArrayList<>();
         Matcher m = MONEY_PATTERN.matcher(text);
         while (m.find()) {
             try {
                 if (m.group(1) != null) {
                     double manWon = Double.parseDouble(m.group(1).replace(",", ""));
-                    values.add(Math.round(manWon * 10_000));
+                    boolean range = manWon == Math.floor(manWon) && isRangeSuffix(text, m.end());
+                    mentions.add(new MoneyMention(Math.round(manWon * 10_000), range));
                 } else if (m.group(2) != null) {
                     long won = Long.parseLong(m.group(2).replace(",", ""));
-                    values.add(won);
+                    mentions.add(new MoneyMention(won, false));
                 }
             } catch (NumberFormatException ignore) {
                 // 파싱 실패 → 무시
             }
         }
-        return values;
+        return mentions;
+    }
+
+    /** 금액 바로 뒤가 '대'(범위)인지. "원대비"·"원 대비"는 비교 표현이므로 제외. */
+    private static boolean isRangeSuffix(String text, int end) {
+        if (end >= text.length() || text.charAt(end) != '대') return false;
+        return end + 1 >= text.length() || text.charAt(end + 1) != '비';
     }
 
     // ── 프롬프트 ──

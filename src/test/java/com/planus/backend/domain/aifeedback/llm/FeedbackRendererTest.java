@@ -337,6 +337,63 @@ class FeedbackRendererTest {
         }
     }
 
+    // ── "N만 원대" 범위 표현 (#111, exp2 23주차 오탐 사례) ──
+
+    @Nested
+    @DisplayName("'N만 원대' 범위 표현 — 원본이 그 만원 구간이면 허용")
+    class ManWonRangeTest {
+
+        private FeedbackContext ctxWith(long... amounts) {
+            List<FeedbackRenderer.TransactionHighlight> hs = java.util.Arrays.stream(amounts)
+                    .mapToObj(a -> new FeedbackRenderer.TransactionHighlight(
+                            java.time.LocalDate.of(2026, 7, 10), "기타", a, null, null))
+                    .toList();
+            return contextBuilder()
+                    .feedbackType(FeedbackType.ALERT)
+                    .weekHighlights(hs)
+                    .build();
+        }
+
+        @Test
+        @DisplayName("66,700원 → '6만 원대', 45,900원 → '4만 원대' 통과 (10% 초과여도 구간 안이면 사실)")
+        void rangeExpression_passes() {
+            assertThat(renderer.verifyNumbers("세일 충동구매로 6만 원대가 한 번에 나갔어요.", ctxWith(66_700)))
+                    .isTrue();
+            assertThat(renderer.verifyNumbers("스트레스 해소로 쓴 4만원대 식대도 있었어요.", ctxWith(45_900)))
+                    .isTrue();
+        }
+
+        @Test
+        @DisplayName("구간 밖이면 거절: 45,900원 → '5만 원대' (만원 단위 올림 근사로는 통과하지 않음)")
+        void outsideRange_rejected() {
+            assertThat(renderer.verifyNumbers("5만 원대 식대가 있었어요.", ctxWith(45_900)))
+                    .isFalse();
+        }
+
+        @Test
+        @DisplayName("'원대'가 아닌 근사는 기존 10% 규칙: 45,900원 → '4만 원 정도' 거절 (12.9%)")
+        void approximateNotRange_rejected() {
+            assertThat(renderer.verifyNumbers("4만 원 정도 식대가 있었어요.", ctxWith(45_900)))
+                    .isFalse();
+        }
+
+        @Test
+        @DisplayName("'원 대비'·'원대비'는 범위 표현이 아님")
+        void comparisonNotRange() {
+            assertThat(renderer.extractMoneyMentions("100만원대비 4만원대 지출"))
+                    .containsExactly(
+                            new FeedbackRenderer.MoneyMention(1_000_000, false),
+                            new FeedbackRenderer.MoneyMention(40_000, true));
+        }
+
+        @Test
+        @DisplayName("이전 규칙(만원 단위 허용 끔)에서는 범위 표현도 허용하지 않음 — 측정 도구의 '새 규칙으로 통과' 구분 유지")
+        void legacyRule_noRange() {
+            assertThat(renderer.verifyNumbers("6만 원대가 나갔어요.", ctxWith(66_700), false))
+                    .isFalse();
+        }
+    }
+
     // ── 배수 표기 (#111, exp1: 한 건 배수를 카테고리 전체에 붙인 표현이 주간 응답의 51%) ──
 
     @Nested
@@ -650,6 +707,11 @@ class FeedbackRendererTest {
             this.anomalyWeeklyAmountWon = weeklyAmountWon;
             this.anomalyConfidence = Confidence.HIGH;
             this.anomalyBasis = basis;
+            return this;
+        }
+
+        FeedbackContextBuilder weekHighlights(List<FeedbackRenderer.TransactionHighlight> v) {
+            this.weekHighlights = v;
             return this;
         }
 
