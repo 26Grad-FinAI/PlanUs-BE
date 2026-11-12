@@ -253,6 +253,89 @@ class FeedbackRendererTest {
         assertThat(captor.getValue()).contains("구체적이고 확신 있는");
     }
 
+    // ── 만원 단위 표현 허용 (#111, exp0 실측 사례 기반) ──
+
+    @Nested
+    @DisplayName("만원 단위 표현 허용 — 내림·올림 + 10% 이내")
+    class ManWonBracketTest {
+
+        @Test
+        @DisplayName("만원 단위 내림 + 수식어: 117,266원 → '11만 원 넘게' 통과 (exp0 오탐 최다 사례)")
+        void floorWithQualifier_passes() {
+            assertThat(renderer.isAllowedExpression(110_000, 117_266)).isTrue(); // 6.2%
+            assertThat(renderer.isAllowedExpression(100_000, 105_500)).isTrue(); // 5.2%
+            assertThat(renderer.isAllowedExpression(80_000, 85_219)).isTrue(); // 6.1%
+        }
+
+        @Test
+        @DisplayName("만원 단위 올림: 117,266원 → '12만 원' 통과")
+        void ceil_passes() {
+            assertThat(renderer.isAllowedExpression(120_000, 117_266)).isTrue();
+            assertThat(renderer.isAllowedExpression(90_000, 85_219)).isTrue();
+        }
+
+        @Test
+        @DisplayName("만원 단위를 벗어나면 거절: 117,266원 → '10만 원' / '13만 원'")
+        void outsideBracket_rejected() {
+            assertThat(renderer.isAllowedExpression(100_000, 117_266)).isFalse();
+            assertThat(renderer.isAllowedExpression(130_000, 117_266)).isFalse();
+        }
+
+        @Test
+        @DisplayName("만원 단위 안이어도 10% 초과면 거절: 14,400원 → '2만 원'(39%), 59,000원 → '5만 원'(15%)")
+        void insideBracketButTooFar_rejected() {
+            assertThat(renderer.isAllowedExpression(20_000, 14_400)).isFalse();
+            assertThat(renderer.isAllowedExpression(50_000, 59_000)).isFalse();
+        }
+
+        @Test
+        @DisplayName("[알려진 느슨함] 기존 반올림 규칙은 작은 금액에서 큰 차이를 허용: 14,400원 → '1만 원'(30%) 통과")
+        void knownLooseness_smallAmountRounding() {
+            // 만원 단위 반올림값(10,000)과 일치하므로 기존 규칙으로 통과한다. 이번 변경 전부터의 동작이며,
+            // 통과 응답 누락 조사에서 문제가 확인되면 반올림 규칙에도 상대 오차 상한을 두는 것을 검토한다.
+            assertThat(renderer.isAllowedExpression(10_000, 14_400)).isTrue();
+        }
+
+        @Test
+        @DisplayName("원본이 만원 배수면 올림 없음: 110,000원 → '12만 원' 거절")
+        void exactManWon_noCeil() {
+            assertThat(renderer.isAllowedExpression(110_000, 110_000)).isTrue();
+            assertThat(renderer.isAllowedExpression(120_000, 110_000)).isFalse();
+        }
+
+        @Test
+        @DisplayName("1만원 미만은 기존 5% 규칙만 적용")
+        void belowManWon_onlyTolerance() {
+            assertThat(renderer.isAllowedExpression(5_000, 5_100)).isTrue();
+            assertThat(renderer.isAllowedExpression(10_000, 5_100)).isFalse();
+        }
+
+        @Test
+        @DisplayName("기존 규칙 유지: 5% 이내 / 만원 반올림값 5% 이내")
+        void existingRulesKept() {
+            assertThat(renderer.isAllowedExpression(800_000, 790_000)).isTrue(); // 1.3%
+            assertThat(renderer.isAllowedExpression(80_000, 84_000)).isTrue(); // 반올림 8만
+            assertThat(renderer.isAllowedExpression(900_000, 800_000)).isFalse(); // 12.5%
+        }
+
+        @Test
+        @DisplayName("exp0 진짜 오류 회귀: 절약 액션에 없는 '10만 원 이상 절약'은 여전히 거절")
+        void fabricatedSavings_stillRejected() {
+            FeedbackContext ctx = contextBuilder()
+                    .feedbackType(FeedbackType.ALERT)
+                    .predictedMonthEndWon(1_142_719)
+                    .savingsImpactWon(-142_719)
+                    .actions(List.of(
+                            new ActionSummary("기타", 73_932, null, 0.5), new ActionSummary("식료품", 31_175, null, 0.5)))
+                    .build();
+
+            assertThat(renderer.verifyNumbers("외식을 줄이면 월말까지 10만 원 이상 절약할 수 있어요.", ctx))
+                    .isFalse();
+            assertThat(renderer.verifyNumbers("기타에서 7만 원 넘게 줄이면 목표에 가까워져요.", ctx))
+                    .isTrue();
+        }
+    }
+
     // ── 측정 도구(LlmRenderMeter) 판정 검증 (#111) ──
 
     @Nested
@@ -365,6 +448,29 @@ class FeedbackRendererTest {
 
             assertThat(meter.rejectedLines()).containsExactly("[제18주차 r2 / 시도 1 | 최종: 2차 통과] " + MISMATCH);
             assertThat(meter.acceptedLines()).containsExactly("[제18주차 r2 / 시도 2] " + MATCH);
+        }
+
+        @Test
+        @DisplayName("이전 규칙으로는 거절되고 새 규칙(만원 단위)으로만 통과한 응답에 표시가 붙는다")
+        void passedOnlyByNewRule_tagged() {
+            String floorExpr = "예상 지출이 11만 원 넘게 나올 것 같아요."; // 117,266원의 만원 단위 내림 (6.2%)
+            String exact = "예상 지출이 117,266원 나올 것 같아요.";
+            FeedbackContext ctx = contextBuilder()
+                    .feedbackType(FeedbackType.ALERT)
+                    .predictedMonthEndWon(117_266)
+                    .build();
+
+            for (String answer : List.of(floorExpr, exact)) {
+                when(llmProvider.getIfAvailable()).thenReturn(meter.wrap(scripted(answer)));
+                meter.begin(LlmRenderMeter.legacyRule(renderer, ctx));
+                Rendered result = renderer.render(ctx);
+                meter.end(result.text(), "case");
+            }
+
+            assertThat(meter.passedAt(1)).isEqualTo(2);
+            assertThat(meter.passedOnlyByNewRule()).isEqualTo(1);
+            assertThat(meter.acceptedLines())
+                    .containsExactly("[case / 시도 1 | 새 규칙으로 통과] " + floorExpr, "[case / 시도 1] " + exact);
         }
 
         @Test

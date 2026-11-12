@@ -40,6 +40,17 @@ public class FeedbackRenderer {
     /** 숫자 후검증 허용 오차. LLM이 자연스럽게 반올림하는 것을 허용. */
     private static final double NUMBER_TOLERANCE = 0.05;
 
+    /**
+     * 만원 단위 표현 허용 오차 (#111).
+     *
+     * <p>"117,266원 → 11만 원 넘게"처럼 만원 단위로 내림·올림한 표현은 5% 오차를 넘어도 사실과 맞는다. 실측(exp0, 거절 52건)에서
+     * 이런 표현이 오탐의 대부분이었고 실제 차이는 5.2~6.9%였다. 만원 단위 내림·올림이면서 차이 10% 이내일 때 허용한다.
+     * 10% 상한은 작은 금액의 과도한 근사(14,400원 → "2만 원", 39%)와 무관한 항목 숫자에 우연히 맞는 경우(59,000원 → "5만 원", 15%)를 막는다.
+     */
+    private static final double MAN_WON_BRACKET_TOLERANCE = 0.10;
+
+    private static final long MAN_WON = 10_000;
+
     private final ObjectProvider<LlmClient> llm;
 
     public FeedbackRenderer(ObjectProvider<LlmClient> llm) {
@@ -163,14 +174,55 @@ public class FeedbackRenderer {
      * 불일치가 하나라도 있으면 false.
      */
     boolean verifyNumbers(String text, FeedbackContext c) {
-        return checkExtracted(text, collectAllowedValues(c));
+        return verifyNumbers(text, c, true);
     }
 
-    /** 추출된 금액이 허용값 집합 안에 있는지 확인하는 공통 헬퍼. */
-    private boolean checkExtracted(String text, Set<Long> allowed) {
+    /**
+     * @param allowManWonBracket false면 만원 단위 표현 허용(#111)을 끈 이전 규칙으로 검증한다. 측정 도구가 "새 규칙 덕분에 통과한 응답"을
+     *                           구분하는 용도이며, 운영 경로는 항상 true다.
+     */
+    boolean verifyNumbers(String text, FeedbackContext c, boolean allowManWonBracket) {
+        return checkExtracted(text, collectAllowedValues(c), allowManWonBracket);
+    }
+
+    /**
+     * 추출된 금액이 모두 허용값 중 하나로 설명되는지 확인하는 공통 헬퍼.
+     *
+     * @param allowed 프롬프트에 제공한 원본 금액 (반올림하지 않은 값)
+     */
+    private boolean checkExtracted(String text, Set<Long> allowed, boolean allowManWonBracket) {
         List<Long> extracted = extractMoneyValues(text);
         if (extracted.isEmpty()) return true;
-        return extracted.stream().allMatch(v -> allowed.stream().anyMatch(a -> isWithinTolerance(v, a)));
+        return extracted.stream()
+                .allMatch(v -> allowed.stream().anyMatch(a -> isAllowedExpression(v, a, allowManWonBracket)));
+    }
+
+    /**
+     * LLM이 쓴 금액 {@code extracted}가 원본 금액 {@code original}의 허용 가능한 표현인지 판정한다.
+     * <ol>
+     *   <li>원본과 5% 이내
+     *   <li>만원 단위 반올림값과 5% 이내 ("84,000원" → "8만원")
+     *   <li>만원 단위 내림·올림이면서 원본과 10% 이내 ("117,266원" → "11만 원 넘게" / "12만 원")
+     * </ol>
+     */
+    boolean isAllowedExpression(long extracted, long original) {
+        return isAllowedExpression(extracted, original, true);
+    }
+
+    private boolean isAllowedExpression(long extracted, long original, boolean allowManWonBracket) {
+        if (isWithinTolerance(extracted, original)) return true;
+        long abs = Math.abs(original);
+        if (abs < MAN_WON) return false;
+        if (isWithinTolerance(extracted, Math.round(abs / (double) MAN_WON) * MAN_WON)) return true;
+        return allowManWonBracket && isManWonBracket(extracted, abs);
+    }
+
+    /** 만원 단위 내림값 또는 올림값이면서 원본과 {@link #MAN_WON_BRACKET_TOLERANCE} 이내인지. */
+    private boolean isManWonBracket(long extracted, long original) {
+        long floor = (original / MAN_WON) * MAN_WON;
+        long ceil = original % MAN_WON == 0 ? floor : floor + MAN_WON;
+        if (extracted != floor && extracted != ceil) return false;
+        return Math.abs(extracted - original) <= original * MAN_WON_BRACKET_TOLERANCE;
     }
 
     /**
@@ -183,55 +235,43 @@ public class FeedbackRenderer {
     }
 
     /**
-     * FeedbackContext에서 검증 대상 금액을 수집한다.
-     * 프롬프트에서 {@code exactWon()}으로 정확한 값을 전달하므로 LLM이 반올림할 가능성은 낮지만,
-     * 만원 반올림 변환값도 포함하여 {@code won()} 폴백 시에도 안전하게 통과.
+     * FeedbackContext에서 검증 대상 원본 금액을 수집한다.
+     * 반올림·만원 단위 표현 허용은 {@link #isAllowedExpression}에서 원본 기준으로 판정한다.
+     * (반올림값을 집합에 섞으면 그 값을 기준으로 다시 만원 단위를 허용해 범위가 넓어지므로 원본만 담는다.)
      */
     private Set<Long> collectAllowedValues(FeedbackContext c) {
         Set<Long> values = new HashSet<>();
-        addWithRounded(values, c.predictedMonthEndWon());
-        addWithRounded(values, c.availableBudgetWon());
-        addWithRounded(values, Math.abs(c.savingsImpactWon()));
+        values.add(c.predictedMonthEndWon());
+        values.add(c.availableBudgetWon());
+        values.add(Math.abs(c.savingsImpactWon()));
 
-        addWithRounded(values, c.weekTotalWon());
-        addWithRounded(values, c.prevWeekTotalWon());
+        values.add(c.weekTotalWon());
+        values.add(c.prevWeekTotalWon());
         if (c.weekTotalWon() > 0 && c.prevWeekTotalWon() > 0) {
-            addWithRounded(values, Math.abs(c.weekTotalWon() - c.prevWeekTotalWon()));
+            values.add(Math.abs(c.weekTotalWon() - c.prevWeekTotalWon()));
         }
-        addWithRounded(values, c.anomalyWeeklyAmountWon());
-        c.additionalHighAnomalies().forEach(a -> addWithRounded(values, a.weeklyAmountWon()));
+        values.add(c.anomalyWeeklyAmountWon());
+        c.additionalHighAnomalies().forEach(a -> values.add(a.weeklyAmountWon()));
         if (c.weekEmotion() != null) {
-            c.weekEmotion().amounts().values().forEach(v -> addWithRounded(values, v));
-            addWithRounded(values, c.weekEmotion().untaggedWon());
+            c.weekEmotion().amounts().values().forEach(v -> values.add(v));
+            values.add(c.weekEmotion().untaggedWon());
         }
         for (CategoryOverspend ov : c.overspendCategories()) {
-            addWithRounded(values, ov.overAmountWon());
-            addWithRounded(values, ov.thisWeekWon());
+            values.add(ov.overAmountWon());
+            values.add(ov.thisWeekWon());
             if (ov.causeSignals() != null) {
                 for (MemoEvidence memo : ov.causeSignals().memos()) {
-                    addWithRounded(values, memo.amount());
+                    values.add(memo.amount());
                 }
             }
         }
         for (ActionSummary a : c.actions()) {
-            addWithRounded(values, a.reductionWon());
+            values.add(a.reductionWon());
         }
         for (TransactionHighlight h : c.weekHighlights()) {
-            addWithRounded(values, h.amountWon());
+            values.add(h.amountWon());
         }
         return values;
-    }
-
-    /**
-     * 원본 값과 만원 단위 반올림값을 모두 추가한다.
-     * 프롬프트가 "84,000원"을 주지만 LLM이 "약 8만원"이라 쓸 수 있으므로,
-     * 80,000(= Math.round(84,000 / 10,000) × 10,000)도 허용 값으로 등록.
-     */
-    private void addWithRounded(Set<Long> set, long v) {
-        set.add(v);
-        if (Math.abs(v) >= 10_000) {
-            set.add(Math.round(v / 10_000.0) * 10_000);
-        }
     }
 
     /**
@@ -544,17 +584,22 @@ public class FeedbackRenderer {
 
     /** 월말 컨텍스트의 금액 숫자를 추출하고 허용 값과 대조한다. */
     boolean verifyMonthEndNumbers(String text, MonthEndContext c) {
+        return verifyMonthEndNumbers(text, c, true);
+    }
+
+    /** @see #verifyNumbers(String, FeedbackContext, boolean) */
+    boolean verifyMonthEndNumbers(String text, MonthEndContext c, boolean allowManWonBracket) {
         Set<Long> allowed = new HashSet<>();
-        addWithRounded(allowed, c.actualTotalWon());
-        addWithRounded(allowed, c.availableBudgetWon());
-        addWithRounded(allowed, Math.abs(c.budgetDiffWon()));
+        allowed.add(c.actualTotalWon());
+        allowed.add(c.availableBudgetWon());
+        allowed.add(Math.abs(c.budgetDiffWon()));
         for (CategoryResult r : c.overspendCategories()) {
-            addWithRounded(allowed, r.amountWon());
+            allowed.add(r.amountWon());
         }
         for (CategoryResult r : c.savingCategories()) {
-            addWithRounded(allowed, r.amountWon());
+            allowed.add(r.amountWon());
         }
-        return checkExtracted(text, allowed);
+        return checkExtracted(text, allowed, allowManWonBracket);
     }
 
     private String monthEndUserPrompt(MonthEndContext c) {

@@ -6,6 +6,7 @@ import java.util.List;
 import java.util.LongSummaryStatistics;
 import java.util.Map;
 import java.util.TreeMap;
+import java.util.function.Predicate;
 
 /**
  * LLM 숫자 후검증 측정 도구 (테스트 전용).
@@ -28,6 +29,8 @@ public final class LlmRenderMeter {
     private final List<String> currentCalls = new ArrayList<>();
     private int currentErrors;
     private String currentPrompt;
+    private Predicate<String> currentLegacyCheck;
+    private int passedOnlyByNewRule;
 
     private int renders;
     private int totalCalls;
@@ -62,9 +65,30 @@ public final class LlmRenderMeter {
 
     /** 렌더 1회 측정을 시작한다. */
     public void begin() {
+        begin(null);
+    }
+
+    /**
+     * 렌더 1회 측정을 시작한다.
+     *
+     * @param passesUnderLegacyRule 만원 단위 표현 허용(#111) 이전 규칙으로도 통과하는지 판정하는 함수. 통과 응답 중 이 함수가 false인 것은
+     *                              "새 규칙으로 통과"로 표시한다. null이면 구분하지 않는다.
+     */
+    public void begin(Predicate<String> passesUnderLegacyRule) {
         currentCalls.clear();
         currentErrors = 0;
         currentPrompt = null;
+        currentLegacyCheck = passesUnderLegacyRule;
+    }
+
+    /** 주간 피드백용 이전 규칙 판정 함수. */
+    public static Predicate<String> legacyRule(FeedbackRenderer renderer, FeedbackRenderer.FeedbackContext ctx) {
+        return text -> renderer.verifyNumbers(text, ctx, false);
+    }
+
+    /** 월말 결산용 이전 규칙 판정 함수. */
+    public static Predicate<String> legacyRule(FeedbackRenderer renderer, FeedbackRenderer.MonthEndContext ctx) {
+        return text -> renderer.verifyMonthEndNumbers(text, ctx, false);
     }
 
     /**
@@ -101,7 +125,10 @@ public final class LlmRenderMeter {
         String renderLabel = rep > 0 ? label + " r" + rep : label;
         if (currentPrompt != null) prompts.putIfAbsent(label, currentPrompt);
         if (acceptedIdx >= 0) {
-            accepted.add("[" + renderLabel + " / 시도 " + (acceptedIdx + 1) + "] " + finalText);
+            boolean newRuleOnly = currentLegacyCheck != null && !currentLegacyCheck.test(finalText);
+            if (newRuleOnly) passedOnlyByNewRule++;
+            accepted.add("[" + renderLabel + " / 시도 " + (acceptedIdx + 1) + (newRuleOnly ? " | 새 규칙으로 통과" : "") + "] "
+                    + finalText);
         }
         String outcome = acceptedIdx >= 0 ? (acceptedIdx + 1) + "차 통과" : "폴백";
         int rejectedUntil = acceptedIdx >= 0 ? acceptedIdx : currentCalls.size();
@@ -130,6 +157,7 @@ public final class LlmRenderMeter {
             if (k > 1) System.out.printf("%d차 시도에서 통과       : %d%n", k, v);
         });
         System.out.printf("최종 LLM 문장 사용      : %d/%d = %.1f%%%n", passed, renders, pct(passed, renders));
+        System.out.printf("  └ 새 규칙으로만 통과  : %d (만원 단위 표현 허용 #111이 없었다면 거절)%n", passedOnlyByNewRule);
         System.out.printf("템플릿 폴백(검증 실패)  : %d%n", fallbackVerify);
         System.out.printf("템플릿 폴백(오류/빈 응답): %d%n", fallbackError);
 
@@ -181,6 +209,10 @@ public final class LlmRenderMeter {
 
     public List<String> rejectedLines() {
         return List.copyOf(rejected);
+    }
+
+    public int passedOnlyByNewRule() {
+        return passedOnlyByNewRule;
     }
 
     public List<String> acceptedLines() {

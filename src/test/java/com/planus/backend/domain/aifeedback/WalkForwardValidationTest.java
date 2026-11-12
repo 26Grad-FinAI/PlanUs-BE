@@ -916,7 +916,7 @@ class WalkForwardValidationTest {
 
             FeedbackRenderer.Rendered result = null;
             for (int r = 0; r < LLM_REPEAT; r++) {
-                stats.begin();
+                stats.begin(LlmRenderMeter.legacyRule(renderer, ctx));
                 result = renderer.render(ctx);
                 stats.end(result.text(), "제" + week + "주차", r + 1);
             }
@@ -1041,7 +1041,7 @@ class WalkForwardValidationTest {
 
             FeedbackRenderer.Rendered result = null;
             for (int r = 0; r < LLM_REPEAT; r++) {
-                stats.begin();
+                stats.begin(LlmRenderMeter.legacyRule(renderer, ctx));
                 result = renderer.renderMonthEnd(ctx);
                 stats.end(result.text(), ym + " 월말", r + 1);
             }
