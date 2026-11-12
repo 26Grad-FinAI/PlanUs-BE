@@ -12,6 +12,11 @@ services:
       ANTHROPIC_API_KEY:
       GOOGLE_CLIENT_ID:
       KAKAO_APP_ID:
+      RUNPOD_ENDPOINT:
+      RUNPOD_API_KEY:
+      PLANUS_TOKEN:
+      MAIL_USERNAME:
+      MAIL_PASSWORD:
     expose:
       - "8080"
     logging:
