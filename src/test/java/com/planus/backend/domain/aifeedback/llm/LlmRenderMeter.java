@@ -179,6 +179,11 @@ public final class LlmRenderMeter {
 
     // ── 조회 (판정 로직 검증용) ──
 
+    /** 이번 렌더에서 LLM 호출이 있었는지. LOW_DATA처럼 LLM 없이 끝나는 렌더를 집계에서 빼는 용도. */
+    public boolean hasCallsInCurrentRender() {
+        return !currentCalls.isEmpty() || currentErrors > 0;
+    }
+
     public int renders() {
         return renders;
     }
