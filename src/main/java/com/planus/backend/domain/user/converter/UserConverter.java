@@ -46,7 +46,6 @@ public class UserConverter {
                 user.getNickname(),
                 user.getAge(),
                 user.getGender(),
-                user.getResidence(),
                 user.getMonthlyIncome(),
                 user.getMonthlyFixedExpenses(),
                 user.totalFixedExpenses(),

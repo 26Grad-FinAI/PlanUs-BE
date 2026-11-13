@@ -19,9 +19,12 @@ import com.planus.backend.domain.user.entity.UserAccount;
 import com.planus.backend.domain.user.repository.UserAccountRepository;
 import com.planus.backend.global.apiPayload.code.GeneralErrorCode;
 import com.planus.backend.global.apiPayload.exception.GeneralException;
+import java.nio.charset.StandardCharsets;
 import java.time.LocalDate;
 import java.time.LocalDateTime;
+import java.time.LocalTime;
 import java.time.YearMonth;
+import java.util.Base64;
 import java.util.Collections;
 import java.util.List;
 import java.util.Optional;
@@ -29,6 +32,7 @@ import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Nested;
 import org.junit.jupiter.api.Test;
+import org.springframework.data.domain.PageRequest;
 
 class HomeServiceTest {
 
@@ -377,51 +381,46 @@ class HomeServiceTest {
     @DisplayName("getRecentTransactions 성공")
     class GetRecentTransactionsSuccess {
 
+        private static final LocalDateTime FROM = LocalDateTime.of(2026, 8, 1, 0, 0);
+        private static final LocalDateTime TO = LocalDateTime.of(2026, 9, 1, 0, 0);
+
         @Test
-        @DisplayName("최근 거래를 날짜별로 그룹화하여 반환한다")
-        void getRecentTransactions_groupsByDate() {
-            List<Expense> expenses = List.of(
-                    Expense.builder()
-                            .id(1L)
-                            .userId(USER_ID)
-                            .type("EXPENSE")
-                            .amount(6500L)
-                            .title("커피")
-                            .categoryId(7)
-                            .expenseDate(LocalDateTime.of(2026, 8, 22, 14, 0))
-                            .build(),
-                    Expense.builder()
-                            .id(2L)
-                            .userId(USER_ID)
-                            .type("EXPENSE")
-                            .amount(15000L)
-                            .title("점심 식사")
-                            .categoryId(7)
-                            .expenseDate(LocalDateTime.of(2026, 8, 22, 12, 0))
-                            .build(),
-                    Expense.builder()
-                            .id(3L)
-                            .userId(USER_ID)
-                            .type("INCOME")
-                            .amount(30000L)
-                            .title("용돈")
-                            .categoryId(10)
-                            .expenseDate(LocalDateTime.of(2026, 8, 21, 9, 0))
-                            .build());
-            when(expenseRepository.findTop10ByUserIdOrderByExpenseDateDescIdDesc(USER_ID))
-                    .thenReturn(expenses);
+        @DisplayName("거래 일시가 같으면 커서의 ID 다음부터 조회한다")
+        void getRecentTransactions_withCursor_returnsNextPage() {
+            LocalDateTime expenseDate = LocalDateTime.of(2026, 8, 31, 23, 59);
+            Expense expense = Expense.builder()
+                    .id(3L)
+                    .userId(USER_ID)
+                    .type("EXPENSE")
+                    .amount(6500L)
+                    .title("커피")
+                    .categoryId(7)
+                    .expenseDate(expenseDate)
+                    .build();
+            Expense income = Expense.builder()
+                    .id(2L)
+                    .userId(USER_ID)
+                    .type("INCOME")
+                    .amount(30000L)
+                    .title("용돈")
+                    .categoryId(10)
+                    .expenseDate(expenseDate)
+                    .build();
+            PageRequest page = PageRequest.of(0, 2);
+            when(expenseRepository.findRecentByPeriod(USER_ID, FROM, TO, page)).thenReturn(List.of(expense, income));
+            when(expenseRepository.findRecentByPeriodAfterCursor(USER_ID, FROM, TO, expenseDate, 3L, page))
+                    .thenReturn(List.of(income));
 
-            HomeRecentResponse response = homeService.getRecentTransactions(USER_ID);
+            HomeRecentResponse first = homeService.getRecentTransactions(USER_ID, YEAR_MONTH, 1, null);
+            HomeRecentResponse response = homeService.getRecentTransactions(USER_ID, YEAR_MONTH, 1, first.nextCursor());
 
-            assertThat(response.dailyGroups()).hasSize(2);
+            assertThat(first.transactions()).hasSize(1);
+            assertThat(first.transactions().get(0).id()).isEqualTo(3L);
+            assertThat(first.nextCursor()).isNotBlank();
 
-            // 첫 번째 그룹: 8/22 (최신)
-            assertThat(response.dailyGroups().get(0).date()).isEqualTo(LocalDate.of(2026, 8, 22));
-            assertThat(response.dailyGroups().get(0).transactions()).hasSize(2);
-
-            // 두 번째 그룹: 8/21
-            assertThat(response.dailyGroups().get(1).date()).isEqualTo(LocalDate.of(2026, 8, 21));
-            assertThat(response.dailyGroups().get(1).transactions()).hasSize(1);
+            assertThat(response.transactions()).hasSize(1);
+            assertThat(response.transactions().get(0).id()).isEqualTo(2L);
+            assertThat(response.nextCursor()).isNull();
         }
 
         @Test
@@ -446,46 +445,71 @@ class HomeServiceTest {
                             .categoryId(10)
                             .expenseDate(LocalDateTime.of(2026, 8, 22, 9, 0))
                             .build());
-            when(expenseRepository.findTop10ByUserIdOrderByExpenseDateDescIdDesc(USER_ID))
+            when(expenseRepository.findRecentByPeriod(USER_ID, FROM, TO, PageRequest.of(0, 21)))
                     .thenReturn(expenses);
 
-            HomeRecentResponse response = homeService.getRecentTransactions(USER_ID);
+            HomeRecentResponse response = homeService.getRecentTransactions(USER_ID, YEAR_MONTH, 20, null);
 
-            var transactions = response.dailyGroups().get(0).transactions();
+            var transactions = response.transactions();
+            assertThat(transactions.get(0).type()).isEqualTo("EXPENSE");
             assertThat(transactions.get(0).amount()).isEqualTo(-6500L);
+            assertThat(transactions.get(0).categoryId()).isEqualTo(7);
+            assertThat(transactions.get(0).date()).isEqualTo(LocalDate.of(2026, 8, 22));
+            assertThat(transactions.get(0).time()).isEqualTo(LocalTime.of(14, 0));
+            assertThat(transactions.get(1).type()).isEqualTo("INCOME");
             assertThat(transactions.get(1).amount()).isEqualTo(30000L);
-        }
-
-        @Test
-        @DisplayName("카테고리명이 올바르게 매핑된다")
-        void getRecentTransactions_categoryNameMapped() {
-            List<Expense> expenses = List.of(Expense.builder()
-                    .id(1L)
-                    .userId(USER_ID)
-                    .type("EXPENSE")
-                    .amount(5000L)
-                    .title("버스")
-                    .categoryId(4)
-                    .expenseDate(LocalDateTime.of(2026, 8, 22, 8, 0))
-                    .build());
-            when(expenseRepository.findTop10ByUserIdOrderByExpenseDateDescIdDesc(USER_ID))
-                    .thenReturn(expenses);
-
-            HomeRecentResponse response = homeService.getRecentTransactions(USER_ID);
-
-            assertThat(response.dailyGroups().get(0).transactions().get(0).categoryName())
-                    .isEqualTo("교통");
         }
 
         @Test
         @DisplayName("거래가 없으면 빈 배열을 반환한다")
         void getRecentTransactions_noTransactions_returnsEmpty() {
-            when(expenseRepository.findTop10ByUserIdOrderByExpenseDateDescIdDesc(USER_ID))
+            when(expenseRepository.findRecentByPeriod(USER_ID, FROM, TO, PageRequest.of(0, 21)))
                     .thenReturn(Collections.emptyList());
 
-            HomeRecentResponse response = homeService.getRecentTransactions(USER_ID);
+            HomeRecentResponse response = homeService.getRecentTransactions(USER_ID, YEAR_MONTH, 20, null);
 
-            assertThat(response.dailyGroups()).isEmpty();
+            assertThat(response.transactions()).isEmpty();
+            assertThat(response.nextCursor()).isNull();
+        }
+    }
+
+    @Nested
+    @DisplayName("getRecentTransactions 실패")
+    class GetRecentTransactionsFailure {
+
+        @Test
+        @DisplayName("페이지 크기가 범위를 벗어나면 VALIDATION_ERROR 예외가 발생한다")
+        void getRecentTransactions_invalidSize_throwsValidationError() {
+            assertThatThrownBy(() -> homeService.getRecentTransactions(USER_ID, YEAR_MONTH, 0, null))
+                    .isInstanceOf(GeneralException.class)
+                    .satisfies(ex -> assertThat(((GeneralException) ex).getErrorCode())
+                            .isEqualTo(GeneralErrorCode.VALIDATION_ERROR));
+            assertThatThrownBy(() -> homeService.getRecentTransactions(USER_ID, YEAR_MONTH, 101, null))
+                    .isInstanceOf(GeneralException.class)
+                    .satisfies(ex -> assertThat(((GeneralException) ex).getErrorCode())
+                            .isEqualTo(GeneralErrorCode.VALIDATION_ERROR));
+        }
+
+        @Test
+        @DisplayName("커서 형식이 잘못되면 VALIDATION_ERROR 예외가 발생한다")
+        void getRecentTransactions_invalidCursor_throwsValidationError() {
+            assertThatThrownBy(() -> homeService.getRecentTransactions(USER_ID, YEAR_MONTH, 20, "invalid!"))
+                    .isInstanceOf(GeneralException.class)
+                    .satisfies(ex -> assertThat(((GeneralException) ex).getErrorCode())
+                            .isEqualTo(GeneralErrorCode.VALIDATION_ERROR));
+        }
+
+        @Test
+        @DisplayName("다른 월의 커서를 사용하면 VALIDATION_ERROR 예외가 발생한다")
+        void getRecentTransactions_cursorFromAnotherMonth_throwsValidationError() {
+            String cursor = Base64.getUrlEncoder()
+                    .withoutPadding()
+                    .encodeToString("2026-09-01T00:00|1".getBytes(StandardCharsets.UTF_8));
+
+            assertThatThrownBy(() -> homeService.getRecentTransactions(USER_ID, YEAR_MONTH, 20, cursor))
+                    .isInstanceOf(GeneralException.class)
+                    .satisfies(ex -> assertThat(((GeneralException) ex).getErrorCode())
+                            .isEqualTo(GeneralErrorCode.VALIDATION_ERROR));
         }
     }
 

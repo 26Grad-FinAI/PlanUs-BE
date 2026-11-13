@@ -100,7 +100,7 @@ public class UserController {
 
                     **인증:** Authorization 헤더에 Bearer 액세스 토큰 필요.
                     **주의사항:**
-                    - 프로필 미저장 시 profileCompleted=false이며, 문자열·객체 필드(nickname, gender, residence, hobbies 등)는 null, 숫자 필드(monthlyIncome, monthlyFixedExpenses 등)는 0으로 반환된다. userId, email, createdAt은 프로필 저장 여부와 무관하게 항상 반환된다.""")
+                    - 프로필 미저장 시 profileCompleted=false이며, 문자열·객체 필드(nickname, gender, hobbies 등)는 null, 숫자 필드(monthlyIncome, monthlyFixedExpenses 등)는 0으로 반환된다. userId, email, createdAt은 프로필 저장 여부와 무관하게 항상 반환된다.""")
     @ApiResponses({
         @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "200", description = "프로필 조회 성공"),
         @io.swagger.v3.oas.annotations.responses.ApiResponse(

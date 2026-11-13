@@ -63,7 +63,7 @@ class UserServiceTest {
         }
 
         @Test
-        @DisplayName("프로필 저장 후 profileCompleted가 true이다")
+        @DisplayName("거주지 없이 프로필을 저장해도 profileCompleted가 true이다")
         void saveProfile_profileCompletedIsTrue() {
             UserAccount user = spy(UserAccount.builder().id(1L).nickname("김스펜드").build());
             when(userAccountRepository.findById(1L)).thenReturn(Optional.of(user));
@@ -97,7 +97,6 @@ class UserServiceTest {
                     .updateProfile(
                             30,
                             "MALE",
-                            "서울",
                             3_000_000L,
                             List.of(new FixedExpenseItem("월세", 700_000L), new FixedExpenseItem("보험", 300_000L)),
                             500_000L,
@@ -161,7 +160,6 @@ class UserServiceTest {
                     .updateProfile(
                             30,
                             "MALE",
-                            "서울",
                             3_000_000L,
                             List.of(new FixedExpenseItem("월세", 700_000L), new FixedExpenseItem("보험", 300_000L)),
                             500_000L,
@@ -200,7 +198,6 @@ class UserServiceTest {
                     .nickname("김스펜드")
                     .age(28)
                     .gender("MALE")
-                    .residence("서울특별시")
                     .monthlyIncome(3_000_000L)
                     .monthlyFixedExpenses(
                             List.of(new FixedExpenseItem("월세", 700_000L), new FixedExpenseItem("보험", 300_000L)))
@@ -353,7 +350,6 @@ class UserServiceTest {
         return new UserProfileRequest(
                 30,
                 "MALE",
-                "서울",
                 3_000_000L,
                 List.of(new FixedExpenseItem("월세", 700_000L), new FixedExpenseItem("보험", 300_000L)),
                 500_000L,

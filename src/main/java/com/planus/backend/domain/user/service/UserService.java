@@ -49,7 +49,6 @@ public class UserService {
         user.updateProfile(
                 request.age(),
                 request.gender(),
-                request.residence(),
                 request.monthlyIncome(),
                 request.monthlyFixedExpenses(),
                 request.monthlySavingsGoal(),
@@ -76,7 +75,6 @@ public class UserService {
         user.updateProfile(
                 request.age(),
                 request.gender(),
-                request.residence(),
                 request.monthlyIncome(),
                 request.monthlyFixedExpenses(),
                 request.monthlySavingsGoal(),

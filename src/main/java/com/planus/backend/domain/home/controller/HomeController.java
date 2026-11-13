@@ -121,23 +121,34 @@ public class HomeController {
             summary = "최근 거래 내역 조회",
             description =
                     """
-                    최근 거래 10건을 날짜별로 그룹화하여 반환한다.
+                    선택한 월의 수입·지출 거래를 거래 일시와 ID 내림차순으로 조회한다.
 
                     **인증:** Authorization 헤더에 Bearer 액세스 토큰 필요.
-                    **주의사항:**
-                    - 최대 10건까지 반환하며, 날짜 내림차순 정렬.
-                    - 금액은 부호 포함: 지출은 음수(-), 수입은 양수(+).
-                    - 같은 날짜의 거래는 하나의 그룹으로 묶인다.
-                    - 거래가 없으면 빈 배열을 반환한다.""")
+                    **조회 방법:**
+                    - 첫 요청에서는 cursor를 생략하고, 다음 요청에는 같은 yearMonth와 응답의 nextCursor를 전달한다.
+                    - 금액은 부호를 포함한다. 지출은 음수, 수입은 양수다.
+                    - 거래가 없으면 transactions는 빈 배열이고, 다음 페이지가 없으면 nextCursor는 null이다.""")
     @ApiResponses({
         @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "200", description = "조회 성공"),
+        @io.swagger.v3.oas.annotations.responses.ApiResponse(
+                responseCode = "400",
+                description = "잘못된 조회 월, 페이지 크기 또는 커서",
+                content = @Content(schema = @Schema(implementation = ApiResponse.class))),
         @io.swagger.v3.oas.annotations.responses.ApiResponse(
                 responseCode = "401",
                 description = "인증되지 않은 사용자",
                 content = @Content(schema = @Schema(implementation = ApiResponse.class)))
     })
     @GetMapping("/recent")
-    public ApiResponse<HomeRecentResponse> getRecentTransactions(@AuthenticationPrincipal Long userId) {
-        return ApiResponse.onSuccess(GeneralSuccessCode.OK, homeService.getRecentTransactions(userId));
+    public ApiResponse<HomeRecentResponse> getRecentTransactions(
+            @AuthenticationPrincipal Long userId,
+            @Parameter(description = "조회 월 (yyyy-MM)", example = "2026-10")
+                    @RequestParam
+                    @DateTimeFormat(pattern = "yyyy-MM")
+                    YearMonth yearMonth,
+            @Parameter(description = "페이지 크기 (1~100)", example = "20") @RequestParam(defaultValue = "20") int size,
+            @Parameter(description = "직전 응답의 다음 페이지 커서") @RequestParam(required = false) String cursor) {
+        return ApiResponse.onSuccess(
+                GeneralSuccessCode.OK, homeService.getRecentTransactions(userId, yearMonth, size, cursor));
     }
 }

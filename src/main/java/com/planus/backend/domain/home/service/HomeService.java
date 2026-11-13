@@ -1,6 +1,5 @@
 package com.planus.backend.domain.home.service;
 
-import com.planus.backend.domain.aifeedback.core.Categories;
 import com.planus.backend.domain.aifeedback.entity.Budget;
 import com.planus.backend.domain.aifeedback.entity.Expense;
 import com.planus.backend.domain.aifeedback.repository.BudgetRepository;
@@ -10,7 +9,6 @@ import com.planus.backend.domain.home.dto.HomeCalendarResponse.DailySummary;
 import com.planus.backend.domain.home.dto.HomeDailyResponse;
 import com.planus.backend.domain.home.dto.HomeDailyResponse.TransactionDetail;
 import com.planus.backend.domain.home.dto.HomeRecentResponse;
-import com.planus.backend.domain.home.dto.HomeRecentResponse.DailyGroup;
 import com.planus.backend.domain.home.dto.HomeRecentResponse.RecentTransaction;
 import com.planus.backend.domain.home.dto.HomeSummaryResponse;
 import com.planus.backend.domain.user.entity.UserAccount;
@@ -19,14 +17,18 @@ import com.planus.backend.global.apiPayload.code.GeneralErrorCode;
 import com.planus.backend.global.apiPayload.exception.GeneralException;
 import java.math.BigDecimal;
 import java.math.RoundingMode;
+import java.nio.charset.StandardCharsets;
+import java.time.DateTimeException;
 import java.time.LocalDate;
 import java.time.LocalDateTime;
 import java.time.LocalTime;
 import java.time.YearMonth;
+import java.util.Base64;
 import java.util.List;
 import java.util.Map;
 import java.util.stream.Collectors;
 import lombok.RequiredArgsConstructor;
+import org.springframework.data.domain.PageRequest;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -35,6 +37,8 @@ import org.springframework.transaction.annotation.Transactional;
 @RequiredArgsConstructor
 @Transactional(readOnly = true)
 public class HomeService {
+
+    private static final int MAX_RECENT_PAGE_SIZE = 100;
 
     private final ExpenseRepository expenseRepository;
     private final BudgetRepository budgetRepository;
@@ -159,31 +163,76 @@ public class HomeService {
     }
 
     /**
-     * 최근 거래 10건을 날짜별로 그룹화하여 반환한다.
+     * 선택 월의 거래를 거래 일시와 ID 내림차순으로 조회한다.
      *
      * @param userId 사용자 ID
-     * @return 날짜별 그룹화된 최근 거래 목록
+     * @param yearMonth 조회 월
+     * @param size 페이지 크기
+     * @param cursor 직전 페이지의 마지막 거래를 가리키는 커서
+     * @return 최근 거래 목록과 다음 페이지 커서
      */
-    public HomeRecentResponse getRecentTransactions(Long userId) {
-        List<Expense> recent = expenseRepository.findTop10ByUserIdOrderByExpenseDateDescIdDesc(userId);
+    public HomeRecentResponse getRecentTransactions(Long userId, YearMonth yearMonth, int size, String cursor) {
+        if (yearMonth.getYear() < 1 || yearMonth.getYear() > 9999) {
+            throw new GeneralException(GeneralErrorCode.VALIDATION_ERROR, "조회 월은 yyyy-MM 형식이어야 합니다.");
+        }
+        if (size < 1 || size > MAX_RECENT_PAGE_SIZE) {
+            throw new GeneralException(GeneralErrorCode.VALIDATION_ERROR, "페이지 크기는 1~100이어야 합니다.");
+        }
 
-        List<DailyGroup> dailyGroups = recent.stream()
-                .collect(Collectors.groupingBy(Expense::getDate, java.util.LinkedHashMap::new, Collectors.toList()))
-                .entrySet()
-                .stream()
-                .map(entry -> {
-                    List<RecentTransaction> transactions = entry.getValue().stream()
-                            .map(e -> new RecentTransaction(
-                                    e.getTitle(),
-                                    Categories.name(e.getCategoryId()),
-                                    e.isExpense() ? -e.getAmount() : e.getAmount()))
-                            .toList();
-                    return new DailyGroup(entry.getKey(), transactions);
-                })
+        LocalDateTime from = yearMonth.atDay(1).atStartOfDay();
+        LocalDateTime to = from.plusMonths(1);
+        PageRequest page = PageRequest.of(0, size + 1);
+        List<Expense> recent;
+        if (cursor == null) {
+            recent = expenseRepository.findRecentByPeriod(userId, from, to, page);
+        } else {
+            RecentCursor position = decodeRecentCursor(cursor, yearMonth);
+            recent = expenseRepository.findRecentByPeriodAfterCursor(
+                    userId, from, to, position.date(), position.id(), page);
+        }
+
+        List<RecentTransaction> transactions = recent.stream()
+                .limit(size)
+                .map(e -> new RecentTransaction(
+                        e.getId(),
+                        e.getType(),
+                        e.isExpense() ? -e.getAmount() : e.getAmount(),
+                        e.getTitle(),
+                        e.getCategoryId(),
+                        e.getDate(),
+                        e.getExpenseDate().toLocalTime()))
                 .toList();
-
-        return new HomeRecentResponse(dailyGroups);
+        String nextCursor = recent.size() > size ? encodeRecentCursor(recent.get(size - 1)) : null;
+        return new HomeRecentResponse(transactions, nextCursor);
     }
+
+    private String encodeRecentCursor(Expense expense) {
+        String position = expense.getExpenseDate() + "|" + expense.getId();
+        return Base64.getUrlEncoder().withoutPadding().encodeToString(position.getBytes(StandardCharsets.UTF_8));
+    }
+
+    private RecentCursor decodeRecentCursor(String cursor, YearMonth yearMonth) {
+        try {
+            if (cursor.length() > 80) {
+                throw new IllegalArgumentException();
+            }
+            String decoded = new String(Base64.getUrlDecoder().decode(cursor), StandardCharsets.UTF_8);
+            String[] position = decoded.split("\\|", -1);
+            if (position.length != 2) {
+                throw new IllegalArgumentException();
+            }
+            LocalDateTime date = LocalDateTime.parse(position[0]);
+            long id = Long.parseLong(position[1]);
+            if (id <= 0 || !YearMonth.from(date).equals(yearMonth)) {
+                throw new IllegalArgumentException();
+            }
+            return new RecentCursor(date, id);
+        } catch (IllegalArgumentException | DateTimeException e) {
+            throw new GeneralException(GeneralErrorCode.VALIDATION_ERROR, "조회 월에 유효한 거래 커서가 아닙니다.");
+        }
+    }
+
+    private record RecentCursor(LocalDateTime date, long id) {}
 
     private UserAccount findUserOrThrow(Long userId) {
         return userAccountRepository
