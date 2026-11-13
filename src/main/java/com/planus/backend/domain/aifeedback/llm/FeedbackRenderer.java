@@ -149,13 +149,15 @@ public class FeedbackRenderer {
             if (candidate == null || candidate.isBlank()) {
                 break;
             }
-            if (verifyNumbers(candidate, c)) {
+            boolean numbersOk = verifyNumbers(candidate, c);
+            if (numbersOk && verifyMerchantCounts(candidate, c)) {
                 return candidate;
             }
+            String reason = numbersOk ? "거래처 건수" : "숫자";
             if (attempt < MAX_LLM_ATTEMPTS) {
-                log.warn("LLM 숫자 불일치 — 재시도 {}/{}", attempt, MAX_LLM_ATTEMPTS - 1);
+                log.warn("LLM {} 불일치 — 재시도 {}/{}", reason, attempt, MAX_LLM_ATTEMPTS - 1);
             } else {
-                log.warn("LLM 숫자 불일치 — 템플릿 폴백 사용 ({}회 시도)", MAX_LLM_ATTEMPTS);
+                log.warn("LLM {} 불일치 — 템플릿 폴백 사용 ({}회 시도)", reason, MAX_LLM_ATTEMPTS);
             }
         }
         return template(c);
@@ -191,6 +193,75 @@ public class FeedbackRenderer {
      * LLM 출력의 금액 숫자를 추출하고 페이로드 값과 허용 오차 이내인지 대조한다.
      * 불일치가 하나라도 있으면 false.
      */
+    // ── 거래처 건수 후검증 (#111) ──
+
+    private static final Map<String, Integer> KOREAN_COUNT =
+            Map.of("한", 1, "두", 2, "세", 3, "네", 4, "다섯", 5, "여섯", 6, "일곱", 7, "여덟", 8, "아홉", 9, "열", 10);
+
+    private static final String COUNT_NUMBER = "(\\d+|한|두|세|네|다섯|여섯|일곱|여덟|아홉|열)\\s*(?:건|회|번)";
+
+    /** 이름과 건수 사이 허용 구간: 숫자·문장부호·'등' 없이 최대 15자 ("결제가", "거래가 합쳐", "로", "방문"). */
+    private static final String COUNT_GAP = "([^\\d.!?\\n,(]{0,15}?)";
+
+    /**
+     * "카카오페이·토스페이 결제가 7건", "롯데월드 3회" 같은 거래처 건수 주장을 초과 카테고리의 거래처별 건수와 대조한다.
+     *
+     * <p>이름이 여러 개면 그 거래처들의 건수 합과 비교한다. "등"이 붙은 주장("토스페이 출금 등 13건")은 카테고리 전체를 가리키므로 검사하지 않는다.
+     * 데이터가 없는 이름(예: "택시")은 건너뛴다. 실험 8: 거래처별 건수를 제공해도 "상위 결제 수단 2개 + 카테고리 전체 건수"로 요약하는 오류가
+     * 34·37주차 ×20에서 5/40 — 프롬프트로는 못 막아 코드로 검사한다.
+     */
+    boolean verifyMerchantCounts(String text, FeedbackContext c) {
+        List<Map<String, Integer>> perCategory = c.overspendCategories().stream()
+                .map(CategoryOverspend::merchantCounts)
+                .filter(m -> m != null && !m.isEmpty())
+                .toList();
+        if (perCategory.isEmpty()) return true;
+
+        Map<String, List<String>> aliases = new LinkedHashMap<>(); // 문장에 쓰일 수 있는 이름 → 거래처 키
+        for (Map<String, Integer> m : perCategory) {
+            for (String key : m.keySet()) {
+                if (key.length() < 2) continue;
+                aliases.computeIfAbsent(key, k -> new ArrayList<>()).add(key);
+                String shortName = key.replaceFirst("(결제|충전|출금)$", "");
+                if (!shortName.equals(key) && shortName.length() >= 2) {
+                    aliases.computeIfAbsent(shortName, k -> new ArrayList<>()).add(key);
+                }
+            }
+        }
+        String names = aliases.keySet().stream()
+                .sorted(Comparator.comparingInt(String::length).reversed())
+                .map(Pattern::quote)
+                .collect(java.util.stream.Collectors.joining("|"));
+        Pattern claim = Pattern.compile(
+                "((?:" + names + ")(?:\\s*(?:·|/|와|과|및|랑|이랑|,)\\s*(?:" + names + "))*)" + COUNT_GAP + COUNT_NUMBER);
+        Pattern single = Pattern.compile(names);
+
+        Matcher m = claim.matcher(text);
+        while (m.find()) {
+            String gap = m.group(2);
+            if (gap.contains("등") || gap.contains("포함")) continue;
+            int claimed = parseCount(m.group(3));
+            Set<String> keys = new LinkedHashSet<>();
+            Matcher n = single.matcher(m.group(1));
+            while (n.find()) keys.addAll(aliases.getOrDefault(n.group(), List.of()));
+            if (keys.isEmpty()) continue;
+            boolean consistent = perCategory.stream()
+                    .anyMatch(cat ->
+                            keys.stream().mapToInt(k -> cat.getOrDefault(k, 0)).sum() == claimed);
+            int total = perCategory.stream()
+                    .mapToInt(cat ->
+                            keys.stream().mapToInt(k -> cat.getOrDefault(k, 0)).sum())
+                    .sum();
+            if (!consistent && total != claimed) return false;
+        }
+        return true;
+    }
+
+    private static int parseCount(String g) {
+        Integer k = KOREAN_COUNT.get(g);
+        return k != null ? k : Integer.parseInt(g);
+    }
+
     boolean verifyNumbers(String text, FeedbackContext c) {
         return verifyNumbers(text, c, true);
     }

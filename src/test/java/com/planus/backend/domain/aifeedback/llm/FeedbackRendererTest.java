@@ -356,6 +356,82 @@ class FeedbackRendererTest {
         }
     }
 
+    // ── 거래처 건수 후검증 (#111, exp8: "카카오페이·토스페이 결제가 7건" 5/40) ──
+
+    @Nested
+    @DisplayName("거래처 건수 후검증 — 거래처별 건수와 대조")
+    class MerchantCountVerificationTest {
+
+        private FeedbackContext ctx34() {
+            java.util.Map<String, Integer> etc = new java.util.LinkedHashMap<>();
+            etc.put("카카오페이", 3);
+            etc.put("토스페이", 3);
+            etc.put("네이버페이결제", 1);
+            java.util.Map<String, Integer> fun = new java.util.LinkedHashMap<>();
+            fun.put("롯데월드", 4);
+            return contextBuilder()
+                    .feedbackType(FeedbackType.ALERT)
+                    .overspendCategories(List.of(
+                            new CategoryOverspend("기타", 346_563, 141_742, null, 7, etc),
+                            new CategoryOverspend("오락문화", 25_691, 116_600, null, 4, fun)))
+                    .build();
+        }
+
+        @Test
+        @DisplayName("여러 거래처 + 카테고리 전체 건수 → 거절 (exp8 34주차 실제 문장)")
+        void combinedNamesWithCategoryTotal_rejected() {
+            assertThat(renderer.verifyMerchantCounts("기타는 카카오페이·토스페이 결제가 7건 발생했어요.", ctx34()))
+                    .isFalse();
+            assertThat(renderer.verifyMerchantCounts("기타 항목도 카카오페이·토스페이로 7건이 늘어났는데", ctx34()))
+                    .isFalse();
+        }
+
+        @Test
+        @DisplayName("거래처 건수 합이 맞으면 통과: '합쳐 6건', '카카오페이 3건, 토스페이 3건'")
+        void correctCounts_pass() {
+            assertThat(renderer.verifyMerchantCounts("토스페이·카카오페이 거래가 합쳐 6건이었어요.", ctx34()))
+                    .isTrue();
+            assertThat(renderer.verifyMerchantCounts("기타가 14만 원(카카오페이 3건, 토스페이 3건 등)이었어요.", ctx34()))
+                    .isTrue();
+            assertThat(renderer.verifyMerchantCounts("네이버페이 1건도 있었어요.", ctx34()))
+                    .isTrue();
+        }
+
+        @Test
+        @DisplayName("묶인 거래 횟수도 검사: '롯데월드 3회' 거절, '롯데월드를 네 번' 통과")
+        void groupedTransactionCount() {
+            assertThat(renderer.verifyMerchantCounts("롯데월드 3회 방문으로 오락문화가 늘었어요.", ctx34()))
+                    .isFalse();
+            assertThat(renderer.verifyMerchantCounts("롯데월드를 네 번 다녀오면서 오락문화가 늘었어요.", ctx34()))
+                    .isTrue();
+        }
+
+        @Test
+        @DisplayName("검사하지 않는 경우: '등'·'포함'이 붙은 주장, 거래처 이름 없는 건수, 건수 없는 언급")
+        void notChecked() {
+            assertThat(renderer.verifyMerchantCounts("토스페이 출금 등 13건이 모두 필요한 지출이었어요.", ctx34()))
+                    .isTrue();
+            assertThat(renderer.verifyMerchantCounts("기타 7건이 쌓였어요.", ctx34())).isTrue();
+            assertThat(renderer.verifyMerchantCounts("토스페이·카카오페이 결제가 여러 건 있었어요.", ctx34()))
+                    .isTrue();
+        }
+
+        @Test
+        @DisplayName("재시도 연동: 1차 '카카오페이·토스페이 결제가 7건' 거절 → 2차 '합쳐 6건' 채택")
+        void retryOnMerchantCountMismatch() {
+            LlmClient client = mock(LlmClient.class);
+            when(llmProvider.getIfAvailable()).thenReturn(client);
+            when(client.complete(anyString(), anyString()))
+                    .thenReturn("기타는 카카오페이·토스페이 결제가 7건 발생했어요.")
+                    .thenReturn("기타는 카카오페이·토스페이 거래가 합쳐 6건이었어요.");
+
+            Rendered result = renderer.render(ctx34());
+
+            assertThat(result.text()).isEqualTo("기타는 카카오페이·토스페이 거래가 합쳐 6건이었어요.");
+            verify(client, times(2)).complete(anyString(), anyString());
+        }
+    }
+
     // ── 금액 형식 인식 (#111, exp4: "5만 8,970원" 오인식 4건, "26만 9천 원" 미검사) ──
 
     @Nested
