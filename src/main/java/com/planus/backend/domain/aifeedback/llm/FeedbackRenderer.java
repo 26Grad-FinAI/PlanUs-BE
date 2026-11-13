@@ -79,7 +79,7 @@ public class FeedbackRenderer {
         - 절약 제안은 '어느 항목에서 얼마를 줄이면 저축 목표에 어떤 효과'인지 구체적으로 연결한다.
         - 절약 금액·절약 효과(원)는 [절약 액션]에 있는 카테고리와 금액만 쓴다. [절약 액션 대상 아님] 카테고리나 [절약 액션]이 없는 주에는 'N회 줄이면 N만 원', '월 N만 원 아낄 수' 같은 금액을 만들지 않는다. 줄이기를 권하더라도 금액을 붙이지 않는다.
         - 절약 금액은 [절약 액션]에 적힌 그 카테고리에만 붙인다. '다른 항목에서 N원 줄이기'처럼 카테고리를 바꾸지 않는다.
-        - 절약 효과는 [절약 액션]의 '다 지키면' 줄대로 '월말 초과가 A원에서 B원으로 줄어요'처럼 줄어드는 폭으로 쓴다. 초과가 남는데 '예산 안에 들어온다', '목표를 지킬 수 있다'고 쓰지 않고, '다 메우기 어렵다', '이번 달은 받아들이자'처럼 체념하는 말도 쓰지 않는다. 줄어드는 폭이 작으면 '크게 낮출 수 있다'처럼 과장하지 말고 초과의 주된 원인과 다음 행동을 짚는다.
+        - 절약 효과는 [절약 액션]의 '다 지키면' 줄대로 '월말 초과가 A원에서 B원으로 줄어요'처럼 줄어드는 폭으로 쓴다. 초과가 남는데 '예산 안에 들어온다', '목표를 지킬 수 있다'고 쓰지 않고, '다 메우기 어렵다', '받아들이자', '받아들이고'처럼 체념하는 말은 쓰지 않는다. 남은 기간이 짧아 줄어드는 폭이 작으면 그 폭만 짧게 말하고 다음 달에 해볼 행동으로 넘어간다. 줄어드는 폭이 작으면 '크게 낮출 수 있다'처럼 과장하지 말고 초과의 주된 원인과 다음 행동을 짚는다.
         - 초과 카테고리의 '월말 예상 초과'는 지금 속도로 가면 월말에 그 카테고리 예산을 넘을 것으로 예상되는 금액이다. 이미 쓴 금액이 아니므로 '누적됐다', '이미 넘었다'처럼 쓰지 않고 '이대로면 월말에 N원 넘을 것 같아요'처럼 예상으로 쓴다. '이번 주 지출'과 합산하지 않는다.
         - 초과 카테고리의 '이번 주 지출'이 작으면 그 카테고리는 이번 주 원인이 아니라 이전 주들의 지출 때문임을 인식하고 이번 주 피드백에서 주요 원인으로 다루지 않는다.
         - 원인 신뢰도가 '높음'이 아니면 원인을 단정하지 말고 가볍게만 언급하거나 생략한다.
@@ -152,10 +152,11 @@ public class FeedbackRenderer {
                 break;
             }
             boolean numbersOk = verifyNumbers(candidate, c);
-            if (numbersOk && verifyMerchantCounts(candidate, c)) {
+            boolean merchantOk = numbersOk && verifyMerchantCounts(candidate, c);
+            if (merchantOk && verifyTone(candidate)) {
                 return candidate;
             }
-            String reason = numbersOk ? "거래처 건수" : "숫자";
+            String reason = !numbersOk ? "숫자" : !merchantOk ? "거래처 건수" : "체념 표현";
             if (attempt < MAX_LLM_ATTEMPTS) {
                 log.warn("LLM {} 불일치 — 재시도 {}/{}", reason, attempt, MAX_LLM_ATTEMPTS - 1);
             } else {
@@ -201,6 +202,14 @@ public class FeedbackRenderer {
             Map.of("한", 1, "두", 2, "세", 3, "네", 4, "다섯", 5, "여섯", 6, "일곱", 7, "여덟", 8, "아홉", 9, "열", 10);
 
     private static final String COUNT_NUMBER = "(\\d+|한|두|세|네|다섯|여섯|일곱|여덟|아홉|열)\\s*(?:건|회|번)";
+
+    /** 체념 표현. 금지 규칙만으로는 7/60이 남음 (#122 실험 3: "이번 달은 있는 그대로 받아들이고 …"). */
+    private static final Pattern RESIGNED_TONE = Pattern.compile("받아들이|메우기 어렵|메우긴 어렵");
+
+    /** 사용자 판정으로 금지한 체념 표현("이번 달은 받아들이고", "다 메우긴 어려워요")이 없으면 true. */
+    boolean verifyTone(String text) {
+        return !RESIGNED_TONE.matcher(text).find();
+    }
 
     /** 이름과 건수 사이 허용 구간: 숫자·문장부호·'등' 없이 최대 15자 ("결제가", "거래가 합쳐", "로", "방문"). */
     private static final String COUNT_GAP = "([^\\d.!?\\n,(]{0,15}?)";

@@ -879,6 +879,31 @@ class FeedbackRendererTest {
         }
 
         @Test
+        @DisplayName("체념 표현은 거절 — 사용자 판정 (#122 실험 3, 30주차 '이번 달은 있는 그대로 받아들이고')")
+        void resignedTone_rejected() {
+            assertThat(renderer.verifyTone("이번 달은 있는 그대로 받아들이고 9월부터 기타 예산을 조정해보세요."))
+                    .isFalse();
+            assertThat(renderer.verifyTone("이번 달 안에 다 메우긴 어렵지만 다음 달엔 줄여봐요.")).isFalse();
+            assertThat(renderer.verifyTone("기타에서 9,718원 줄이면 월말 초과가 22만 원대로 줄어요. 다음 달엔 기타 예산을 조정해보세요."))
+                    .isTrue();
+        }
+
+        @Test
+        @DisplayName("체념 표현이 있으면 재시도하고, 다음 응답을 사용")
+        void resignedTone_retried() {
+            LlmClient client = mock(LlmClient.class);
+            when(llmProvider.getIfAvailable()).thenReturn(client);
+            when(client.complete(anyString(), anyString()))
+                    .thenReturn("이번 달은 받아들이고 다음 달을 준비해봐요.")
+                    .thenReturn("다음 달엔 기타 지출을 미리 정해두면 좋겠어요.");
+
+            FeedbackRenderer.Rendered out = renderer.render(contextBuilder().build());
+
+            assertThat(out.text()).isEqualTo("다음 달엔 기타 지출을 미리 정해두면 좋겠어요.");
+            verify(client, org.mockito.Mockito.times(2)).complete(anyString(), anyString());
+        }
+
+        @Test
         @DisplayName("모르는 감정 코드는 그대로 둔다")
         void emotionLabel_unknownKept() {
             assertThat(FeedbackRenderer.emotionLabel("CALM")).isEqualTo("CALM");
