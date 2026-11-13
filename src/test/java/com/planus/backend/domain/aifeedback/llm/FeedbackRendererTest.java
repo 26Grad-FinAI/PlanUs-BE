@@ -884,6 +884,8 @@ class FeedbackRendererTest {
             assertThat(renderer.verifyTone("이번 달은 있는 그대로 받아들이고 9월부터 기타 예산을 조정해보세요."))
                     .isFalse();
             assertThat(renderer.verifyTone("이번 달 안에 다 메우긴 어렵지만 다음 달엔 줄여봐요.")).isFalse();
+            assertThat(renderer.verifyTone("남은 기간이 16일이라 다 메우긴 어려워 보여요.")).isFalse(); // 실험 4 19주차
+            assertThat(renderer.verifyTone("이번 달 안에 메우기는 어려울 것 같아요.")).isFalse();
             assertThat(renderer.verifyTone("기타에서 9,718원 줄이면 월말 초과가 22만 원대로 줄어요. 다음 달엔 기타 예산을 조정해보세요."))
                     .isTrue();
         }

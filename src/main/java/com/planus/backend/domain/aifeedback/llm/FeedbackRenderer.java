@@ -203,8 +203,11 @@ public class FeedbackRenderer {
 
     private static final String COUNT_NUMBER = "(\\d+|한|두|세|네|다섯|여섯|일곱|여덟|아홉|열)\\s*(?:건|회|번)";
 
-    /** 체념 표현. 금지 규칙만으로는 7/60이 남음 (#122 실험 3: "이번 달은 있는 그대로 받아들이고 …"). */
-    private static final Pattern RESIGNED_TONE = Pattern.compile("받아들이|메우기 어렵|메우긴 어렵");
+    /**
+     * 체념 표현. 금지 규칙만으로는 7/60이 남음 (#122 실험 3: "이번 달은 있는 그대로 받아들이고 …"). "어렵"만 보면 "메우긴 어려워 보여요"를
+     * 놓친다 (실험 4, 19주차).
+     */
+    private static final Pattern RESIGNED_TONE = Pattern.compile("받아들이|메우(?:기|긴|기는)\\s*어(?:려|렵)");
 
     /** 사용자 판정으로 금지한 체념 표현("이번 달은 받아들이고", "다 메우긴 어려워요")이 없으면 true. */
     boolean verifyTone(String text) {
