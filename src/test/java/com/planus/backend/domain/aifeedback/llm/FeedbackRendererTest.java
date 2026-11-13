@@ -429,6 +429,31 @@ class FeedbackRendererTest {
         }
 
         @Test
+        @DisplayName("거래처 계열·모르는 이름 (exp10): '토스·네이버페이 6건'(토스페이 4 + 토스 1 + 네이버페이 1) 통과, '케이스포츠·노래방 7건' 검사 제외")
+        void familyNameAndUnknownName() {
+            java.util.Map<String, Integer> etc = new java.util.LinkedHashMap<>();
+            etc.put("토스페이", 4);
+            etc.put("네이버페이결제", 1);
+            etc.put("토스", 1);
+            java.util.Map<String, Integer> fun = new java.util.LinkedHashMap<>();
+            fun.put("케이스포츠", 5);
+            fun.put("렉스코인노래연습장", 2);
+            FeedbackContext ctx = contextBuilder()
+                    .feedbackType(FeedbackType.ALERT)
+                    .overspendCategories(List.of(
+                            new CategoryOverspend("기타", 300_000, 140_203, null, 6, etc),
+                            new CategoryOverspend("오락문화", 14_143, 18_000, null, 7, fun)))
+                    .build();
+
+            assertThat(renderer.verifyMerchantCounts("토스·네이버페이 거래가 6건 있었어요.", ctx))
+                    .isTrue();
+            assertThat(renderer.verifyMerchantCounts("토스페이·네이버페이 거래가 6건 있었어요.", ctx))
+                    .isFalse(); // 4 + 1 = 5
+            assertThat(renderer.verifyMerchantCounts("오락문화는 케이스포츠·노래방 7건으로 쌓였어요.", ctx))
+                    .isTrue();
+        }
+
+        @Test
         @DisplayName("재시도 연동: 1차 '카카오페이·토스페이 결제가 7건' 거절 → 2차 '합쳐 6건' 채택")
         void retryOnMerchantCountMismatch() {
             LlmClient client = mock(LlmClient.class);

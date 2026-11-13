@@ -241,12 +241,21 @@ public class FeedbackRenderer {
             String gap = m.group(2);
             // "등·포함·같은·처럼·비롯" — 예시를 든 뒤 카테고리 전체 건수를 말하는 표현 (exp9b 30주차 "역전할머니맥주·욘카츠 같은 외식이 9건")
             if (gap.matches(".*(등|포함|같은|처럼|비롯).*")) continue;
+            // 나열 뒤에 모르는 이름이 이어지면("케이스포츠·노래방 7건") 일부 거래처만 셀 수 있으므로 검사하지 않는다 (exp10 18주차)
+            if (gap.matches("^\\s*(·|/|와|과|및|랑|이랑|,).*")) continue;
             int claimed = parseCount(m.group(3));
             // "카카오페이 한 건이 평소의 5.2배"처럼 1건 표현은 여러 거래 중 하나를 가리키므로 총 건수 주장으로 보지 않는다 (exp9 오탐 3건)
             if (claimed == 1) continue;
             Set<String> keys = new LinkedHashSet<>();
             Matcher n = single.matcher(m.group(1));
-            while (n.find()) keys.addAll(aliases.getOrDefault(n.group(), List.of()));
+            while (n.find()) {
+                String name = n.group();
+                keys.addAll(aliases.getOrDefault(name, List.of()));
+                // 다른 거래처 이름의 앞부분이면 계열 전체("토스" → 토스페이 + 토스 이체) — exp10 36주차 "토스·네이버페이 거래가 6건"(4+1+1) 오탐
+                for (Map<String, Integer> cat : perCategory) {
+                    for (String key : cat.keySet()) if (key.startsWith(name)) keys.add(key);
+                }
+            }
             if (keys.isEmpty()) continue;
             boolean consistent = perCategory.stream()
                     .anyMatch(cat ->
