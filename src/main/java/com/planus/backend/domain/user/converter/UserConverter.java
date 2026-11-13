@@ -23,7 +23,7 @@ public class UserConverter {
                 user.getNickname(),
                 user.availableBudget(),
                 user.isProfileCompleted(),
-                "프로필 저장 완료. 예산 산출이 시작됩니다.");
+                "프로필 저장 완료. 예산 산출을 요청합니다.");
     }
 
     /**
@@ -34,7 +34,7 @@ public class UserConverter {
      */
     public static UserProfileUpdateResponse toProfileUpdateResponse(UserAccount user) {
         return new UserProfileUpdateResponse(
-                user.getId(), user.availableBudget(), "프로필 수정 완료. 예산 재산출이 시작됩니다.", user.getUpdatedAt());
+                user.getId(), user.availableBudget(), "프로필 수정 완료. 예산 재산출을 요청합니다.", user.getUpdatedAt());
     }
 
     /**

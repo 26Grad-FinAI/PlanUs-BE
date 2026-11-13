@@ -37,7 +37,7 @@ public class UserService {
     private final ApplicationEventPublisher eventPublisher;
 
     /**
-     * 사용자 프로필을 저장하고 가용예산을 반환한다. 커밋 후 AI 예산 산출이 자동으로 시작된다.
+     * 사용자 프로필을 저장하고 가용예산을 반환한다. 커밋 후 AI 예산 산출을 자동으로 요청한다(시작은 보장하지 않음).
      *
      * @param userId  JWT 필터가 주입한 사용자 ID
      * @param request 프로필 요청 DTO
@@ -65,7 +65,7 @@ public class UserService {
     }
 
     /**
-     * 사용자 프로필을 수정한다. 커밋 후 AI 예산 산출이 자동으로 다시 시작된다.
+     * 사용자 프로필을 수정한다. 커밋 후 AI 예산 재산출을 자동으로 요청한다(시작은 보장하지 않음).
      *
      * @param userId  JWT 필터가 주입한 사용자 ID
      * @param request 수정할 프로필 요청 DTO

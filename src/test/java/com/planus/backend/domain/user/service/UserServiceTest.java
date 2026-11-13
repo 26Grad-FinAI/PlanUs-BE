@@ -171,7 +171,7 @@ class UserServiceTest {
 
             UserProfileUpdateResponse response = userService.updateProfile(1L, validRequest());
 
-            assertThat(response.message()).isEqualTo("프로필 수정 완료. 예산 재산출이 시작됩니다.");
+            assertThat(response.message()).isEqualTo("프로필 수정 완료. 예산 재산출을 요청합니다.");
         }
 
         @Test

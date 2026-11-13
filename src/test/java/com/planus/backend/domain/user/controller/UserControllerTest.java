@@ -75,7 +75,7 @@ class UserControllerTest {
                 SecurityContextHolder.getContext().setAuthentication(new UsernamePasswordAuthenticationToken(1L, null));
 
                 UserProfileResponse response =
-                        new UserProfileResponse(1L, "김스펜드", 1_500_000L, true, "프로필 저장 완료. 예산 산출이 시작됩니다.");
+                        new UserProfileResponse(1L, "김스펜드", 1_500_000L, true, "프로필 저장 완료. 예산 산출을 요청합니다.");
                 when(userService.saveProfile(eq(1L), any())).thenReturn(response);
 
                 mockMvc.perform(post("/api/users/me/profile")
@@ -87,7 +87,7 @@ class UserControllerTest {
                         .andExpect(jsonPath("$.result.nickname").value("김스펜드"))
                         .andExpect(jsonPath("$.result.availableBudget").value(1_500_000L))
                         .andExpect(jsonPath("$.result.profileCompleted").value(true))
-                        .andExpect(jsonPath("$.result.message").value("프로필 저장 완료. 예산 산출이 시작됩니다."));
+                        .andExpect(jsonPath("$.result.message").value("프로필 저장 완료. 예산 산출을 요청합니다."));
 
                 verify(userService).saveProfile(eq(1L), any());
             }
@@ -142,7 +142,7 @@ class UserControllerTest {
                 SecurityContextHolder.getContext().setAuthentication(new UsernamePasswordAuthenticationToken(1L, null));
 
                 UserProfileUpdateResponse response =
-                        new UserProfileUpdateResponse(1L, 1_500_000L, "프로필 수정 완료. 예산 재산출이 시작됩니다.", null);
+                        new UserProfileUpdateResponse(1L, 1_500_000L, "프로필 수정 완료. 예산 재산출을 요청합니다.", null);
                 when(userService.updateProfile(eq(1L), any())).thenReturn(response);
 
                 mockMvc.perform(put("/api/users/me/profile")
@@ -152,7 +152,7 @@ class UserControllerTest {
                         .andExpect(jsonPath("$.isSuccess").value(true))
                         .andExpect(jsonPath("$.result.userId").value(1L))
                         .andExpect(jsonPath("$.result.availableBudget").value(1_500_000L))
-                        .andExpect(jsonPath("$.result.message").value("프로필 수정 완료. 예산 재산출이 시작됩니다."));
+                        .andExpect(jsonPath("$.result.message").value("프로필 수정 완료. 예산 재산출을 요청합니다."));
 
                 verify(userService).updateProfile(eq(1L), any());
             }
