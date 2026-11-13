@@ -709,7 +709,7 @@ class FeedbackRendererTest {
                     .build();
 
             assertThat(capturedUserPrompt(ctx))
-                    .contains("(이 중 이번 주 신규 116,600원, 4건)")
+                    .contains("(이번 주 지출 116,600원, 4건)")
                     .contains("메모 (이번 주 4건 중 3건만 표시):")
                     .contains("/ 오락문화 이번 주 합계: 116,600원 (4건)");
         }
@@ -792,8 +792,65 @@ class FeedbackRendererTest {
                     .build();
 
             String prompt = capturedUserPrompt(ctx);
-            assertThat(prompt).contains("- 식대: 이번 달 누적 초과 +191,731원 (이 중 이번 주 신규 139,940원, 9건) [절약 액션 대상 아님]");
-            assertThat(prompt).contains("- 기타: 이번 달 누적 초과 +204,821원 (이 중 이번 주 신규 58,250원, 4건)\n");
+            assertThat(prompt).contains("- 식대: 월말 예상 초과 +191,731원 (이번 주 지출 139,940원, 9건) [절약 액션 대상 아님]");
+            assertThat(prompt).contains("- 기타: 월말 예상 초과 +204,821원 (이번 주 지출 58,250원, 4건)\n");
+        }
+
+        @Test
+        @DisplayName("초과 카테고리 금액은 '월말 예상 초과'로 표기 — 누적으로 표기하면 월초에 '이미 51만 원 누적'이라고 씀 (#122 실험 0, 39주차)")
+        void overspend_labeledAsProjection() {
+            FeedbackContext ctx = contextBuilder()
+                    .feedbackType(FeedbackType.ALERT)
+                    .overspendCategories(List.of(new CategoryOverspend("기타", 512_900, 117_830, null, 5)))
+                    .build();
+
+            String prompt = capturedUserPrompt(ctx);
+            assertThat(prompt).contains("- 기타: 월말 예상 초과 +512,900원 (이번 주 지출 117,830원, 5건)");
+            assertThat(prompt).doesNotContain("누적");
+        }
+
+        @Test
+        @DisplayName("감정 태그는 한국어로 표기 — 영문 코드가 있으면 'SATISFIED 태그'처럼 그대로 노출 (#122 실험 0, 7/68)")
+        void emotionTags_renderedInKorean() {
+            CauseSignals cs = new CauseSignals(
+                    null,
+                    "FREQUENCY",
+                    1.0,
+                    0.0,
+                    java.util.Map.of("SATISFIED", 3L, "STRESS_RELIEF", 1L),
+                    java.util.Map.of("SATISFIED", 30_000L, "STRESS_RELIEF", 5_000L),
+                    null,
+                    List.of(),
+                    false);
+            FeedbackContext ctx = contextBuilder()
+                    .feedbackType(FeedbackType.ALERT)
+                    .weekEmotion(new FeedbackRenderer.WeekEmotionSummary(
+                            java.util.Map.of("NECESSARY", 2L, "REGRET", 1L),
+                            java.util.Map.of("NECESSARY", 20_000L, "REGRET", 2_000L),
+                            0L))
+                    .overspendCategories(List.of(new CategoryOverspend("식대", 50_000, 35_000, cs, 4)))
+                    .anomaly("기타", 6.5, 117_830, new FeedbackRenderer.AnomalyBasis(true, 94_000, 14_355, "토스페이"))
+                    .anomalyEmotion("NECESSARY")
+                    .weekHighlights(List.of(new FeedbackRenderer.TransactionHighlight(
+                            java.time.LocalDate.of(2026, 10, 2), "기타", 94_000, "토스페이", "IMPULSE")))
+                    .build();
+
+            String prompt = capturedUserPrompt(ctx);
+            assertThat(prompt)
+                    .contains("- 필요 2건 / 20,000원")
+                    .contains("- 후회 1건 / 2,000원")
+                    .contains("만족 3건/30,000원")
+                    .contains("스트레스 해소 1건/5,000원")
+                    .contains(", 감정: 필요")
+                    .contains("\"토스페이\" (충동)");
+            assertThat(prompt).doesNotContainPattern("NECESSARY|SATISFIED|IMPULSE|STRESS_RELIEF|REGRET");
+        }
+
+        @Test
+        @DisplayName("모르는 감정 코드는 그대로 둔다")
+        void emotionLabel_unknownKept() {
+            assertThat(FeedbackRenderer.emotionLabel("CALM")).isEqualTo("CALM");
+            assertThat(FeedbackRenderer.emotionLabel(null)).isNull();
         }
 
         @Test
@@ -1119,6 +1176,16 @@ class FeedbackRendererTest {
         private Confidence overallConfidence = Confidence.HIGH;
         private FeedbackRenderer.AnomalyBasis anomalyBasis = null;
         private int anomalyWeeklyCount = 0;
+
+        FeedbackContextBuilder anomalyEmotion(String v) {
+            this.anomalyEmotion = v;
+            return this;
+        }
+
+        FeedbackContextBuilder weekEmotion(FeedbackRenderer.WeekEmotionSummary v) {
+            this.weekEmotion = v;
+            return this;
+        }
 
         FeedbackContextBuilder anomalyWeeklyCount(int v) {
             this.anomalyWeeklyCount = v;

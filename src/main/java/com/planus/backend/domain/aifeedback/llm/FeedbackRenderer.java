@@ -78,8 +78,8 @@ public class FeedbackRenderer {
         - 금액은 제공된 숫자를 그대로 사용할 것. 임의로 반올림하거나 바꾸지 않는다.
         - 절약 제안은 '어느 항목에서 얼마를 줄이면 저축 목표에 어떤 효과'인지 구체적으로 연결한다.
         - 절약 금액·절약 효과(원)는 [절약 액션]에 있는 카테고리와 금액만 쓴다. [절약 액션 대상 아님] 카테고리나 [절약 액션]이 없는 주에는 'N회 줄이면 N만 원', '월 N만 원 아낄 수' 같은 금액을 만들지 않는다. 줄이기를 권하더라도 금액을 붙이지 않는다.
-        - 초과 카테고리의 '이번 달 누적 초과' 금액은 이번 주 신규 금액을 이미 포함한 누적값이다. 두 숫자를 합산하지 않는다. '이번 주 신규'가 이번 달 누적의 일부임을 인식하고 맥락에 맞게 사용한다.
-        - 초과 카테고리의 '이번 주 신규' 금액이 작으면 그 카테고리는 이번 주 원인이 아니라 이전 주 누적임을 인식하고 이번 주 피드백에서 주요 원인으로 다루지 않는다.
+        - 초과 카테고리의 '월말 예상 초과'는 지금 속도로 가면 월말에 그 카테고리 예산을 넘을 것으로 예상되는 금액이다. 이미 쓴 금액이 아니므로 '누적됐다', '이미 넘었다'처럼 쓰지 않고 '이대로면 월말에 N원 넘을 것 같아요'처럼 예상으로 쓴다. '이번 주 지출'과 합산하지 않는다.
+        - 초과 카테고리의 '이번 주 지출'이 작으면 그 카테고리는 이번 주 원인이 아니라 이전 주들의 지출 때문임을 인식하고 이번 주 피드백에서 주요 원인으로 다루지 않는다.
         - 원인 신뢰도가 '높음'이 아니면 원인을 단정하지 말고 가볍게만 언급하거나 생략한다.
         - 배수는 무엇의 배수인지 그대로 밝힌다. '한 건' 배수는 그 거래에만 붙이고, 카테고리 전체·이번 주 합계·횟수가 그 배수만큼 늘었다고 쓰지 않는다. '주간 금액' 배수는 금액이 늘었다고만 쓰고 횟수로 바꾸지 않는다.
         - 배수는 제공된 값을 소수 첫째 자리까지 그대로 쓴다. '두 배 가까이', '5배 이상', '약 10배'처럼 근사하지 않는다.
@@ -88,10 +88,10 @@ public class FeedbackRenderer {
         - '한 건' 배수는 "평소 식대 한 건 금액의 9.2배"처럼 한 건 기준임을 밝혀 쓴다. 주간 피드백에서 "평소의 N배", "평소보다 N배"는 일주일 기준으로 읽히므로 한 건 배수에 쓰지 않는다.
         - 횟수(N회·N건)는 표기된 건수만 쓴다. 메모·주목 거래 목록은 일부만 보여주므로 목록 줄 수를 세어 횟수로 쓰지 않는다.
         - 이상 신호 거래의 감정 태그에 따라 피드백 톤을 달리한다:
-          • REGRET / IMPULSE → 명확하게 절제를 권고한다. "이런 소비는 줄여가는 게 좋겠어요" 수준으로 직접적으로 말한다.
-          • NECESSARY → 지출이 불가피했음을 인정하되, 해당 카테고리 예산을 조정하거나 다른 항목을 줄이는 방향을 제안한다.
-          • STRESS_RELIEF → 감정에 공감하되, 예산 영향을 짚고 다른 스트레스 해소 방법을 가볍게 제안한다.
-          • SATISFIED → 사실을 담담하게 전달하고 과도한 칭찬이나 권고 없이 마무리한다.
+          • 후회 / 충동 → 명확하게 절제를 권고한다. "이런 소비는 줄여가는 게 좋겠어요" 수준으로 직접적으로 말한다.
+          • 필요 → 지출이 불가피했음을 인정하되, 해당 카테고리 예산을 조정하거나 다른 항목을 줄이는 방향을 제안한다.
+          • 스트레스 해소 → 감정에 공감하되, 예산 영향을 짚고 다른 스트레스 해소 방법을 가볍게 제안한다.
+          • 만족 → 사실을 담담하게 전달하고 과도한 칭찬이나 권고 없이 마무리한다.
         - 예산에 여유가 있어도 '더 써도 된다'는 식의 조언은 하지 않는다. 저축 목표 달성을 기준으로 판단한다.
         - POSITIVE 주차(초과 카테고리 없음)에도 MEDIUM 이상의 이상 신호가 있으면 마지막 문장에서 1문장만 가볍게 언급한다.
         - 항상 '~요/~어요' 체 존댓말로 일관되게 작성한다.
@@ -570,7 +570,11 @@ public class FeedbackRenderer {
             sb.append("\n[이번 주 소비 감정]\n");
             c.weekEmotion().counts().forEach((emo, cnt) -> {
                 Long amt = c.weekEmotion().amounts().get(emo);
-                sb.append("- ").append(emo).append(" ").append(cnt).append("건");
+                sb.append("- ")
+                        .append(emotionLabel(emo))
+                        .append(" ")
+                        .append(cnt)
+                        .append("건");
                 if (amt != null) sb.append(" / ").append(exactWon(amt));
                 sb.append("\n");
             });
@@ -589,9 +593,9 @@ public class FeedbackRenderer {
             for (CategoryOverspend ov : c.overspendCategories()) {
                 sb.append("- ")
                         .append(ov.categoryName())
-                        .append(": 이번 달 누적 초과 +")
+                        .append(": 월말 예상 초과 +")
                         .append(exactWon(ov.overAmountWon()))
-                        .append(" (이 중 이번 주 신규 ")
+                        .append(" (이번 주 지출 ")
                         .append(exactWon(ov.thisWeekWon()))
                         .append(", ")
                         .append(ov.thisWeekCount())
@@ -629,7 +633,7 @@ public class FeedbackRenderer {
                 if (cs != null && !cs.emotionCounts().isEmpty()) {
                     sb.append("  감정: ");
                     cs.emotionCounts().forEach((emo, cnt) -> {
-                        sb.append(emo).append(" ").append(cnt).append("건");
+                        sb.append(emotionLabel(emo)).append(" ").append(cnt).append("건");
                         Long amt = cs.emotionAmounts() != null
                                 ? cs.emotionAmounts().get(emo)
                                 : null;
@@ -684,7 +688,7 @@ public class FeedbackRenderer {
             } else {
                 sb.append("\n[이상 신호 — 신뢰도 낮음/중간: 원인 단정 금지, 언급은 선택]\n");
                 if (c.anomalyEmotion() != null && !c.anomalyEmotion().isBlank()) {
-                    sb.append("- 감정 태그: ").append(c.anomalyEmotion()).append("\n");
+                    sb.append("- 감정: ").append(emotionLabel(c.anomalyEmotion())).append("\n");
                 }
             }
         }
@@ -719,7 +723,7 @@ public class FeedbackRenderer {
                     sb.append(" \"").append(h.memo()).append("\"");
                 }
                 if (h.emotion() != null && !h.emotion().isBlank()) {
-                    sb.append(" (").append(h.emotion()).append(")");
+                    sb.append(" (").append(emotionLabel(h.emotion())).append(")");
                 }
                 sb.append("\n");
             }
@@ -847,9 +851,25 @@ public class FeedbackRenderer {
             if (weeklyCount > 0) sb.append(" (").append(weeklyCount).append("건)");
         }
         if (emotion != null && !emotion.isBlank()) {
-            sb.append(", 감정 태그: ").append(emotion);
+            sb.append(", 감정: ").append(emotionLabel(emotion));
         }
         sb.append("\n");
+    }
+
+    /**
+     * 감정 태그 코드를 사용자에게 보이는 말로 바꾼다. 프롬프트에 영문 코드가 있으면 LLM이 "SATISFIED 태그"처럼 그대로 옮기기 때문 (#122).
+     * 모르는 값은 그대로 둔다.
+     */
+    static String emotionLabel(String code) {
+        if (code == null) return null;
+        return switch (code) {
+            case "NECESSARY" -> "필요";
+            case "SATISFIED" -> "만족";
+            case "IMPULSE" -> "충동";
+            case "STRESS_RELIEF" -> "스트레스 해소";
+            case "REGRET" -> "후회";
+            default -> code;
+        };
     }
 
     /** 상위 거래처 표시 개수. 넘으면 "외 N건". */
@@ -1045,7 +1065,7 @@ public class FeedbackRenderer {
     /**
      * 카테고리별 초과 예상.
      *
-     * @param overAmountWon  MTD 기준 예상 초과액 (이전 주 누적 포함)
+     * @param overAmountWon  월말 예상 초과액 (이번 달 지금까지의 지출로 외삽, 이미 쓴 금액이 아님)
      * @param thisWeekWon    이번 주에 새로 발생한 해당 카테고리 변동 지출
      */
     /**
