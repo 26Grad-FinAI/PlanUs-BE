@@ -915,6 +915,39 @@ class FeedbackRendererTest {
         }
 
         @Test
+        @DisplayName("내부 용어 '절약 액션'과 '이번 주는 예산의 N%' 거절 — 사용자 판정 (#122 실험 6)")
+        void bannedWording_rejected() {
+            assertThat(renderer.verifyWording("기타와 식료품에서 절약 액션을 모두 지켜도 초과가 남아요."))
+                    .isFalse();
+            assertThat(renderer.verifyWording("이번 주는 예산의 41%를 썼어요.")).isFalse();
+            assertThat(renderer.verifyWording("이번 주 예산의 69%를 사용했어요.")).isFalse();
+            assertThat(renderer.verifyWording("이번 주 30만 원 넘게 쓰면서 이번 달 예산의 86%를 사용했어요."))
+                    .isTrue();
+            assertThat(renderer.verifyWording("기타에서 27만 원 줄이면 월말 초과가 36만 원으로 줄어요."))
+                    .isTrue();
+        }
+
+        @Test
+        @DisplayName("'각각' 금액은 카테고리마다 맞아야 통과 (#122 실험 6, 18주차 '식료품과 오락문화에서 각각 2~3만 원씩')")
+        void eachAmount_checkedPerCategory() {
+            FeedbackContext ctx = contextBuilder()
+                    .feedbackType(FeedbackType.ALERT)
+                    .overspendCategories(List.of(
+                            new CategoryOverspend("식료품", 29_675, 17_900, null, 3),
+                            new CategoryOverspend("오락문화", 14_143, 18_000, null, 7)))
+                    .build();
+
+            assertThat(renderer.verifyEach("식료품과 오락문화에서 각각 2~3만 원씩 초과될 수 있어요.", ctx))
+                    .isFalse();
+            assertThat(renderer.verifyEach("식료품과 오락문화가 각각 1~3만 원 정도 넘을 것 같아요.", ctx))
+                    .isTrue();
+            assertThat(renderer.verifyEach("식료품과 오락문화에서 각각 29,675원, 14,143원 넘을 것 같아요.", ctx))
+                    .isTrue();
+            assertThat(renderer.verifyEach("식료품은 3만 원, 오락문화는 1만 원 정도 넘을 것 같아요.", ctx))
+                    .isTrue();
+        }
+
+        @Test
         @DisplayName("모르는 감정 코드는 그대로 둔다")
         void emotionLabel_unknownKept() {
             assertThat(FeedbackRenderer.emotionLabel("CALM")).isEqualTo("CALM");

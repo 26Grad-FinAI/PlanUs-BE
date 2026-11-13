@@ -79,6 +79,8 @@ public class FeedbackRenderer {
         - 절약 제안은 '어느 항목에서 얼마를 줄이면 저축 목표에 어떤 효과'인지 구체적으로 연결한다.
         - 절약 금액·절약 효과(원)는 [절약 액션]에 있는 카테고리와 금액만 쓴다. [절약 액션 대상 아님] 카테고리나 [절약 액션]이 없는 주에는 'N회 줄이면 N만 원', '월 N만 원 아낄 수' 같은 금액을 만들지 않는다. 줄이기를 권하더라도 금액을 붙이지 않는다.
         - 절약 금액은 [절약 액션]에 적힌 그 카테고리에만 붙인다. '다른 항목에서 N원 줄이기'처럼 카테고리를 바꾸지 않는다.
+        - 여러 카테고리에 '각각 N원'을 붙이지 않는다. 금액이 다르면 '식료품 29,675원, 오락문화 14,143원'처럼 따로 쓴다.
+        - 예산 사용 비율은 이번 달 전체 기준이다. '이번 주는 예산의 N%'처럼 이번 주로 쓰지 않는다.
         - 예산 사용 비율(%)은 '이번 달 예산의 30%를 썼어요'처럼 무엇의 비율인지 밝혀 쓴다. '페이싱', '보통 이맘때 20%인데 지금은 30%'처럼 대상 없이 쓰지 않는다.
         - [절약 액션]의 '모두 지키면' 효과(월말 초과 A → B)는 적힌 카테고리를 모두 지켰을 때의 결과다. 일부 카테고리만 말하면서 그 효과를 붙이지 않는다. 효과를 말하려면 적힌 카테고리를 모두 함께 말한다.
         - 절약 효과는 [절약 액션]의 '모두 지키면' 줄대로 '월말 초과가 A원에서 B원으로 줄어요'처럼 줄어드는 폭으로 쓴다. 초과가 남는데 '예산 안에 들어온다', '목표를 지킬 수 있다'고 쓰지 않고, '다 메우기 어렵다', '받아들이자', '받아들이고'처럼 체념하는 말은 쓰지 않는다. 남은 기간이 짧아 줄어드는 폭이 작으면 그 폭만 짧게 말하고 다음 달에 해볼 행동으로 넘어간다. 줄어드는 폭이 작으면 '크게 낮출 수 있다'처럼 과장하지 말고 초과의 주된 원인과 다음 행동을 짚는다.
@@ -153,12 +155,10 @@ public class FeedbackRenderer {
             if (candidate == null || candidate.isBlank()) {
                 break;
             }
-            boolean numbersOk = verifyNumbers(candidate, c);
-            boolean merchantOk = numbersOk && verifyMerchantCounts(candidate, c);
-            if (merchantOk && verifyTone(candidate)) {
+            String reason = firstFailure(candidate, c);
+            if (reason == null) {
                 return candidate;
             }
-            String reason = !numbersOk ? "숫자" : !merchantOk ? "거래처 건수" : "체념 표현";
             if (attempt < MAX_LLM_ATTEMPTS) {
                 log.warn("LLM {} 불일치 — 재시도 {}/{}", reason, attempt, MAX_LLM_ATTEMPTS - 1);
             } else {
@@ -166,6 +166,16 @@ public class FeedbackRenderer {
             }
         }
         return template(c);
+    }
+
+    /** 검사를 차례로 돌려 처음 실패한 검사 이름을 반환한다. 모두 통과하면 null. */
+    private String firstFailure(String candidate, FeedbackContext c) {
+        if (!verifyNumbers(candidate, c)) return "숫자";
+        if (!verifyMerchantCounts(candidate, c)) return "거래처 건수";
+        if (!verifyTone(candidate)) return "체념 표현";
+        if (!verifyWording(candidate)) return "내부 용어·기간 표기";
+        if (!verifyEach(candidate, c)) return "'각각' 금액";
+        return null;
     }
 
     private String callMonthEndWithRetry(LlmClient client, MonthEndContext c) {
@@ -213,6 +223,72 @@ public class FeedbackRenderer {
      * 놓친다 (실험 4, 19주차).
      */
     private static final Pattern RESIGNED_TONE = Pattern.compile("받아들이|메우(?:기|긴|기는)\\s*어(?:려|렵)");
+
+    /**
+     * 사용자 판정으로 금지한 표기 (#122 실험 6). 규칙만으로는 남음.
+     * <ul>
+     *   <li>내부 용어 "절약 액션" (4/69: "절약 액션을 모두 지켜도")
+     *   <li>이번 달 예산 사용 비율을 '이번 주'로 ("이번 주는 예산의 41%를 썼어요", 4/69)
+     * </ul>
+     */
+    private static final Pattern BANNED_WORDING =
+            Pattern.compile("절약\\s*액션|이번\\s*주(?:는|에는|에|엔)?\\s*(?:이번\\s*달\\s*)?예산의\\s*\\d");
+
+    boolean verifyWording(String text) {
+        return !BANNED_WORDING.matcher(text).find();
+    }
+
+    /**
+     * "식료품과 오락문화에서 각각 2~3만 원씩 초과"처럼 여러 카테고리에 '각각' 금액 하나를 붙이면, 카테고리마다 그 금액이 맞는지 본다 (#122 실험 6,
+     * 18주차: 오락문화는 14,143원). 숫자 검사는 한 카테고리(식료품 29,675원)만 맞아도 통과시킨다.
+     *
+     * <p>카테고리 금액 후보: 초과를 말하는 문장이면 월말 예상 초과만, 아니면 월말 예상 초과·이번 주 지출·절약 액션 금액. '각각' 뒤 금액이 둘 이상이면("각각 5만 원, 2만 원") 따로 쓴 것이므로
+     * 검사하지 않는다.
+     */
+    boolean verifyEach(String text, FeedbackContext c) {
+        Map<String, Set<Long>> overByCategory = new HashMap<>();
+        Map<String, Set<Long>> byCategory = new HashMap<>();
+        for (CategoryOverspend ov : c.overspendCategories()) {
+            overByCategory
+                    .computeIfAbsent(ov.categoryName(), k -> new HashSet<>())
+                    .add(ov.overAmountWon());
+            Set<Long> v = byCategory.computeIfAbsent(ov.categoryName(), k -> new HashSet<>());
+            v.add(ov.overAmountWon());
+            v.add(ov.thisWeekWon());
+        }
+        for (ActionSummary a : c.actions()) {
+            byCategory.computeIfAbsent(a.categoryName(), k -> new HashSet<>()).add(a.reductionWon());
+        }
+        for (String sentence : text.split("(?<=[.!?])\\s+|\\n")) {
+            int i = sentence.indexOf("각각");
+            if (i < 0) continue;
+            // 초과를 말하는 문장이면 초과 금액하고만 비교 — 이번 주 지출(오락문화 18,000원 ≈ 2만)로 통과하지 않게
+            Map<String, Set<Long>> candidates =
+                    sentence.matches(".*(초과|넘).*") && !overByCategory.isEmpty() ? overByCategory : byCategory;
+            String before = sentence.substring(0, i);
+            List<String> names =
+                    candidates.keySet().stream().filter(before::contains).toList();
+            if (names.size() < 2) continue;
+            List<MoneyMention> mentions = extractMoneyMentions(sentence.substring(i));
+            if (mentions.size() != 1) continue;
+            MoneyMention m = mentions.getFirst();
+            for (String name : names) {
+                if (candidates.get(name).stream().noneMatch(v -> eachMatches(m, v))) return false;
+            }
+        }
+        return true;
+    }
+
+    private boolean eachMatches(MoneyMention m, long v) {
+        if (m.manWonRange()) return isInManWonRange(m.rangeFrom() > 0 ? m.rangeFrom() : m.value(), m.value(), v);
+        if (m.rangeFrom() > 0) {
+            // "2~3만 원": 구간 안이거나 양 끝 중 하나로 근사 가능
+            return (v >= m.rangeFrom() && v <= m.value())
+                    || isAllowedExpression(m.rangeFrom(), v)
+                    || isAllowedExpression(m.value(), v);
+        }
+        return isAllowedExpression(m.value(), v);
+    }
 
     /** 사용자 판정으로 금지한 체념 표현("이번 달은 받아들이고", "다 메우긴 어려워요")이 없으면 true. */
     boolean verifyTone(String text) {
@@ -478,7 +554,7 @@ public class FeedbackRenderer {
                     long value = Math.round(manWon * 10_000) + rest;
                     // 범위("N만 원대")는 만원 단위 정수만 — "5만 8천 원대" 같은 표현은 범위로 보지 않는다
                     boolean range = rest == 0 && manWon == Math.floor(manWon) && isRangeSuffix(text, m.end());
-                    long from = range && m.group(1) != null ? Long.parseLong(m.group(1)) * 10_000 : 0;
+                    long from = m.group(1) != null && rest == 0 ? Long.parseLong(m.group(1)) * 10_000 : 0;
                     mentions.add(new MoneyMention(value, range, from));
                 } else if (m.group(6) != null) {
                     long value = digit(m.group(6)) * 1_000 + digit(m.group(7)) * 100 + number(m.group(8));
