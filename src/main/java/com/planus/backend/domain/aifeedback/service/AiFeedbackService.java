@@ -287,7 +287,7 @@ public class AiFeedbackService {
             // ── [7.5] Spring AI 행동 강화 ──
             if (!actions.isEmpty()) {
                 try {
-                    enrichedActions = actionEnricher.enrich(userId, actions);
+                    enrichedActions = actionEnricher.enrich(userId, weekEnd, actions);
                 } catch (Exception e) {
                     log.warn("Spring AI 행동 강화 실패, 기본 actions 사용: userId={}", userId, e);
                     enrichedActions = actionEnricher.toBasicEnriched(actions);

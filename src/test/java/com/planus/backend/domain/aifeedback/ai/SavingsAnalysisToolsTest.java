@@ -6,6 +6,7 @@ import static org.mockito.Mockito.*;
 
 import com.planus.backend.domain.aifeedback.entity.Expense;
 import com.planus.backend.domain.aifeedback.repository.ExpenseRepository;
+import java.time.LocalDate;
 import java.time.LocalDateTime;
 import java.util.List;
 import java.util.Map;
@@ -17,6 +18,9 @@ import org.springframework.ai.chat.model.ToolContext;
 
 class SavingsAnalysisToolsTest {
 
+    /** 기준일: 11월 14일 → 이번 달 = 11/1~11/14 (14일), 평소 = 8/1~10/31 */
+    private static final LocalDate AS_OF = LocalDate.of(2026, 11, 14);
+
     private ExpenseRepository expenseRepository;
     private SavingsAnalysisTools tools;
 
@@ -26,8 +30,8 @@ class SavingsAnalysisToolsTest {
         tools = new SavingsAnalysisTools(expenseRepository);
     }
 
-    private ToolContext toolContext(Long userId) {
-        return new ToolContext(Map.of("userId", userId));
+    private ToolContext toolContext() {
+        return new ToolContext(Map.of("userId", 1L, SavingsAnalysisTools.AS_OF, AS_OF));
     }
 
     private Expense variableExpense(long amount, String emotion, LocalDateTime date) {
@@ -43,37 +47,54 @@ class SavingsAnalysisToolsTest {
                 .build();
     }
 
+    private void stub(List<Expense> expenses) {
+        when(expenseRepository.findByUserIdAndCategoryIdAndExpenseDateBetween(eq(1L), eq(7), any(), any()))
+                .thenReturn(expenses);
+    }
+
     @Nested
     @DisplayName("getCategoryFrequency()")
     class GetCategoryFrequency {
 
         @Test
-        @DisplayName("정상적으로 주간 빈도와 건당 평균 금액을 계산한다")
-        void calculatesCorrectly() {
-            List<Expense> expenses = List.of(
-                    variableExpense(10000, "SATISFIED", LocalDateTime.of(2026, 11, 1, 12, 0)),
-                    variableExpense(20000, "REGRET", LocalDateTime.of(2026, 11, 3, 18, 0)),
-                    variableExpense(30000, null, LocalDateTime.of(2026, 11, 5, 20, 0)));
+        @DisplayName("이번 달(1일~기준일)과 평소(직전 3개월)를 나눠 빈도·건당 평균·합계를 계산한다")
+        void splitsThisMonthAndUsual() {
+            stub(List.of(
+                    variableExpense(30_000, null, LocalDateTime.of(2026, 8, 5, 12, 0)),
+                    variableExpense(30_000, null, LocalDateTime.of(2026, 9, 5, 12, 0)),
+                    variableExpense(30_000, null, LocalDateTime.of(2026, 10, 5, 12, 0)),
+                    variableExpense(10_000, "SATISFIED", LocalDateTime.of(2026, 11, 1, 12, 0)),
+                    variableExpense(20_000, "REGRET", LocalDateTime.of(2026, 11, 3, 18, 0)),
+                    variableExpense(30_000, null, LocalDateTime.of(2026, 11, 5, 20, 0))));
 
-            when(expenseRepository.findByUserIdAndCategoryIdAndExpenseDateBetween(eq(1L), eq(7), any(), any()))
-                    .thenReturn(expenses);
+            SavingsAnalysisTools.FrequencyStats result = tools.getCategoryFrequency(7, toolContext());
 
-            SavingsAnalysisTools.FrequencyStats result = tools.getCategoryFrequency(7, 4, toolContext(1L));
+            SavingsAnalysisTools.PeriodStats thisMonth = result.thisMonth();
+            assertThat(thisMonth.from()).isEqualTo(LocalDate.of(2026, 11, 1));
+            assertThat(thisMonth.to()).isEqualTo(AS_OF);
+            assertThat(thisMonth.days()).isEqualTo(14);
+            assertThat(thisMonth.count()).isEqualTo(3);
+            assertThat(thisMonth.weeklyAvgCount()).isEqualTo(1.5); // 3건 ÷ 14일 × 7
+            assertThat(thisMonth.totalAmount()).isEqualTo(60_000);
+            assertThat(thisMonth.avgAmountPerTransaction()).isEqualTo(20_000);
 
-            assertThat(result.weeklyAvgCount()).isEqualTo(3.0 / 4); // 3건 / 4주
-            assertThat(result.avgAmountPerTransaction()).isEqualTo(20000); // (10000+20000+30000) / 3
+            SavingsAnalysisTools.PeriodStats usual = result.usual();
+            assertThat(usual.from()).isEqualTo(LocalDate.of(2026, 8, 1));
+            assertThat(usual.to()).isEqualTo(LocalDate.of(2026, 10, 31));
+            assertThat(usual.count()).isEqualTo(3);
+            assertThat(usual.monthlyAvgAmount()).isEqualTo(30_000);
         }
 
         @Test
         @DisplayName("거래가 없으면 0을 반환한다")
         void emptyExpenses() {
-            when(expenseRepository.findByUserIdAndCategoryIdAndExpenseDateBetween(eq(1L), eq(7), any(), any()))
-                    .thenReturn(List.of());
+            stub(List.of());
 
-            SavingsAnalysisTools.FrequencyStats result = tools.getCategoryFrequency(7, 4, toolContext(1L));
+            SavingsAnalysisTools.FrequencyStats result = tools.getCategoryFrequency(7, toolContext());
 
-            assertThat(result.weeklyAvgCount()).isEqualTo(0);
-            assertThat(result.avgAmountPerTransaction()).isEqualTo(0);
+            assertThat(result.thisMonth().weeklyAvgCount()).isZero();
+            assertThat(result.thisMonth().avgAmountPerTransaction()).isZero();
+            assertThat(result.usual().count()).isZero();
         }
 
         @Test
@@ -88,15 +109,25 @@ class SavingsAnalysisToolsTest {
                     .recurring(true)
                     .planned(false)
                     .build();
-            Expense variable = variableExpense(10000, null, LocalDateTime.of(2026, 11, 2, 12, 0));
+            stub(List.of(recurring, variableExpense(10000, null, LocalDateTime.of(2026, 11, 2, 12, 0))));
 
-            when(expenseRepository.findByUserIdAndCategoryIdAndExpenseDateBetween(eq(1L), eq(7), any(), any()))
-                    .thenReturn(List.of(recurring, variable));
+            SavingsAnalysisTools.FrequencyStats result = tools.getCategoryFrequency(7, toolContext());
 
-            SavingsAnalysisTools.FrequencyStats result = tools.getCategoryFrequency(7, 4, toolContext(1L));
+            assertThat(result.thisMonth().count()).isEqualTo(1);
+            assertThat(result.thisMonth().avgAmountPerTransaction()).isEqualTo(10000);
+        }
 
-            assertThat(result.weeklyAvgCount()).isEqualTo(1.0 / 4); // 변동 1건만
-            assertThat(result.avgAmountPerTransaction()).isEqualTo(10000);
+        @Test
+        @DisplayName("기준일 기준으로 조회한다 — 이번 달 1일 ~ 기준일, 평소는 그 직전 3개월")
+        void queriesFromUsualStartToAsOf() {
+            stub(List.of());
+
+            tools.getCategoryFrequency(7, toolContext());
+
+            verify(expenseRepository)
+                    .findByUserIdAndCategoryIdAndExpenseDateBetween(
+                            eq(1L), eq(7), eq(LocalDate.of(2026, 8, 1).atStartOfDay()), argThat(to -> to.toLocalDate()
+                                    .equals(AS_OF)));
         }
     }
 
@@ -105,22 +136,34 @@ class SavingsAnalysisToolsTest {
     class GetDayOfWeekDistribution {
 
         @Test
-        @DisplayName("요일별 지출 금액 분포를 반환한다")
+        @DisplayName("이번 달 요일별 금액과 비중을 반환한다")
         void calculatesDistribution() {
             // 2026-11-02 = Monday, 2026-11-06 = Friday
-            List<Expense> expenses = List.of(
+            stub(List.of(
                     variableExpense(10000, null, LocalDateTime.of(2026, 11, 2, 12, 0)),
                     variableExpense(20000, null, LocalDateTime.of(2026, 11, 6, 19, 0)),
-                    variableExpense(15000, null, LocalDateTime.of(2026, 11, 6, 12, 0)));
+                    variableExpense(15000, null, LocalDateTime.of(2026, 11, 6, 12, 0))));
 
-            when(expenseRepository.findByUserIdAndCategoryIdAndExpenseDateBetween(eq(1L), eq(7), any(), any()))
-                    .thenReturn(expenses);
+            SavingsAnalysisTools.DayOfWeekStats result = tools.getDayOfWeekDistribution(7, toolContext());
 
-            Map<String, Long> result = tools.getDayOfWeekDistribution(7, toolContext(1L));
+            assertThat(result.from()).isEqualTo(LocalDate.of(2026, 11, 1));
+            assertThat(result.totalAmount()).isEqualTo(45000);
+            assertThat(result.byDay().get("MONDAY").amount()).isEqualTo(10000L);
+            assertThat(result.byDay().get("FRIDAY").amount()).isEqualTo(35000L); // 20000 + 15000
+            assertThat(result.byDay().get("FRIDAY").share()).isEqualTo(0.778); // 35000 ÷ 45000
+            assertThat(result.byDay().get("TUESDAY").amount()).isZero();
+        }
 
-            assertThat(result).containsEntry("MONDAY", 10000L);
-            assertThat(result).containsEntry("FRIDAY", 35000L); // 20000 + 15000
-            assertThat(result).containsEntry("TUESDAY", 0L);
+        @Test
+        @DisplayName("이번 달 1일부터 조회한다 (이전 8주 고정 기간 아님)")
+        void queriesThisMonthOnly() {
+            stub(List.of());
+
+            tools.getDayOfWeekDistribution(7, toolContext());
+
+            verify(expenseRepository)
+                    .findByUserIdAndCategoryIdAndExpenseDateBetween(
+                            eq(1L), eq(7), eq(LocalDate.of(2026, 11, 1).atStartOfDay()), any());
         }
     }
 
@@ -129,41 +172,41 @@ class SavingsAnalysisToolsTest {
     class GetEmotionDistribution {
 
         @Test
-        @DisplayName("감정별 통계를 반환한다")
+        @DisplayName("이번 달 감정별 건수·금액과 비중을 반환한다")
         void calculatesEmotionStats() {
-            List<Expense> expenses = List.of(
+            stub(List.of(
                     variableExpense(10000, "SATISFIED", LocalDateTime.of(2026, 11, 1, 12, 0)),
                     variableExpense(20000, "REGRET", LocalDateTime.of(2026, 11, 2, 12, 0)),
                     variableExpense(30000, "REGRET", LocalDateTime.of(2026, 11, 3, 12, 0)),
-                    variableExpense(5000, null, LocalDateTime.of(2026, 11, 4, 12, 0)));
+                    variableExpense(5000, null, LocalDateTime.of(2026, 11, 4, 12, 0))));
 
-            when(expenseRepository.findByUserIdAndCategoryIdAndExpenseDateBetween(eq(1L), eq(7), any(), any()))
-                    .thenReturn(expenses);
+            SavingsAnalysisTools.EmotionStats result = tools.getEmotionDistribution(7, toolContext());
 
-            Map<String, SavingsAnalysisTools.EmotionStat> result = tools.getEmotionDistribution(7, toolContext(1L));
+            assertThat(result.totalCount()).isEqualTo(4);
+            assertThat(result.totalAmount()).isEqualTo(65000);
 
-            assertThat(result).containsKey("SATISFIED");
-            assertThat(result.get("SATISFIED").count()).isEqualTo(1);
-            assertThat(result.get("SATISFIED").totalAmount()).isEqualTo(10000);
-            assertThat(result.get("SATISFIED").ratio()).isCloseTo(0.25, within(0.01));
+            SavingsAnalysisTools.EmotionStat satisfied = result.byEmotion().get("SATISFIED");
+            assertThat(satisfied.count()).isEqualTo(1);
+            assertThat(satisfied.totalAmount()).isEqualTo(10000);
+            assertThat(satisfied.ratio()).isCloseTo(0.25, within(0.001));
 
-            assertThat(result).containsKey("REGRET");
-            assertThat(result.get("REGRET").count()).isEqualTo(2);
-            assertThat(result.get("REGRET").totalAmount()).isEqualTo(50000);
+            SavingsAnalysisTools.EmotionStat regret = result.byEmotion().get("REGRET");
+            assertThat(regret.count()).isEqualTo(2);
+            assertThat(regret.totalAmount()).isEqualTo(50000);
+            assertThat(regret.amountShare()).isEqualTo(0.769); // 50000 ÷ 65000
 
-            assertThat(result).containsKey("UNTAGGED");
-            assertThat(result.get("UNTAGGED").count()).isEqualTo(1);
+            assertThat(result.byEmotion().get("UNTAGGED").count()).isEqualTo(1);
         }
 
         @Test
-        @DisplayName("거래가 없으면 빈 맵 반환")
+        @DisplayName("거래가 없으면 빈 분포")
         void emptyExpenses() {
-            when(expenseRepository.findByUserIdAndCategoryIdAndExpenseDateBetween(eq(1L), eq(7), any(), any()))
-                    .thenReturn(List.of());
+            stub(List.of());
 
-            Map<String, SavingsAnalysisTools.EmotionStat> result = tools.getEmotionDistribution(7, toolContext(1L));
+            SavingsAnalysisTools.EmotionStats result = tools.getEmotionDistribution(7, toolContext());
 
-            assertThat(result).isEmpty();
+            assertThat(result.byEmotion()).isEmpty();
+            assertThat(result.totalCount()).isZero();
         }
     }
 }
