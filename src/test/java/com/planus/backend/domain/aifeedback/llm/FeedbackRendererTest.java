@@ -417,6 +417,15 @@ class FeedbackRendererTest {
         }
 
         @Test
+        @DisplayName("'한 건'은 여러 거래 중 하나를 가리키므로 총 건수 주장으로 보지 않음 (exp9 28·38주차 오탐)")
+        void singleTransactionReference_notTreatedAsTotal() {
+            assertThat(renderer.verifyMerchantCounts("카카오페이 한 건이 평소 기타 한 건 금액의 5.2배였어요.", ctx34()))
+                    .isTrue();
+            assertThat(renderer.verifyMerchantCounts("토스페이로 결제한 한 건이 158,355원이었어요.", ctx34()))
+                    .isTrue();
+        }
+
+        @Test
         @DisplayName("재시도 연동: 1차 '카카오페이·토스페이 결제가 7건' 거절 → 2차 '합쳐 6건' 채택")
         void retryOnMerchantCountMismatch() {
             LlmClient client = mock(LlmClient.class);
