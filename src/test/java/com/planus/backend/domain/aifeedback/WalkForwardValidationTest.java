@@ -927,7 +927,8 @@ class WalkForwardValidationTest {
                     bw,
                     overall,
                     anomalyBasis,
-                    anomalyWeeklyCount);
+                    anomalyWeeklyCount,
+                    weekEnd.lengthOfMonth() - weekEnd.getDayOfMonth());
 
             System.out.printf("%n=== [검증 4] 제%d주차 (%s ~ %s) ===%n", week, weekStart, weekEnd);
             System.out.printf("예측 월말 지출  : %,d원 / 가용예산 %,d원%n", ctx.predictedMonthEndWon(), AVAILABLE_BUDGET);

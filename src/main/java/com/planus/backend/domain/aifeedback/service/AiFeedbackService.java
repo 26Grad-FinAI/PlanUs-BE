@@ -63,7 +63,7 @@ public class AiFeedbackService {
     private static final Logger log = LoggerFactory.getLogger(AiFeedbackService.class);
 
     /** v3.0 (#111): 배수 기준 명시, 건수·묶음 표기, 절약 액션 출처 제한, 내부 용어 제거, 거래처별 건수. */
-    private static final String PROMPT_VERSION = "v3.1";
+    private static final String PROMPT_VERSION = "v3.2";
 
     private static final String LOGIC_VERSION = "v2.0";
 
@@ -439,7 +439,8 @@ public class AiFeedbackService {
                 bandWidth,
                 overallConfidence,
                 top != null ? top.basis() : null,
-                anomalyWeeklyCount);
+                anomalyWeeklyCount,
+                dim - day);
 
         // ── [9] 렌더링 ──
         FeedbackRenderer.Rendered out = renderer.render(ctx);

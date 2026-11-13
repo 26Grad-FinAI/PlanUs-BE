@@ -847,6 +847,38 @@ class FeedbackRendererTest {
         }
 
         @Test
+        @DisplayName("절약 액션을 다 지켜도 남는 초과를 표시 (#122 실험 0, 29주차: '8만 5천 원만 줄이면 예산 안에')")
+        void actionTotal_showsRemainingOverspend() {
+            FeedbackContext ctx = contextBuilder()
+                    .feedbackType(FeedbackType.ALERT)
+                    .savingsImpactWon(-196_455)
+                    .remainingDaysInMonth(10)
+                    .actions(List.of(new ActionSummary("기타", 85_219, null, 0.5)))
+                    .build();
+
+            assertThat(capturedUserPrompt(ctx))
+                    .contains("[절약 액션] (이번 달 남은 기간 10일)\n")
+                    .contains("- 위 절약을 다 지켜도 이대로면 월말에 111,236원 초과 (이번 달 안에 다 메우기 어려움)");
+            assertThat(renderer.verifyNumbers("다 줄여도 월말에 11만 원 넘게 초과할 것 같아요.", ctx))
+                    .isTrue();
+        }
+
+        @Test
+        @DisplayName("절약 액션이 초과를 모두 덮으면 '예산 안에 들어올 수 있음'")
+        void actionTotal_coversGap() {
+            FeedbackContext ctx = contextBuilder()
+                    .feedbackType(FeedbackType.ALERT)
+                    .savingsImpactWon(-120_746)
+                    .actions(List.of(
+                            new ActionSummary("기타", 103_056, null, 0.5), new ActionSummary("식료품", 17_690, null, 0.5)))
+                    .build();
+
+            String prompt = capturedUserPrompt(ctx);
+            assertThat(prompt).contains("[절약 액션]\n");
+            assertThat(prompt).contains("- 위 절약을 다 지키면 이번 달 예산 안에 들어올 수 있음");
+        }
+
+        @Test
         @DisplayName("모르는 감정 코드는 그대로 둔다")
         void emotionLabel_unknownKept() {
             assertThat(FeedbackRenderer.emotionLabel("CALM")).isEqualTo("CALM");
@@ -1176,6 +1208,12 @@ class FeedbackRendererTest {
         private Confidence overallConfidence = Confidence.HIGH;
         private FeedbackRenderer.AnomalyBasis anomalyBasis = null;
         private int anomalyWeeklyCount = 0;
+        private int remainingDaysInMonth = 0;
+
+        FeedbackContextBuilder remainingDaysInMonth(int v) {
+            this.remainingDaysInMonth = v;
+            return this;
+        }
 
         FeedbackContextBuilder anomalyEmotion(String v) {
             this.anomalyEmotion = v;
@@ -1268,7 +1306,8 @@ class FeedbackRendererTest {
                     bandWidth,
                     overallConfidence,
                     anomalyBasis,
-                    anomalyWeeklyCount);
+                    anomalyWeeklyCount,
+                    remainingDaysInMonth);
         }
     }
 }

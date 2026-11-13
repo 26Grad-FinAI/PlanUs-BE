@@ -78,6 +78,8 @@ public class FeedbackRenderer {
         - 금액은 제공된 숫자를 그대로 사용할 것. 임의로 반올림하거나 바꾸지 않는다.
         - 절약 제안은 '어느 항목에서 얼마를 줄이면 저축 목표에 어떤 효과'인지 구체적으로 연결한다.
         - 절약 금액·절약 효과(원)는 [절약 액션]에 있는 카테고리와 금액만 쓴다. [절약 액션 대상 아님] 카테고리나 [절약 액션]이 없는 주에는 'N회 줄이면 N만 원', '월 N만 원 아낄 수' 같은 금액을 만들지 않는다. 줄이기를 권하더라도 금액을 붙이지 않는다.
+        - 절약 금액은 [절약 액션]에 적힌 그 카테고리에만 붙인다. '다른 항목에서 N원 줄이기'처럼 카테고리를 바꾸지 않는다.
+        - [절약 액션]의 '위 절약을 다 지켜도/다 지키면' 줄을 따른다. 다 지켜도 초과가 남으면 '예산 안에 들어온다', '목표를 지킬 수 있다'고 쓰지 않고, 절약 금액이 초과의 일부일 때 '크게 낮출 수 있다'처럼 과장하지 않는다. 남은 기간이 짧아 다 메우기 어려우면 그렇다고 담담하게 말한다.
         - 초과 카테고리의 '월말 예상 초과'는 지금 속도로 가면 월말에 그 카테고리 예산을 넘을 것으로 예상되는 금액이다. 이미 쓴 금액이 아니므로 '누적됐다', '이미 넘었다'처럼 쓰지 않고 '이대로면 월말에 N원 넘을 것 같아요'처럼 예상으로 쓴다. '이번 주 지출'과 합산하지 않는다.
         - 초과 카테고리의 '이번 주 지출'이 작으면 그 카테고리는 이번 주 원인이 아니라 이전 주들의 지출 때문임을 인식하고 이번 주 피드백에서 주요 원인으로 다루지 않는다.
         - 원인 신뢰도가 '높음'이 아니면 원인을 단정하지 말고 가볍게만 언급하거나 생략한다.
@@ -377,6 +379,10 @@ public class FeedbackRenderer {
         values.add(c.predictedMonthEndWon());
         values.add(c.availableBudgetWon());
         values.add(Math.abs(c.savingsImpactWon()));
+        if (!c.actions().isEmpty() && c.savingsImpactWon() < 0) {
+            // 합계 자체는 허용하지 않는다 — "외식을 줄이면 10만 원 이상 절약"처럼 카테고리를 바꾼 금액이 통과함 (exp0 회귀 테스트)
+            values.add(Math.abs(Math.abs(c.savingsImpactWon()) - actionTotal(c)));
+        }
 
         values.add(c.weekTotalWon());
         values.add(c.prevWeekTotalWon());
@@ -734,7 +740,11 @@ public class FeedbackRenderer {
             // 액션이 없는 주에도 LLM이 "주 1~2회 줄이면 월 5~10만 원" 같은 금액을 지어냄 (#111 exp5 17주차)
             sb.append("\n[절약 액션] 없음 — 절약 금액이나 절약 효과(원)를 제시하지 말 것\n");
         } else {
-            sb.append("\n[절약 액션]\n");
+            sb.append("\n[절약 액션]");
+            if (c.remainingDaysInMonth() > 0) {
+                sb.append(" (이번 달 남은 기간 ").append(c.remainingDaysInMonth()).append("일)");
+            }
+            sb.append("\n");
             for (ActionSummary a : c.actions()) {
                 sb.append("- ")
                         .append(a.categoryName())
@@ -752,6 +762,7 @@ public class FeedbackRenderer {
                 }
                 sb.append("\n");
             }
+            appendActionCoverage(sb, c);
         }
 
         // 추가 HIGH 이상치 언급 강제 — 프롬프트 끝에 명시적 지시
@@ -854,6 +865,26 @@ public class FeedbackRenderer {
             sb.append(", 감정: ").append(emotionLabel(emotion));
         }
         sb.append("\n");
+    }
+
+    /**
+     * 절약 액션을 다 지켰을 때 남는 월말 초과. 없으면 LLM이 "8만 5천 원만 줄이면 예산 안에 들어와요"처럼 일부 절약을
+     * 전부인 것처럼 쓴다 (#122 실험 0, 29주차: 초과 196,455원에 절약 85,219원).
+     */
+    private static void appendActionCoverage(StringBuilder sb, FeedbackContext c) {
+        if (c.savingsImpactWon() >= 0) return;
+
+        long left = Math.abs(c.savingsImpactWon()) - actionTotal(c);
+        if (left > 0) {
+            sb.append("- 위 절약을 다 지켜도 이대로면 월말에 ").append(exactWon(left)).append(" 초과 (이번 달 안에 다 메우기 어려움)");
+        } else {
+            sb.append("- 위 절약을 다 지키면 이번 달 예산 안에 들어올 수 있음");
+        }
+        sb.append("\n");
+    }
+
+    private static long actionTotal(FeedbackContext c) {
+        return c.actions().stream().mapToLong(ActionSummary::reductionWon).sum();
     }
 
     /**
@@ -1038,7 +1069,8 @@ public class FeedbackRenderer {
             BandWidth bandWidth,
             Confidence overallConfidence,
             AnomalyBasis anomalyBasis,
-            int anomalyWeeklyCount) {}
+            int anomalyWeeklyCount,
+            int remainingDaysInMonth) {}
 
     /**
      * 이상치 배수의 기준 (#111). 프롬프트에 무엇의 배수인지 밝히기 위해 전달한다.
