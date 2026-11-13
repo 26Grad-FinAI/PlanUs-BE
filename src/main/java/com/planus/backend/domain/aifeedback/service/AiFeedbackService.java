@@ -62,7 +62,9 @@ public class AiFeedbackService {
 
     private static final Logger log = LoggerFactory.getLogger(AiFeedbackService.class);
 
-    private static final String PROMPT_VERSION = "v2.0";
+    /** v3.0 (#111): 배수 기준 명시, 건수·묶음 표기, 절약 액션 출처 제한, 내부 용어 제거, 거래처별 건수. */
+    private static final String PROMPT_VERSION = "v3.0";
+
     private static final String LOGIC_VERSION = "v2.0";
 
     /** 추세 magnitude 계산에 필요한 최소 주 수 (4주 recent + 4주 prior). */
