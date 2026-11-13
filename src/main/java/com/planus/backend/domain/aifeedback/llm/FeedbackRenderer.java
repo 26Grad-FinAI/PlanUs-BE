@@ -84,6 +84,7 @@ public class FeedbackRenderer {
         - 전체 월말 예상 초과가 있으면 '예산 안에서 잘 쓰고 있다'처럼 예산 안인 것으로 쓰지 않는다.
         - 여러 카테고리에 '각각 N원'을 붙이지 않는다. 금액이 다르면 '식료품 29,675원, 오락문화 14,143원'처럼 따로 쓴다.
         - 예산 사용 비율은 이번 달 전체 기준이다. '이번 주는 예산의 N%'처럼 이번 주로 쓰지 않는다.
+        - 예산 사용 비율은 [예산 사용 비율]의 '지금까지 이번 달 예산의 N%'를 그대로 쓰고, 평소와 비교할 때는 '평소보다 빠른/느린 속도'로 말한다.
         - 예산 사용 비율(%)은 '이번 달 예산의 30%를 썼어요'처럼 무엇의 비율인지 밝혀 쓴다. '페이싱', '보통 이맘때 20%인데 지금은 30%'처럼 대상 없이 쓰지 않는다.
         - [절약 액션]의 '모두 지키면' 효과(월말 초과 A → B)는 적힌 카테고리를 모두 지켰을 때의 결과다. 일부 카테고리만 말하면 'X만 지키면' 줄의 숫자를 쓰고, '모두 지키면' 숫자를 붙이지 않는다.
         - 절약 효과는 [절약 액션]의 '모두 지키면' 줄대로 '월말 초과가 A원에서 B원으로 줄어요'처럼 줄어드는 폭으로 쓴다. 초과가 남는데 '예산 안에 들어온다', '목표를 지킬 수 있다'고 쓰지 않고, '다 메우기 어렵다', '받아들이자', '받아들이고'처럼 체념하는 말은 쓰지 않는다. 남은 기간이 짧아 줄어드는 폭이 작으면 그 폭만 짧게 말하고 다음 달에 해볼 행동으로 넘어간다. 줄어드는 폭이 작으면 '크게 낮출 수 있다'처럼 과장하지 말고 초과의 주된 원인과 다음 행동을 짚는다.
@@ -153,8 +154,9 @@ public class FeedbackRenderer {
     private String callWithRetry(LlmClient client, FeedbackContext c) {
         String system = systemPrompt(c);
         String user = userPrompt(c);
+        String lastReason = null;
         for (int attempt = 1; attempt <= MAX_LLM_ATTEMPTS; attempt++) {
-            String candidate = client.complete(system, user);
+            String candidate = client.complete(system, lastReason == null ? user : user + retryHint(lastReason));
             if (candidate == null || candidate.isBlank()) {
                 break;
             }
@@ -162,6 +164,7 @@ public class FeedbackRenderer {
             if (reason == null) {
                 return candidate;
             }
+            lastReason = reason;
             if (attempt < MAX_LLM_ATTEMPTS) {
                 log.warn("LLM {} 불일치 — 재시도 {}/{}", reason, attempt, MAX_LLM_ATTEMPTS - 1);
             } else {
@@ -169,6 +172,26 @@ public class FeedbackRenderer {
             }
         }
         return template(c);
+    }
+
+    /**
+     * 재시도 때 붙이는 거절 이유. 이유를 알려주지 않으면 같은 오류를 3번 반복해 템플릿 폴백된다 (#122 실험 9: 21주차 "104%까지 내려왔어요" ×3,
+     * 28주차 "이번 주는 예산의 69%" ×3).
+     */
+    static String retryHint(String reason) {
+        String fix =
+                switch (reason) {
+                    case "숫자" -> "분석 재료에 있는 금액만 쓰고, 금액을 바꾸거나 새로 계산하지 말 것.";
+                    case "거래처 건수" -> "결제 수단·거래처 건수는 '거래처별'에 적힌 숫자만 쓸 것. 카테고리 전체 건수를 거래처 건수로 쓰지 말 것.";
+                    case "체념 표현" -> "'받아들이다', '메우기 어렵다' 같은 말을 쓰지 말고, 줄였을 때 줄어드는 폭과 다음 행동을 말할 것.";
+                    case "내부 용어·기간 표기" ->
+                        "예산 사용 비율은 '지금까지 이번 달 예산의 N%'처럼 이번 달 기준임을 밝히고, '이번 주는 예산의 N%', '비율이 내려왔다·줄었다',"
+                                + " '절약 액션'이라는 말을 쓰지 말 것.";
+                    case "사실과 반대 표현" -> "전체 월말 예상 초과가 있으므로 '예산 안에서 잘 쓰고 있다'고 쓰지 말고, 'N원 넘게'는 실제 금액이 N원 이상일 때만 쓸 것.";
+                    case "'각각' 금액" -> "여러 카테고리에 '각각 N원'을 붙이지 말고 카테고리마다 금액을 따로 쓸 것.";
+                    default -> "분석 재료와 맞지 않는 부분을 고칠 것.";
+                };
+        return "\n\n[직전 답변이 거절된 이유: " + reason + "]\n" + fix + " 나머지 규칙은 그대로 지켜서 다시 작성해줘.";
     }
 
     /** 검사를 차례로 돌려 처음 실패한 검사 이름을 반환한다. 모두 통과하면 null. */
@@ -242,15 +265,31 @@ public class FeedbackRenderer {
      * "이번 주 28만 9천 원을 쓰면서 예산의 109%를 사용했어요" — 이번 달 누적 비율을 '이번 달' 없이 이번 주 금액에 붙임 (#122 실험 8, 34주차 ×2).
      * 같은 문장에 '이번 주'가 있고 '예산의 N%' 앞에 '이번 달·한 달'이 없으면 거절.
      */
-    private static final Pattern WEEK_THEN_RATE =
-            Pattern.compile("이번\\s*주[^.!?\\n]*?(?<!이번 달 )(?<!이번달 )(?<!한 달 )(?<!한달 )(?<!이번 달의 )예산의\\s*\\d+%");
+    private static final Pattern RATE = Pattern.compile("예산의\\s*\\d+%");
+
+    /** '예산의 N%' 바로 앞에 이 말이 있으면 이번 달 누적 또는 월말 예상임이 분명하다 (실험 9 오탐: "월말엔 예산의 141%", "지금까지 예산의 57%"). */
+    private static final Pattern RATE_QUALIFIER = Pattern.compile("이번\\s*달|한\\s*달|월말|지금까지|누적");
+
+    private static final Pattern THIS_WEEK = Pattern.compile("이번\\s*주");
+
+    private static boolean weekThenRate(String text) {
+        for (String sentence : text.split("(?<=[.!?])\\s+|\\n")) {
+            if (!THIS_WEEK.matcher(sentence).find()) continue;
+            Matcher m = RATE.matcher(sentence);
+            while (m.find()) {
+                String before = sentence.substring(Math.max(0, m.start() - 12), m.start());
+                if (!RATE_QUALIFIER.matcher(before).find()) return true;
+            }
+        }
+        return false;
+    }
 
     /** "예산의 104%까지 내려왔어요", "113%로 줄었어요" — 사용 비율은 줄지 않음 (#122 실험 8, 21주차). */
     private static final Pattern RATE_DOWN = Pattern.compile("\\d+%\\s*(?:까지|로|으로)?\\s*(?:내려왔|내려갔|내려온|줄었|줄어들었|낮아졌)");
 
     boolean verifyWording(String text) {
         return !BANNED_WORDING.matcher(text).find()
-                && !WEEK_THEN_RATE.matcher(text).find()
+                && !weekThenRate(text)
                 && !RATE_DOWN.matcher(text).find();
     }
 
@@ -409,6 +448,26 @@ public class FeedbackRenderer {
                 }
             }
             if (keys.isEmpty()) continue;
+            // "카카오페이, 네이버페이 충전이 각각 2건씩" — 합이 아니라 이름마다 (#122 실험 9, 27주차 오탐)
+            if (gap.contains("각각")) {
+                boolean each = true;
+                Matcher e = single.matcher(m.group(1));
+                while (e.find()) {
+                    String name = e.group();
+                    Set<String> one = new LinkedHashSet<>(aliases.getOrDefault(name, List.of()));
+                    for (Map<String, Integer> cat : perCategory) {
+                        for (String key : cat.keySet()) if (key.startsWith(name)) one.add(key);
+                    }
+                    if (one.isEmpty()) continue;
+                    each &= perCategory.stream()
+                            .anyMatch(cat -> one.stream()
+                                            .mapToInt(k -> cat.getOrDefault(k, 0))
+                                            .sum()
+                                    == claimed);
+                }
+                if (!each) return false;
+                continue;
+            }
             boolean consistent = perCategory.stream()
                     .anyMatch(cat ->
                             keys.stream().mapToInt(k -> cat.getOrDefault(k, 0)).sum() == claimed);
@@ -702,25 +761,31 @@ public class FeedbackRenderer {
             PacingResult p = c.pacing();
             switch (p.displayType()) {
                 case SINGLE ->
-                    sb.append("- 지난달 이맘때는 예산의 ")
-                            .append(pct(p.historicalAvgRate()))
-                            .append("를 썼는데, 지금은 예산의 ")
+                    sb.append("- 지금까지 이번 달 예산의 ")
                             .append(pct(p.currentRate()))
-                            .append("\n");
+                            .append("를 씀 (지난달 이맘때는 ")
+                            .append(pct(p.historicalAvgRate()))
+                            .append(" — ")
+                            .append(speed(p.currentRate(), p.historicalAvgRate()))
+                            .append(")\n");
                 case RANGE ->
-                    sb.append("- 보통 이맘때 예산의 ")
+                    sb.append("- 지금까지 이번 달 예산의 ")
+                            .append(pct(p.currentRate()))
+                            .append("를 씀 (보통 이맘때는 ")
                             .append(pct(p.referenceMin()))
                             .append("~")
                             .append(pct(p.referenceMax()))
-                            .append(" 쓰셨는데, 지금은 예산의 ")
-                            .append(pct(p.currentRate()))
-                            .append("\n");
+                            .append(" — ")
+                            .append(speed(p.currentRate(), p.historicalAvgRate()))
+                            .append(")\n");
                 case MEDIAN ->
-                    sb.append("- 보통 이맘때 예산의 ")
-                            .append(pct(p.historicalAvgRate()))
-                            .append(" 쓰셨는데, 지금은 예산의 ")
+                    sb.append("- 지금까지 이번 달 예산의 ")
                             .append(pct(p.currentRate()))
-                            .append("\n");
+                            .append("를 씀 (보통 이맘때는 ")
+                            .append(pct(p.historicalAvgRate()))
+                            .append(" — ")
+                            .append(speed(p.currentRate(), p.historicalAvgRate()))
+                            .append(")\n");
             }
         }
 
@@ -1224,6 +1289,13 @@ public class FeedbackRenderer {
     }
 
     /** 소진율을 퍼센트 문자열로 변환한다. */
+    /** 평소 대비 속도. 비율이 '내려왔다'로 읽히지 않게 속도로 표현한다 (#122 실험 8·9, 21주차 "104%까지 내려왔어요"). */
+    private static String speed(double current, double usual) {
+        if (usual <= 0) return "비교 기준 없음";
+        double r = current / usual;
+        return r > 1.05 ? "평소보다 빠른 속도" : r < 0.95 ? "평소보다 느린 속도" : "평소와 비슷한 속도";
+    }
+
     private static String pct(double rate) {
         return String.format("%.0f%%", rate * 100);
     }

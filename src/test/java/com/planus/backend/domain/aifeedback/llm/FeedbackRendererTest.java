@@ -404,6 +404,11 @@ class FeedbackRendererTest {
                     .isTrue();
             assertThat(renderer.verifyMerchantCounts("카카오페이·토스페이 결제가 7건 중 5건이었어요.", ctx34()))
                     .isFalse();
+            // '각각' — 이름마다 (#122 실험 9, 27주차 "카카오페이, 네이버페이 충전이 각각 2건씩" 오탐)
+            assertThat(renderer.verifyMerchantCounts("카카오페이, 토스페이 결제가 각각 3건씩 있었어요.", ctx34()))
+                    .isTrue();
+            assertThat(renderer.verifyMerchantCounts("카카오페이, 토스페이 결제가 각각 2건씩 있었어요.", ctx34()))
+                    .isFalse();
         }
 
         @Test
@@ -965,6 +970,15 @@ class FeedbackRendererTest {
                     .isTrue();
             assertThat(renderer.verifyWording("이번 주는 전주보다 7만 원 덜 썼어요. 지금까지 예산의 70%를 썼어요."))
                     .isTrue();
+            // 실험 9 오탐
+            assertThat(renderer.verifyWording("이번 주 총 291,540원을 쓰셨는데, 이대로면 월말엔 예산의 141%를 써서 멀어질 것 같아요."))
+                    .isTrue();
+            assertThat(renderer.verifyWording("이번 주는 지출이 26만 원대로 줄었지만, 지금까지 예산의 57%를 썼어요."))
+                    .isTrue();
+            assertThat(renderer.verifyWording("이번 주는 줄었지만 이번 달 예산의 57%를 썼고 이대로면 월말엔 예산의 136%를 쓸 것 같아요."))
+                    .isTrue();
+            assertThat(renderer.verifyWording("이번 주는 15만 원 정도 썼고, 예산의 84%까지 왔어요."))
+                    .isFalse();
         }
 
         @Test
@@ -1005,6 +1019,43 @@ class FeedbackRendererTest {
             String prompt = capturedUserPrompt(ctx);
             assertThat(prompt).contains("- 이대로면 월말엔 예산의 136%\n");
             assertThat(prompt).contains("358,038원 멀어짐 (= 전체 월말 예상 초과.");
+        }
+
+        @Test
+        @DisplayName("재시도 때 거절 이유를 프롬프트에 붙인다 (#122 실험 9: 같은 오류 3번 반복 → 폴백)")
+        void retry_includesRejectionReason() {
+            LlmClient client = mock(LlmClient.class);
+            when(llmProvider.getIfAvailable()).thenReturn(client);
+            when(client.complete(anyString(), anyString()))
+                    .thenReturn("이번 주는 예산의 69%를 썼어요.")
+                    .thenReturn("다음 달엔 기타 지출을 미리 정해두면 좋겠어요.");
+
+            FeedbackRenderer.Rendered out = renderer.render(contextBuilder().build());
+
+            assertThat(out.text()).isEqualTo("다음 달엔 기타 지출을 미리 정해두면 좋겠어요.");
+            var captor = org.mockito.ArgumentCaptor.forClass(String.class);
+            verify(client, times(2)).complete(anyString(), captor.capture());
+            assertThat(captor.getAllValues().get(0)).doesNotContain("직전 답변이 거절된 이유");
+            assertThat(captor.getAllValues().get(1)).contains("[직전 답변이 거절된 이유: 내부 용어·기간 표기]");
+        }
+
+        @Test
+        @DisplayName("예산 사용 비율 줄: '지금까지 이번 달 예산의 N%' + 평소 대비 속도")
+        void pacingLine_currentFirstWithSpeed() {
+            FeedbackContext ctx = contextBuilder()
+                    .feedbackType(FeedbackType.ALERT)
+                    .pacing(new com.planus.backend.domain.aifeedback.core.PacingComparator.PacingResult(
+                            1.04,
+                            1.37,
+                            0.76,
+                            null,
+                            3,
+                            com.planus.backend.domain.aifeedback.core.PacingComparator.PacingDisplay.MEDIAN,
+                            null,
+                            null))
+                    .build();
+
+            assertThat(capturedUserPrompt(ctx)).contains("- 지금까지 이번 달 예산의 104%를 씀 (보통 이맘때는 137% — 평소보다 느린 속도)\n");
         }
 
         @Test
