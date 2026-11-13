@@ -317,12 +317,15 @@ public class AiFeedbackService {
                             && !ex.getDate().isBefore(finalWeekStart)
                             && !ex.getDate().isAfter(weekEnd)
                             && ex.isVariable();
+                    List<String> memos = new ArrayList<>();
+                    for (Expense ex : window) if (thisWeekVar.test(ex)) memos.add(ex.getMemo());
                     return new CategoryOverspend(
                             Categories.name(cat),
                             e.getValue(),
                             sum(window, thisWeekVar),
                             finalCauseSignals.get(cat),
-                            count(window, thisWeekVar));
+                            count(window, thisWeekVar),
+                            MerchantNames.countByMerchant(memos));
                 })
                 .toList();
 

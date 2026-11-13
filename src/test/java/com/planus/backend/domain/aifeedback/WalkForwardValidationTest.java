@@ -630,12 +630,17 @@ class WalkForwardValidationTest {
                     int thisWeekCnt = (int) thisWeek.stream()
                             .filter(e -> e.isVariable() && Objects.equals(e.getCategoryId(), entry.getKey()))
                             .count();
+                    List<String> weekMemos = thisWeek.stream()
+                            .filter(e -> e.isVariable() && Objects.equals(e.getCategoryId(), entry.getKey()))
+                            .map(Expense::getMemo)
+                            .toList();
                     overspend.add(new FeedbackRenderer.CategoryOverspend(
                             Categories.name(entry.getKey()),
                             catSpend - entry.getValue(),
                             thisWeekAmt,
                             cs,
-                            thisWeekCnt));
+                            thisWeekCnt,
+                            MerchantNames.countByMerchant(weekMemos)));
                 }
             }
 

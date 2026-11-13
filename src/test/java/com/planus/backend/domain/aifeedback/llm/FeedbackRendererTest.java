@@ -708,6 +708,46 @@ class FeedbackRendererTest {
         }
 
         @Test
+        @DisplayName("거래처별 건수 줄 — 카테고리 건수를 결제 수단에 붙이지 않도록 (exp7 34주차 '토스페이·카카오페이 7건')")
+        void merchantCounts_line() {
+            java.util.Map<String, Integer> counts = new java.util.LinkedHashMap<>();
+            counts.put("카카오페이", 3);
+            counts.put("토스페이", 3);
+            counts.put("네이버페이결제", 1);
+            FeedbackContext ctx = contextBuilder()
+                    .feedbackType(FeedbackType.ALERT)
+                    .overspendCategories(List.of(new CategoryOverspend("기타", 346_563, 141_742, null, 7, counts)))
+                    .build();
+
+            assertThat(capturedUserPrompt(ctx)).contains("  거래처별: 카카오페이 3건, 토스페이 3건, 네이버페이결제 1건\n");
+            assertThat(capturedSystemPrompt(ctx)).contains("'거래처별' 표기의 숫자를 그대로 쓴다");
+        }
+
+        @Test
+        @DisplayName("거래처가 5곳을 넘으면 상위 5곳 + '외 N건', 이번 주 1건이면 거래처 줄 생략")
+        void merchantCounts_limitAndSingle() {
+            java.util.Map<String, Integer> many = new java.util.LinkedHashMap<>();
+            many.put("토스페이", 5);
+            many.put("KOCES_하남하머니", 2);
+            many.put("네이버페이결제", 2);
+            many.put("쿠팡", 1);
+            many.put("스마트로_대표비인증", 1);
+            many.put("네이버페이충전", 1);
+            many.put("키오스크_KICC_1", 1);
+            FeedbackContext ctx = contextBuilder()
+                    .feedbackType(FeedbackType.ALERT)
+                    .overspendCategories(List.of(
+                            new CategoryOverspend("기타", 1_006_344, 550_850, null, 13, many),
+                            new CategoryOverspend("교통", 27_100, 14_000, null, 1, java.util.Map.of("카카오T일반택시", 1))))
+                    .build();
+
+            String prompt = capturedUserPrompt(ctx);
+            assertThat(prompt)
+                    .contains("  거래처별: 토스페이 5건, KOCES_하남하머니 2건, 네이버페이결제 2건, 쿠팡 1건, 스마트로_대표비인증 1건 외 2건\n")
+                    .doesNotContain("거래처별: 카카오T일반택시");
+        }
+
+        @Test
         @DisplayName("목록이 잘리지 않으면 기존 '메모:' 표기")
         void count_notTruncated_plainMemoHeader() {
             List<com.planus.backend.domain.aifeedback.cause.MemoEvidence> memos =

@@ -83,7 +83,7 @@ public class FeedbackRenderer {
         - 원인 신뢰도가 '높음'이 아니면 원인을 단정하지 말고 가볍게만 언급하거나 생략한다.
         - 배수는 무엇의 배수인지 그대로 밝힌다. '한 건' 배수는 그 거래에만 붙이고, 카테고리 전체·이번 주 합계·횟수가 그 배수만큼 늘었다고 쓰지 않는다. '주간 금액' 배수는 금액이 늘었다고만 쓰고 횟수로 바꾸지 않는다.
         - 배수는 제공된 값을 소수 첫째 자리까지 그대로 쓴다. '두 배 가까이', '5배 이상', '약 10배'처럼 근사하지 않는다.
-        - 건수는 표기된 대상(카테고리 또는 묶인 거래)에만 쓴다. 카테고리 건수를 토스페이·카카오페이 같은 특정 결제 수단이나 거래처의 건수로 바꿔 쓰지 않는다.
+        - 건수는 표기된 대상(카테고리 또는 묶인 거래)에만 쓴다. 카테고리 건수를 토스페이·카카오페이 같은 특정 결제 수단이나 거래처의 건수로 바꿔 쓰지 않는다. 결제 수단·거래처 건수는 '거래처별' 표기의 숫자를 그대로 쓴다.
         - 분석 재료의 표기(대괄호 표시, '절약 액션', '한 건 배수' 같은 용어)는 사용자에게 보이는 문장에 쓰지 않는다. 일상적인 말로 풀어 쓴다.
         - '한 건' 배수는 "평소 식대 한 건 금액의 9.2배"처럼 한 건 기준임을 밝혀 쓴다. 주간 피드백에서 "평소의 N배", "평소보다 N배"는 일주일 기준으로 읽히므로 한 건 배수에 쓰지 않는다.
         - 횟수(N회·N건)는 표기된 건수만 쓴다. 메모·주목 거래 목록은 일부만 보여주므로 목록 줄 수를 세어 횟수로 쓰지 않는다.
@@ -540,6 +540,7 @@ public class FeedbackRenderer {
                     sb.append(" [절약 액션 대상 아님]");
                 }
                 sb.append("\n");
+                appendMerchantCounts(sb, ov);
 
                 // 감정태그 — 건수와 금액 합계 함께 표시
                 if (cs != null && !cs.emotionCounts().isEmpty()) {
@@ -768,6 +769,33 @@ public class FeedbackRenderer {
         sb.append("\n");
     }
 
+    /** 상위 거래처 표시 개수. 넘으면 "외 N건". */
+    private static final int MERCHANT_LIMIT = 5;
+
+    /**
+     * 거래처별 건수 줄 (#111). 카테고리 건수만 주면 LLM이 메모에 보이는 결제 수단에 붙여 "토스페이·카카오페이 7건"처럼 쓴다
+     * (실제 카카오페이 3·토스페이 3·네이버페이 1).
+     */
+    private static void appendMerchantCounts(StringBuilder sb, CategoryOverspend ov) {
+        if (ov.thisWeekCount() < 2
+                || ov.merchantCounts() == null
+                || ov.merchantCounts().isEmpty()) return;
+        List<String> parts = new ArrayList<>();
+        int shown = 0;
+        for (Map.Entry<String, Integer> e : ov.merchantCounts().entrySet()) {
+            if (parts.size() == MERCHANT_LIMIT) break;
+            parts.add(e.getKey() + " " + e.getValue() + "건");
+            shown += e.getValue();
+        }
+        sb.append("  거래처별: ").append(String.join(", ", parts));
+        int rest = ov.merchantCounts().values().stream()
+                        .mapToInt(Integer::intValue)
+                        .sum()
+                - shown;
+        if (rest > 0) sb.append(" 외 ").append(rest).append("건");
+        sb.append("\n");
+    }
+
     private String monthEndUserPrompt(MonthEndContext c) {
         StringBuilder sb = new StringBuilder();
         sb.append(c.yearMonth().getYear())
@@ -937,8 +965,26 @@ public class FeedbackRenderer {
      * @param overAmountWon  MTD 기준 예상 초과액 (이전 주 누적 포함)
      * @param thisWeekWon    이번 주에 새로 발생한 해당 카테고리 변동 지출
      */
+    /**
+     * @param merchantCounts 이번 주 거래처(결제 수단)별 건수, 건수 내림차순 (#111)
+     */
     public record CategoryOverspend(
-            String categoryName, long overAmountWon, long thisWeekWon, CauseSignals causeSignals, int thisWeekCount) {}
+            String categoryName,
+            long overAmountWon,
+            long thisWeekWon,
+            CauseSignals causeSignals,
+            int thisWeekCount,
+            Map<String, Integer> merchantCounts) {
+
+        public CategoryOverspend(
+                String categoryName,
+                long overAmountWon,
+                long thisWeekWon,
+                CauseSignals causeSignals,
+                int thisWeekCount) {
+            this(categoryName, overAmountWon, thisWeekWon, causeSignals, thisWeekCount, Map.of());
+        }
+    }
 
     /**
      * 이번 주 전체 변동지출의 감정 태그 분포 요약.
