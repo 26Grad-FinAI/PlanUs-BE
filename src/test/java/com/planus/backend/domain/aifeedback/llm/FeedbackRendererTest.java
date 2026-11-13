@@ -884,6 +884,11 @@ class FeedbackRendererTest {
 
             String prompt = capturedUserPrompt(ctx);
             assertThat(prompt).contains("[절약 액션]\n");
+            // 카테고리가 둘 이상이면 하나씩 지켰을 때 효과도 (#122 실험 7, 22주차)
+            assertThat(prompt).contains("- 기타만 지키면 월말 초과 120,746원 → 17,690원\n");
+            assertThat(prompt).contains("- 식료품만 지키면 월말 초과 120,746원 → 103,056원\n");
+            assertThat(renderer.verifyNumbers("기타만 줄여도 월말 초과가 120,746원에서 17,690원으로 줄어요.", ctx))
+                    .isTrue();
             assertThat(prompt).contains("- 기타·식료품 모두 지키면 이번 달 예산 안에 들어올 수 있음");
         }
 

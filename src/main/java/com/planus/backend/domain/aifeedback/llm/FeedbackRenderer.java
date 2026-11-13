@@ -82,7 +82,7 @@ public class FeedbackRenderer {
         - 여러 카테고리에 '각각 N원'을 붙이지 않는다. 금액이 다르면 '식료품 29,675원, 오락문화 14,143원'처럼 따로 쓴다.
         - 예산 사용 비율은 이번 달 전체 기준이다. '이번 주는 예산의 N%'처럼 이번 주로 쓰지 않는다.
         - 예산 사용 비율(%)은 '이번 달 예산의 30%를 썼어요'처럼 무엇의 비율인지 밝혀 쓴다. '페이싱', '보통 이맘때 20%인데 지금은 30%'처럼 대상 없이 쓰지 않는다.
-        - [절약 액션]의 '모두 지키면' 효과(월말 초과 A → B)는 적힌 카테고리를 모두 지켰을 때의 결과다. 일부 카테고리만 말하면서 그 효과를 붙이지 않는다. 효과를 말하려면 적힌 카테고리를 모두 함께 말한다.
+        - [절약 액션]의 '모두 지키면' 효과(월말 초과 A → B)는 적힌 카테고리를 모두 지켰을 때의 결과다. 일부 카테고리만 말하면 'X만 지키면' 줄의 숫자를 쓰고, '모두 지키면' 숫자를 붙이지 않는다.
         - 절약 효과는 [절약 액션]의 '모두 지키면' 줄대로 '월말 초과가 A원에서 B원으로 줄어요'처럼 줄어드는 폭으로 쓴다. 초과가 남는데 '예산 안에 들어온다', '목표를 지킬 수 있다'고 쓰지 않고, '다 메우기 어렵다', '받아들이자', '받아들이고'처럼 체념하는 말은 쓰지 않는다. 남은 기간이 짧아 줄어드는 폭이 작으면 그 폭만 짧게 말하고 다음 달에 해볼 행동으로 넘어간다. 줄어드는 폭이 작으면 '크게 낮출 수 있다'처럼 과장하지 말고 초과의 주된 원인과 다음 행동을 짚는다.
         - 초과 카테고리의 '월말 예상 초과'는 지금 속도로 가면 월말에 그 카테고리 예산을 넘을 것으로 예상되는 금액이다. 이미 쓴 금액이 아니므로 '누적됐다', '이미 넘었다'처럼 쓰지 않고 '이대로면 월말에 N원 넘을 것 같아요'처럼 예상으로 쓴다. '이번 주 지출'과 합산하지 않는다.
         - 초과 카테고리의 '이번 주 지출'이 작으면 그 카테고리는 이번 주 원인이 아니라 이전 주들의 지출 때문임을 인식하고 이번 주 피드백에서 주요 원인으로 다루지 않는다.
@@ -478,6 +478,9 @@ public class FeedbackRenderer {
         if (!c.actions().isEmpty() && c.savingsImpactWon() < 0) {
             // 합계 자체는 허용하지 않는다 — "외식을 줄이면 10만 원 이상 절약"처럼 카테고리를 바꾼 금액이 통과함 (exp0 회귀 테스트)
             values.add(Math.abs(Math.abs(c.savingsImpactWon()) - actionTotal(c)));
+            if (c.actions().size() >= 2) {
+                c.actions().forEach(a -> values.add(Math.abs(Math.abs(c.savingsImpactWon()) - a.reductionWon())));
+            }
         }
 
         values.add(c.weekTotalWon());
@@ -969,6 +972,22 @@ public class FeedbackRenderer {
      */
     private static void appendActionCoverage(StringBuilder sb, FeedbackContext c) {
         if (c.savingsImpactWon() >= 0) return;
+        long gap = Math.abs(c.savingsImpactWon());
+        // 카테고리가 둘 이상이면 하나씩 지켰을 때의 효과도 준다 — 한 카테고리만 말하면서 전체 효과를 붙이는 오류 (#122 실험 7, 22주차:
+        // "오락문화 56,856원을 아껴보면 월말 초과가 134,328원으로" — 134,328원은 교통까지 합친 결과)
+        if (c.actions().size() >= 2) {
+            for (ActionSummary a : c.actions()) {
+                long single = gap - a.reductionWon();
+                if (single <= 0) continue;
+                sb.append("- ")
+                        .append(a.categoryName())
+                        .append("만 지키면 월말 초과 ")
+                        .append(exactWon(gap))
+                        .append(" → ")
+                        .append(exactWon(single))
+                        .append("\n");
+            }
+        }
 
         long left = Math.abs(c.savingsImpactWon()) - actionTotal(c);
         if (left > 0) {
