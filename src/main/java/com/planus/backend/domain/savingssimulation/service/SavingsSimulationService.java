@@ -3,6 +3,7 @@ package com.planus.backend.domain.savingssimulation.service;
 import com.fasterxml.jackson.core.type.TypeReference;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.planus.backend.domain.aifeedback.ai.EnrichedAction;
+import com.planus.backend.domain.aifeedback.core.BudgetProjector;
 import com.planus.backend.domain.aifeedback.core.Categories;
 import com.planus.backend.domain.aifeedback.entity.AiFeedback;
 import com.planus.backend.domain.aifeedback.entity.Budget;
@@ -20,8 +21,8 @@ import com.planus.backend.domain.user.entity.UserAccount;
 import com.planus.backend.domain.user.repository.UserAccountRepository;
 import com.planus.backend.global.apiPayload.code.GeneralErrorCode;
 import com.planus.backend.global.apiPayload.exception.GeneralException;
+import java.time.Clock;
 import java.time.LocalDate;
-import java.time.LocalDateTime;
 import java.time.LocalTime;
 import java.time.YearMonth;
 import java.time.format.DateTimeFormatter;
@@ -54,6 +55,7 @@ public class SavingsSimulationService {
     private final UserAccountRepository userRepo;
     private final SavingSimulationRepository simulationRepo;
     private final ObjectMapper objectMapper;
+    private final Clock clock;
 
     /**
      * 해당 월의 절약 제안 목록을 조회한다.
@@ -123,39 +125,38 @@ public class SavingsSimulationService {
                 .mapToLong(SuggestResponse.ActionCard::reductionWon)
                 .sum();
 
-        // 가용예산 및 현재 소비 계산
+        // 이번 달 저축액 = 수입 − 고정지출 − 변동지출.
+        // 가용예산(availableBudget)은 이미 저축 목표를 뺀 값이므로 다시 더한다 — 빼면 저축 목표를 두 번 차감해,
+        // 목표를 채우고 남는데도 "저축 목표 미달"로 분류된다 (#127)
+        long savingsGoal = user.getMonthlySavingsGoal();
         long available = user.availableBudget();
         LocalDate monthStart = parseYearMonth(request.yearMonth());
-        LocalDate monthEnd = YearMonth.from(monthStart).atEndOfMonth();
-        LocalDateTime from = monthStart.atStartOfDay();
-        LocalDateTime to = monthEnd.atTime(LocalTime.MAX);
-        long currentSpend = expenseRepo.sumVariableExpensesByPeriod(userId, from, to);
+        long expectedSpend = expectedVariableSpend(userId, monthStart);
 
-        long currentSavings = available - currentSpend;
+        long currentSavings = available + savingsGoal - expectedSpend;
         long projectedSavings = currentSavings + reductionTotal;
 
         // 화면 분기 결정
-        long savingsGoal = user.getMonthlySavingsGoal();
         DisplayType displayType;
         String message;
 
         if (currentSavings < 0) {
-            // 현재 적자
+            // 이번 달 적자 (수입 − 고정지출보다 많이 씀)
             displayType = DisplayType.DEFICIT;
             if (projectedSavings >= 0) {
-                message = String.format("매달 %,d원 초과 지출이 절약 시 균형에 도달합니다", -currentSavings);
+                message = String.format("이번 달 %,d원 적자가 절약 시 균형에 도달합니다", -currentSavings);
             } else {
-                message = String.format("매달 %,d원 초과 지출이 %,d원으로 줄어듭니다", -currentSavings, -projectedSavings);
+                message = String.format("이번 달 %,d원 적자가 %,d원으로 줄어듭니다", -currentSavings, -projectedSavings);
             }
         } else if (savingsGoal > 0 && currentSavings < savingsGoal) {
             // 저축 목표 미달
+            displayType = DisplayType.RECOVER;
             if (projectedSavings >= savingsGoal) {
-                displayType = DisplayType.RECOVER;
-                message = String.format("매달 %,d원 부족했던 저축 목표를 달성할 수 있습니다", savingsGoal - currentSavings);
+                message = String.format("이번 달 %,d원 부족했던 저축 목표를 달성할 수 있습니다", savingsGoal - currentSavings);
             } else {
-                displayType = DisplayType.RECOVER;
                 message = String.format(
-                        "저축 목표까지 %,d원 부족이 %,d원으로 줄어듭니다", savingsGoal - currentSavings, savingsGoal - projectedSavings);
+                        "이번 달 저축 목표까지 %,d원 부족이 %,d원으로 줄어듭니다",
+                        savingsGoal - currentSavings, savingsGoal - projectedSavings);
             }
         } else if (savingsGoal > 0) {
             // 저축 목표 있고 충분 — 달성 단축
@@ -167,12 +168,12 @@ public class SavingsSimulationService {
                         projectedSavings > 0 ? (goalAmount + projectedSavings - 1) / projectedSavings : currentMonths;
                 message = String.format("저축 목표 달성이 %d개월에서 %d개월로 단축됩니다", currentMonths, projectedMonths);
             } else {
-                message = String.format("연 %,d원 추가 절약이 가능합니다", reductionTotal * 12);
+                message = String.format("이번 달 %,d원을 더 모을 수 있습니다", reductionTotal);
             }
         } else {
-            // 여유 있음
+            // 여유 있음 — 절약 액션 금액은 이번 달 남은 기간 기준이므로 연 환산(×12)하지 않는다 (#127)
             displayType = DisplayType.SURPLUS;
-            message = String.format("연 %,d원 추가 절약이 가능합니다", reductionTotal * 12);
+            message = String.format("이번 달 %,d원을 더 모을 수 있습니다", reductionTotal);
         }
 
         return new SimulateResponse(
@@ -271,6 +272,30 @@ public class SavingsSimulationService {
     }
 
     // ── 내부 메서드 ──
+
+    /**
+     * 이번 달 변동지출. 지난 달은 실제 합계, 진행 중인 달은 피드백과 같은 월말 예측(이번 달 일평균과 전월 일평균을 경과일 비율로 혼합).
+     *
+     * <p>지금까지 쓴 돈만 쓰면 월초에는 저축액이 크게 잡혀, 같은 화면의 피드백("이대로면 월말에 N원 초과")과 반대로 "여유"가 나온다 (#127).
+     */
+    private long expectedVariableSpend(Long userId, LocalDate monthStart) {
+        YearMonth ym = YearMonth.from(monthStart);
+        LocalDate today = LocalDate.now(clock);
+        LocalDate monthEnd = ym.atEndOfMonth();
+        if (today.isBefore(monthStart)) return 0;
+        LocalDate upTo = today.isBefore(monthEnd) ? today : monthEnd;
+        long mtd =
+                expenseRepo.sumVariableExpensesByPeriod(userId, monthStart.atStartOfDay(), upTo.atTime(LocalTime.MAX));
+        if (!YearMonth.from(today).equals(ym)) return mtd;
+
+        LocalDate prevStart = monthStart.minusMonths(1);
+        long prev = expenseRepo.sumVariableExpensesByPeriod(
+                userId, prevStart.atStartOfDay(), monthStart.minusDays(1).atTime(LocalTime.MAX));
+        double priorDailyRate = prev > 0 ? (double) prev / prevStart.lengthOfMonth() : 0.0;
+        // 카테고리 하나와 전체 변동지출에 같은 식을 쓴다
+        return BudgetProjector.predictCategory(
+                mtd, 0, today.getDayOfMonth(), ym.lengthOfMonth(), priorDailyRate, null, null);
+    }
 
     private List<EnrichedAction> loadEnrichedActions(Long userId, String yearMonth) {
         AiFeedback feedback = loadFeedback(userId, yearMonth);
