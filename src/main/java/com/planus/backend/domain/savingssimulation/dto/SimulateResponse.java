@@ -8,7 +8,9 @@ import java.util.List;
  * @param displayType             화면 분기 유형
  * @param currentMonthlySavings   현재 월간 저축 가능액 (원)
  * @param projectedMonthlySavings 감축 후 월간 저축 가능액 (원)
- * @param reductionTotal          감축 합계 (원)
+ * @param reductionTotal          이번 달 남은 기간에 줄일 금액 합계 (원)
+ * @param monthlySaving           같은 습관을 유지하면 월 절약액 합계 (원)
+ * @param annualSaving            월 절약액 × 12 (원)
  * @param message                 사용자 안내 메시지
  * @param selectedActions         선택된 절약 제안 목록
  */
@@ -17,6 +19,8 @@ public record SimulateResponse(
         long currentMonthlySavings,
         long projectedMonthlySavings,
         long reductionTotal,
+        long monthlySaving,
+        long annualSaving,
         String message,
         List<SuggestResponse.ActionCard> selectedActions) {
 

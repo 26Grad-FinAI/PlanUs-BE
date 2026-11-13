@@ -66,6 +66,17 @@ class SavingsSimulationServiceTest {
 
     // ── 공통 헬퍼 ──
 
+    private static com.planus.backend.domain.aifeedback.entity.Expense variable(
+            int categoryId, long amount, LocalDate date) {
+        return com.planus.backend.domain.aifeedback.entity.Expense.builder()
+                .userId(1L)
+                .categoryId(categoryId)
+                .type("EXPENSE")
+                .amount(amount)
+                .expenseDate(date.atTime(12, 0))
+                .build();
+    }
+
     private static java.time.Clock fixedClock(LocalDate date) {
         return java.time.Clock.fixed(
                 date.atStartOfDay(java.time.ZoneId.systemDefault()).toInstant(), java.time.ZoneId.systemDefault());
@@ -352,7 +363,48 @@ class SavingsSimulationServiceTest {
 
                 assertThat(result.displayType()).isEqualTo(DisplayType.SURPLUS);
                 assertThat(result.reductionTotal()).isEqualTo(40_000);
-                assertThat(result.message()).isEqualTo("이번 달 40,000원을 더 모을 수 있습니다"); // ×12 연 환산 없음
+                // 카테고리 거래 없음 → 월 절약액 0 (월 기준이 없음)
+                assertThat(result.monthlySaving()).isZero();
+            }
+
+            @Test
+            @DisplayName("월 절약액 = 남은 기간 감축 비율 × 직전 3개월 월평균, 연 = 월 × 12 (#127)")
+            void monthlyAndAnnualSaving() throws Exception {
+                service = new SavingsSimulationService(
+                        feedbackRepo,
+                        budgetRepo,
+                        budgetCatRepo,
+                        expenseRepo,
+                        userRepo,
+                        simulationRepo,
+                        objectMapper,
+                        fixedClock(LocalDate.of(2026, 11, 16)));
+                UserAccount user = userWithGoal(3_000_000, 0, 0);
+                when(userRepo.findById(1L)).thenReturn(Optional.of(user));
+                when(feedbackRepo.findByUserIdAndPeriodTypeOrderByPeriodStartDesc(1L, "WEEKLY"))
+                        .thenReturn(List.of(feedbackWith(buildPayloadWithEnrichedActions())));
+                when(expenseRepo.sumVariableExpensesByPeriod(eq(1L), any(), any()))
+                        .thenReturn(1_000_000L);
+                // 식대(7): 8·9·10월 각 300,000원, 11월 1~16일 160,000원 (일평균 10,000)
+                when(expenseRepo.findByUserIdAndCategoryIdAndExpenseDateBetween(eq(1L), eq(7), any(), any()))
+                        .thenReturn(List.of(
+                                variable(7, 300_000, LocalDate.of(2026, 8, 10)),
+                                variable(7, 300_000, LocalDate.of(2026, 9, 10)),
+                                variable(7, 300_000, LocalDate.of(2026, 10, 10)),
+                                variable(7, 160_000, LocalDate.of(2026, 11, 5))));
+
+                SimulateResponse result = service.simulate(1L, new SimulateRequest("2026-11", List.of(7)));
+
+                // 남은 14일 예상 = min(혼합, 이번 달 속도만 10,000 × 14 = 140,000). 혼합 일평균 = (16/30)·10,000 + (14/30)·9,677 ≈ 9,849
+                // → 남은 기간 ≈ 137,892원. 감축 40,000 ÷ 137,892 ≈ 29% → 월 ≈ 0.29 × 300,000 ≈ 87,000원
+                SuggestResponse.ActionCard card = result.selectedActions().getFirst();
+                assertThat(card.reductionWon()).isEqualTo(40_000);
+                assertThat(card.monthlySavingWon()).isBetween(86_000L, 88_000L);
+                assertThat(card.annualSavingWon()).isEqualTo(card.monthlySavingWon() * 12);
+                assertThat(result.annualSaving()).isEqualTo(result.monthlySaving() * 12);
+                assertThat(result.message())
+                        .isEqualTo(String.format(
+                                "월 %,d원, 1년 %,d원을 더 저축할 수 있습니다", result.monthlySaving(), result.annualSaving()));
             }
 
             @Test

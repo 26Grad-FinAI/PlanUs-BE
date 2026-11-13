@@ -62,8 +62,19 @@ class SavingsSimulationControllerTest {
 
             SuggestResponse response = new SuggestResponse(
                     List.of(new SuggestResponse.ActionCard(
-                            7, "식대", 40000, "REDUCE_FREQUENCY", "주 4.2회 외식", "주 2회로 감소", "금요일 저녁 외식이 전체의 60%", 0.74)),
-                    40000);
+                            7,
+                            "식대",
+                            40000,
+                            "REDUCE_FREQUENCY",
+                            "주 4.2회 외식",
+                            "주 2회로 감소",
+                            "금요일 저녁 외식이 전체의 60%",
+                            0.74,
+                            90000,
+                            1080000)),
+                    40000,
+                    90000,
+                    1080000);
 
             when(service.suggest(eq(1L), eq("2026-11"))).thenReturn(response);
 
@@ -76,7 +87,10 @@ class SavingsSimulationControllerTest {
                     .andExpect(jsonPath("$.result.actions[0].categoryName").value("식대"))
                     .andExpect(jsonPath("$.result.actions[0].actionType").value("REDUCE_FREQUENCY"))
                     .andExpect(jsonPath("$.result.actions[0].currentBehavior").value("주 4.2회 외식"))
-                    .andExpect(jsonPath("$.result.actions[0].targetBehavior").value("주 2회로 감소"));
+                    .andExpect(jsonPath("$.result.actions[0].targetBehavior").value("주 2회로 감소"))
+                    .andExpect(jsonPath("$.result.actions[0].monthlySavingWon").value(90000))
+                    .andExpect(jsonPath("$.result.actions[0].annualSavingWon").value(1080000))
+                    .andExpect(jsonPath("$.result.totalAnnualSaving").value(1080000));
 
             verify(service).suggest(1L, "2026-11");
         }
@@ -111,9 +125,20 @@ class SavingsSimulationControllerTest {
                     -50000,
                     10000,
                     60000,
-                    "매달 50,000원 초과 지출이 절약 시 균형에 도달합니다",
+                    90000,
+                    1080000,
+                    "이번 달 50,000원 적자가 절약 시 균형에 도달합니다",
                     List.of(new SuggestResponse.ActionCard(
-                            7, "식대", 40000, "REDUCE_FREQUENCY", "주 4.2회 외식", "주 2회로 감소", "금요일 저녁 외식이 전체의 60%", 0.74)));
+                            7,
+                            "식대",
+                            40000,
+                            "REDUCE_FREQUENCY",
+                            "주 4.2회 외식",
+                            "주 2회로 감소",
+                            "금요일 저녁 외식이 전체의 60%",
+                            0.74,
+                            90000,
+                            1080000)));
 
             when(service.simulate(eq(1L), any(SimulateRequest.class))).thenReturn(response);
 

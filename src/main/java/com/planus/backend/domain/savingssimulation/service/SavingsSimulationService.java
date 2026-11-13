@@ -8,6 +8,7 @@ import com.planus.backend.domain.aifeedback.core.Categories;
 import com.planus.backend.domain.aifeedback.entity.AiFeedback;
 import com.planus.backend.domain.aifeedback.entity.Budget;
 import com.planus.backend.domain.aifeedback.entity.BudgetCategory;
+import com.planus.backend.domain.aifeedback.entity.Expense;
 import com.planus.backend.domain.aifeedback.repository.AiFeedbackRepository;
 import com.planus.backend.domain.aifeedback.repository.BudgetCategoryRepository;
 import com.planus.backend.domain.aifeedback.repository.BudgetRepository;
@@ -66,26 +67,22 @@ public class SavingsSimulationService {
      */
     public SuggestResponse suggest(Long userId, String yearMonth) {
         List<EnrichedAction> enriched = loadEnrichedActions(userId, yearMonth);
+        LocalDate monthStart = parseYearMonth(yearMonth);
 
         List<SuggestResponse.ActionCard> cards = enriched.stream()
                 .filter(a -> a.reductionWon() >= MIN_REDUCTION_WON)
                 .sorted(Comparator.comparingDouble(EnrichedAction::feasibilityScore)
                         .reversed())
-                .map(a -> new SuggestResponse.ActionCard(
-                        a.categoryId(),
-                        Categories.name(a.categoryId()),
-                        a.reductionWon(),
-                        a.actionType(),
-                        a.currentBehavior(),
-                        a.targetBehavior(),
-                        a.contextInsight(),
-                        a.feasibilityScore()))
+                .map(a -> toCard(userId, monthStart, a))
                 .toList();
 
         long totalReduction = cards.stream()
                 .mapToLong(SuggestResponse.ActionCard::reductionWon)
                 .sum();
-        return new SuggestResponse(cards, totalReduction);
+        long totalMonthly = cards.stream()
+                .mapToLong(SuggestResponse.ActionCard::monthlySavingWon)
+                .sum();
+        return new SuggestResponse(cards, totalReduction, totalMonthly, totalMonthly * 12);
     }
 
     /**
@@ -110,20 +107,16 @@ public class SavingsSimulationService {
             if (action == null) {
                 throw new GeneralException(GeneralErrorCode.INVALID_CATEGORY_SELECTION);
             }
-            selectedCards.add(new SuggestResponse.ActionCard(
-                    action.categoryId(),
-                    Categories.name(action.categoryId()),
-                    action.reductionWon(),
-                    action.actionType(),
-                    action.currentBehavior(),
-                    action.targetBehavior(),
-                    action.contextInsight(),
-                    action.feasibilityScore()));
+            selectedCards.add(toCard(userId, parseYearMonth(request.yearMonth()), action));
         }
 
         long reductionTotal = selectedCards.stream()
                 .mapToLong(SuggestResponse.ActionCard::reductionWon)
                 .sum();
+        long monthlySaving = selectedCards.stream()
+                .mapToLong(SuggestResponse.ActionCard::monthlySavingWon)
+                .sum();
+        long annualSaving = monthlySaving * 12;
 
         // 이번 달 저축액 = 수입 − 고정지출 − 변동지출.
         // 가용예산(availableBudget)은 이미 저축 목표를 뺀 값이므로 다시 더한다 — 빼면 저축 목표를 두 번 차감해,
@@ -161,23 +154,30 @@ public class SavingsSimulationService {
         } else if (savingsGoal > 0) {
             // 저축 목표 있고 충분 — 달성 단축
             displayType = DisplayType.GOAL;
-            long goalAmount = savingsGoal > 0 ? savingsGoal * 12 : 0; // 연간 저축 목표
-            if (goalAmount > 0 && currentSavings > 0) {
+            long goalAmount = savingsGoal * 12; // 연간 저축 목표
+            long habitSavings = currentSavings + monthlySaving; // 습관을 유지했을 때 월 저축액
+            if (currentSavings > 0) {
                 long currentMonths = (goalAmount + currentSavings - 1) / currentSavings;
-                long projectedMonths =
-                        projectedSavings > 0 ? (goalAmount + projectedSavings - 1) / projectedSavings : currentMonths;
+                long projectedMonths = (goalAmount + habitSavings - 1) / habitSavings;
                 message = String.format("저축 목표 달성이 %d개월에서 %d개월로 단축됩니다", currentMonths, projectedMonths);
             } else {
-                message = String.format("이번 달 %,d원을 더 모을 수 있습니다", reductionTotal);
+                message = String.format("월 %,d원, 1년 %,d원을 더 저축할 수 있습니다", monthlySaving, annualSaving);
             }
         } else {
-            // 여유 있음 — 절약 액션 금액은 이번 달 남은 기간 기준이므로 연 환산(×12)하지 않는다 (#127)
+            // 여유 있음 — 연 절약액은 습관 기준 월 절약액 × 12 (#127: 이번 달 남은 기간 금액 × 12가 아님)
             displayType = DisplayType.SURPLUS;
-            message = String.format("이번 달 %,d원을 더 모을 수 있습니다", reductionTotal);
+            message = String.format("월 %,d원, 1년 %,d원을 더 저축할 수 있습니다", monthlySaving, annualSaving);
         }
 
         return new SimulateResponse(
-                displayType, currentSavings, projectedSavings, reductionTotal, message, selectedCards);
+                displayType,
+                currentSavings,
+                projectedSavings,
+                reductionTotal,
+                monthlySaving,
+                annualSaving,
+                message,
+                selectedCards);
     }
 
     /**
@@ -272,6 +272,69 @@ public class SavingsSimulationService {
     }
 
     // ── 내부 메서드 ──
+
+    /** 월 절약액 기준: 직전 몇 개월의 카테고리 월평균 변동지출. */
+    private static final int HABIT_BASE_MONTHS = 3;
+
+    private SuggestResponse.ActionCard toCard(Long userId, LocalDate monthStart, EnrichedAction a) {
+        long monthly = monthlySaving(userId, monthStart, a.categoryId(), a.reductionWon());
+        return new SuggestResponse.ActionCard(
+                a.categoryId(),
+                Categories.name(a.categoryId()),
+                a.reductionWon(),
+                a.actionType(),
+                a.currentBehavior(),
+                a.targetBehavior(),
+                a.contextInsight(),
+                a.feasibilityScore(),
+                monthly,
+                monthly * 12);
+    }
+
+    /**
+     * 같은 습관을 한 달 내내 유지했을 때의 월 절약액 (#127).
+     *
+     * <p>절약 액션 금액(reductionWon)은 이번 달 남은 기간에 줄일 금액이라, 남은 일수에 따라 9,718원처럼 작거나 월초엔 크다. 그대로 ×12 하면
+     * 연 절약액이 왜곡되므로 "남은 기간 예상 지출 대비 줄이는 비율"을 구해 그 카테고리의 월평균 지출에 적용한다.
+     * <pre>
+     * 비율     = reductionWon ÷ 이번 달 남은 기간 예상 지출 (상한 1)
+     * 월 절약액 = 비율 × 직전 3개월 월평균 지출 (기록이 없으면 이번 달 예상 지출)
+     * </pre>
+     */
+    private long monthlySaving(Long userId, LocalDate monthStart, int categoryId, long reductionWon) {
+        YearMonth ym = YearMonth.from(monthStart);
+        LocalDate today = LocalDate.now(clock);
+        LocalDate baseStart = monthStart.minusMonths(HABIT_BASE_MONTHS);
+        LocalDate upTo = today.isBefore(ym.atEndOfMonth()) ? today : ym.atEndOfMonth();
+        List<Expense> expenses = expenseRepo.findByUserIdAndCategoryIdAndExpenseDateBetween(
+                userId, categoryId, baseStart.atStartOfDay(), upTo.atTime(LocalTime.MAX));
+
+        Map<YearMonth, Long> byMonth = new HashMap<>();
+        for (Expense e : expenses) {
+            if (e.isVariable()) byMonth.merge(YearMonth.from(e.getDate()), e.getAmount(), Long::sum);
+        }
+        long mtd = byMonth.getOrDefault(ym, 0L);
+        long remaining = 0;
+        if (YearMonth.from(today).equals(ym)) {
+            long prev = byMonth.getOrDefault(ym.minusMonths(1), 0L);
+            double priorRate = prev > 0 ? (double) prev / ym.minusMonths(1).lengthOfMonth() : 0.0;
+            remaining = BudgetProjector.remainingCategoryExpected(
+                    mtd, today.getDayOfMonth(), ym.lengthOfMonth(), priorRate, null, null);
+        }
+
+        List<Long> past = new ArrayList<>();
+        for (int i = 1; i <= HABIT_BASE_MONTHS; i++) {
+            Long v = byMonth.get(ym.minusMonths(i));
+            if (v != null && v > 0) past.add(v);
+        }
+        long base = past.isEmpty()
+                ? mtd + remaining
+                : Math.round(past.stream().mapToLong(Long::longValue).average().orElse(0));
+        if (base <= 0) return 0;
+
+        double rate = remaining > 0 ? (double) reductionWon / remaining : (double) reductionWon / base;
+        return Math.round(Math.min(1.0, rate) * base);
+    }
 
     /**
      * 이번 달 변동지출. 지난 달은 실제 합계, 진행 중인 달은 피드백과 같은 월말 예측(이번 달 일평균과 전월 일평균을 경과일 비율로 혼합).
