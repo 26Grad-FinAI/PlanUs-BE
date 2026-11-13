@@ -48,7 +48,7 @@ public final class LlmRenderMeter {
     /** 실제 LLM 클라이언트를 감싸 호출을 기록하는 데코레이터를 반환한다. */
     public LlmClient wrap(LlmClient delegate) {
         return (systemPrompt, userPrompt) -> {
-            currentPrompt = userPrompt;
+            if (currentPrompt == null) currentPrompt = userPrompt; // 재시도 프롬프트(거절 이유 포함)가 아닌 첫 프롬프트를 기록
             long start = System.nanoTime();
             try {
                 String out = delegate.complete(systemPrompt, userPrompt);

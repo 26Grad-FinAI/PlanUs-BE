@@ -61,7 +61,7 @@ public class SavingsActionCalculator {
      * @param savingsGap             저축 갭 (양수: 메워야 할 금액)
      * @param elapsedDays            월 경과일
      * @param remainingDays          월 잔여일
-     * @param categoryMtdSpend       카테고리별 이번 달 누적 지출 (categoryId → 원)
+     * @param categoryRemainingExpected 카테고리별 남은 기간 예상 변동 지출 (categoryId → 원)
      * @param causeSignalsByCategory [5]에서 조립한 카테고리별 원인 신호 (dominantFactor 참조)
      * @param thisMonthExpenses      이번 달 지출 내역 (감정태그 참조)
      * @param rejections             거부 이력 (NOT_HELPFUL 반응만)
@@ -73,7 +73,7 @@ public class SavingsActionCalculator {
             long savingsGap,
             int elapsedDays,
             int remainingDays,
-            Map<Integer, Long> categoryMtdSpend,
+            Map<Integer, Long> categoryRemainingExpected,
             Map<Integer, CauseSignals> causeSignalsByCategory,
             List<Expense> thisMonthExpenses,
             List<UserReaction> rejections,
@@ -121,10 +121,8 @@ public class SavingsActionCalculator {
         for (ScoredCategory sc : sortedByScore) {
             if (remainingGap <= 0) break;
 
-            // 남은 기간 감축가능액 = 일평균 × 잔여일 × 감축비율
-            long mtdSpent = categoryMtdSpend.getOrDefault(sc.categoryId, 0L);
-            double dailyAvg = mtdSpent / (double) elapsedDays;
-            long remainingExpected = (long) (dailyAvg * remainingDays);
+            // 남은 기간 감축가능액 = 남은 기간 예상 지출 × 감축비율
+            long remainingExpected = categoryRemainingExpected.getOrDefault(sc.categoryId, 0L);
             long maxReducible = (long) (remainingExpected * p.getReductionRatio());
 
             long reductionWon = Math.min(sc.overspendWon, Math.min(remainingGap, maxReducible));

@@ -398,6 +398,20 @@ class FeedbackRendererTest {
         }
 
         @Test
+        @DisplayName("'N건 중 M건'은 뒤 숫자를 거래처 건수로 본다 (#122 실험 4, 26주차 '토스페이·카카오페이 출금이 12건 중 10건' 오탐)")
+        void partOfCount() {
+            assertThat(renderer.verifyMerchantCounts("카카오페이·토스페이 결제가 7건 중 6건이었어요.", ctx34()))
+                    .isTrue();
+            assertThat(renderer.verifyMerchantCounts("카카오페이·토스페이 결제가 7건 중 5건이었어요.", ctx34()))
+                    .isFalse();
+            // '각각' — 이름마다 (#122 실험 9, 27주차 "카카오페이, 네이버페이 충전이 각각 2건씩" 오탐)
+            assertThat(renderer.verifyMerchantCounts("카카오페이, 토스페이 결제가 각각 3건씩 있었어요.", ctx34()))
+                    .isTrue();
+            assertThat(renderer.verifyMerchantCounts("카카오페이, 토스페이 결제가 각각 2건씩 있었어요.", ctx34()))
+                    .isFalse();
+        }
+
+        @Test
         @DisplayName("묶인 거래 횟수도 검사: '롯데월드 3회' 거절, '롯데월드를 네 번' 통과")
         void groupedTransactionCount() {
             assertThat(renderer.verifyMerchantCounts("롯데월드 3회 방문으로 오락문화가 늘었어요.", ctx34()))
@@ -709,7 +723,7 @@ class FeedbackRendererTest {
                     .build();
 
             assertThat(capturedUserPrompt(ctx))
-                    .contains("(이 중 이번 주 신규 116,600원, 4건)")
+                    .contains("(이번 주 지출 116,600원, 4건)")
                     .contains("메모 (이번 주 4건 중 3건만 표시):")
                     .contains("/ 오락문화 이번 주 합계: 116,600원 (4건)");
         }
@@ -792,8 +806,322 @@ class FeedbackRendererTest {
                     .build();
 
             String prompt = capturedUserPrompt(ctx);
-            assertThat(prompt).contains("- 식대: 이번 달 누적 초과 +191,731원 (이 중 이번 주 신규 139,940원, 9건) [절약 액션 대상 아님]");
-            assertThat(prompt).contains("- 기타: 이번 달 누적 초과 +204,821원 (이 중 이번 주 신규 58,250원, 4건)\n");
+            assertThat(prompt).contains("- 식대: 월말 예상 초과 +191,731원 (이번 주 지출 139,940원, 9건) [절약 액션 대상 아님]");
+            assertThat(prompt).contains("- 기타: 월말 예상 초과 +204,821원 (이번 주 지출 58,250원, 4건)\n");
+        }
+
+        @Test
+        @DisplayName("초과 카테고리 금액은 '월말 예상 초과'로 표기 — 누적으로 표기하면 월초에 '이미 51만 원 누적'이라고 씀 (#122 실험 0, 39주차)")
+        void overspend_labeledAsProjection() {
+            FeedbackContext ctx = contextBuilder()
+                    .feedbackType(FeedbackType.ALERT)
+                    .overspendCategories(List.of(new CategoryOverspend("기타", 512_900, 117_830, null, 5)))
+                    .build();
+
+            String prompt = capturedUserPrompt(ctx);
+            assertThat(prompt).contains("- 기타: 월말 예상 초과 +512,900원 (이번 주 지출 117,830원, 5건)");
+            assertThat(prompt).doesNotContain("누적");
+        }
+
+        @Test
+        @DisplayName("감정 태그는 한국어로 표기 — 영문 코드가 있으면 'SATISFIED 태그'처럼 그대로 노출 (#122 실험 0, 7/68)")
+        void emotionTags_renderedInKorean() {
+            CauseSignals cs = new CauseSignals(
+                    null,
+                    "FREQUENCY",
+                    1.0,
+                    0.0,
+                    java.util.Map.of("SATISFIED", 3L, "STRESS_RELIEF", 1L),
+                    java.util.Map.of("SATISFIED", 30_000L, "STRESS_RELIEF", 5_000L),
+                    null,
+                    List.of(),
+                    false);
+            FeedbackContext ctx = contextBuilder()
+                    .feedbackType(FeedbackType.ALERT)
+                    .weekEmotion(new FeedbackRenderer.WeekEmotionSummary(
+                            java.util.Map.of("NECESSARY", 2L, "REGRET", 1L),
+                            java.util.Map.of("NECESSARY", 20_000L, "REGRET", 2_000L),
+                            0L))
+                    .overspendCategories(List.of(new CategoryOverspend("식대", 50_000, 35_000, cs, 4)))
+                    .anomaly("기타", 6.5, 117_830, new FeedbackRenderer.AnomalyBasis(true, 94_000, 14_355, "토스페이"))
+                    .anomalyEmotion("NECESSARY")
+                    .weekHighlights(List.of(new FeedbackRenderer.TransactionHighlight(
+                            java.time.LocalDate.of(2026, 10, 2), "기타", 94_000, "토스페이", "IMPULSE")))
+                    .build();
+
+            String prompt = capturedUserPrompt(ctx);
+            assertThat(prompt)
+                    .contains("- 필요 2건 / 20,000원")
+                    .contains("- 후회 1건 / 2,000원")
+                    .contains("만족 3건/30,000원")
+                    .contains("스트레스 해소 1건/5,000원")
+                    .contains(", 감정: 필요")
+                    .contains("\"토스페이\" (충동)");
+            assertThat(prompt).doesNotContainPattern("NECESSARY|SATISFIED|IMPULSE|STRESS_RELIEF|REGRET");
+        }
+
+        @Test
+        @DisplayName("절약 액션을 다 지켜도 남는 초과를 표시 (#122 실험 0, 29주차: '8만 5천 원만 줄이면 예산 안에')")
+        void actionTotal_showsRemainingOverspend() {
+            FeedbackContext ctx = contextBuilder()
+                    .feedbackType(FeedbackType.ALERT)
+                    .savingsImpactWon(-196_455)
+                    .remainingDaysInMonth(10)
+                    .actions(List.of(new ActionSummary("기타", 85_219, null, 0.5)))
+                    .build();
+
+            assertThat(capturedUserPrompt(ctx))
+                    .contains("[절약 액션] (이번 달 남은 기간 10일)\n")
+                    .contains("- 기타 모두 지키면 전체 월말 초과 196,455원 → 111,236원으로 줄어듦");
+            assertThat(renderer.verifyNumbers("기타에서 85,219원 줄이면 월말 초과가 19만 6천 원에서 11만 원대로 줄어요.", ctx))
+                    .isTrue();
+        }
+
+        @Test
+        @DisplayName("절약 액션이 초과를 모두 덮으면 '예산 안에 들어올 수 있음'")
+        void actionTotal_coversGap() {
+            FeedbackContext ctx = contextBuilder()
+                    .feedbackType(FeedbackType.ALERT)
+                    .savingsImpactWon(-120_746)
+                    .actions(List.of(
+                            new ActionSummary("기타", 103_056, null, 0.5), new ActionSummary("식료품", 17_690, null, 0.5)))
+                    .build();
+
+            String prompt = capturedUserPrompt(ctx);
+            assertThat(prompt).contains("[절약 액션]\n");
+            // 카테고리가 둘 이상이면 하나씩 지켰을 때 효과도 (#122 실험 7, 22주차)
+            assertThat(prompt).contains("- 기타만 지키면 전체 월말 초과 120,746원 → 17,690원\n");
+            assertThat(prompt).contains("- 식료품만 지키면 전체 월말 초과 120,746원 → 103,056원\n");
+            assertThat(renderer.verifyNumbers("기타만 줄여도 월말 초과가 120,746원에서 17,690원으로 줄어요.", ctx))
+                    .isTrue();
+            assertThat(prompt).contains("- 기타·식료품 모두 지키면 이번 달 예산 안에 들어올 수 있음");
+        }
+
+        @Test
+        @DisplayName("체념 표현은 거절 — 사용자 판정 (#122 실험 3, 30주차 '이번 달은 있는 그대로 받아들이고')")
+        void resignedTone_rejected() {
+            assertThat(renderer.verifyTone("이번 달은 있는 그대로 받아들이고 9월부터 기타 예산을 조정해보세요."))
+                    .isFalse();
+            assertThat(renderer.verifyTone("이번 달 안에 다 메우긴 어렵지만 다음 달엔 줄여봐요.")).isFalse();
+            assertThat(renderer.verifyTone("남은 기간이 16일이라 다 메우긴 어려워 보여요.")).isFalse(); // 실험 4 19주차
+            assertThat(renderer.verifyTone("이번 달 안에 메우기는 어려울 것 같아요.")).isFalse();
+            assertThat(renderer.verifyTone("기타에서 9,718원 줄이면 월말 초과가 22만 원대로 줄어요. 다음 달엔 기타 예산을 조정해보세요."))
+                    .isTrue();
+        }
+
+        @Test
+        @DisplayName("체념 표현이 있으면 재시도하고, 다음 응답을 사용")
+        void resignedTone_retried() {
+            LlmClient client = mock(LlmClient.class);
+            when(llmProvider.getIfAvailable()).thenReturn(client);
+            when(client.complete(anyString(), anyString()))
+                    .thenReturn("이번 달은 받아들이고 다음 달을 준비해봐요.")
+                    .thenReturn("다음 달엔 기타 지출을 미리 정해두면 좋겠어요.");
+
+            FeedbackRenderer.Rendered out = renderer.render(contextBuilder().build());
+
+            assertThat(out.text()).isEqualTo("다음 달엔 기타 지출을 미리 정해두면 좋겠어요.");
+            verify(client, org.mockito.Mockito.times(2)).complete(anyString(), anyString());
+        }
+
+        @Test
+        @DisplayName("내부 용어 '절약 액션'과 '이번 주는 예산의 N%' 거절 — 사용자 판정 (#122 실험 6)")
+        void bannedWording_rejected() {
+            assertThat(renderer.verifyWording("기타와 식료품에서 절약 액션을 모두 지켜도 초과가 남아요."))
+                    .isFalse();
+            assertThat(renderer.verifyWording("이번 주는 예산의 41%를 썼어요.")).isFalse();
+            assertThat(renderer.verifyWording("이번 주 예산의 69%를 사용했어요.")).isFalse();
+            assertThat(renderer.verifyWording("이번 주 30만 원 넘게 쓰면서 이번 달 예산의 86%를 사용했어요."))
+                    .isTrue();
+            assertThat(renderer.verifyWording("기타에서 27만 원 줄이면 월말 초과가 36만 원으로 줄어요."))
+                    .isTrue();
+        }
+
+        @Test
+        @DisplayName("'각각' 금액은 카테고리마다 맞아야 통과 (#122 실험 6, 18주차 '식료품과 오락문화에서 각각 2~3만 원씩')")
+        void eachAmount_checkedPerCategory() {
+            FeedbackContext ctx = contextBuilder()
+                    .feedbackType(FeedbackType.ALERT)
+                    .overspendCategories(List.of(
+                            new CategoryOverspend("식료품", 29_675, 17_900, null, 3),
+                            new CategoryOverspend("오락문화", 14_143, 18_000, null, 7)))
+                    .build();
+
+            assertThat(renderer.verifyEach("식료품과 오락문화에서 각각 2~3만 원씩 초과될 수 있어요.", ctx))
+                    .isFalse();
+            assertThat(renderer.verifyEach("식료품과 오락문화가 각각 1~3만 원 정도 넘을 것 같아요.", ctx))
+                    .isTrue();
+            assertThat(renderer.verifyEach("식료품과 오락문화에서 각각 29,675원, 14,143원 넘을 것 같아요.", ctx))
+                    .isTrue();
+            assertThat(renderer.verifyEach("식료품은 3만 원, 오락문화는 1만 원 정도 넘을 것 같아요.", ctx))
+                    .isTrue();
+        }
+
+        @Test
+        @DisplayName("이번 주 금액에 이번 달 비율을 '이번 달' 없이 붙이거나, 비율이 줄었다고 쓰면 거절 (#122 실험 8, 34·21주차)")
+        void weekRateAndRateDown_rejected() {
+            assertThat(renderer.verifyWording("이번 주 28만 9천 원을 쓰면서 예산의 109%를 사용했어요."))
+                    .isFalse();
+            assertThat(renderer.verifyWording("전주보다 14만 원 줄이면서 이번 달 예산의 104%까지 내려왔어요."))
+                    .isFalse();
+            assertThat(renderer.verifyWording("이맘때 142% 쓰던 패턴이 지금은 113%로 줄었어요."))
+                    .isFalse();
+            assertThat(renderer.verifyWording("이번 주 30만 원 넘게 쓰면서 이번 달 예산의 86%를 사용했어요."))
+                    .isTrue();
+            assertThat(renderer.verifyWording("이번 주는 전주보다 7만 원 덜 썼어요. 지금까지 예산의 70%를 썼어요."))
+                    .isTrue();
+            // 실험 9 오탐
+            assertThat(renderer.verifyWording("이번 주 총 291,540원을 쓰셨는데, 이대로면 월말엔 예산의 141%를 써서 멀어질 것 같아요."))
+                    .isTrue();
+            assertThat(renderer.verifyWording("이번 주는 지출이 26만 원대로 줄었지만, 지금까지 예산의 57%를 썼어요."))
+                    .isTrue();
+            assertThat(renderer.verifyWording("이번 주는 줄었지만 이번 달 예산의 57%를 썼고 이대로면 월말엔 예산의 136%를 쓸 것 같아요."))
+                    .isTrue();
+            assertThat(renderer.verifyWording("이번 주는 15만 원 정도 썼고, 예산의 84%까지 왔어요."))
+                    .isFalse();
+            // 실험 10: '이번 달'이 붙으면 허용 (사용자 판정), '예산을 N%'도 비율로 검사
+            assertThat(renderer.verifyWording("이번 주는 이번 달 예산의 15%를 써서 평소보다 느린 속도예요."))
+                    .isTrue();
+            assertThat(renderer.verifyWording("이번 주는 289,142원을 써서 예산을 109% 사용했어요."))
+                    .isFalse();
+        }
+
+        @Test
+        @DisplayName("초과 예상인데 '예산 안에서 잘', 초과 문장의 'N원 넘게'가 실제보다 크면 거절 (#122 실험 8, 26·24주차)")
+        void contradictingFacts_rejected() {
+            FeedbackContext ctx = contextBuilder()
+                    .feedbackType(FeedbackType.ALERT)
+                    .savingsImpactWon(-278_982)
+                    .overspendCategories(List.of(new CategoryOverspend("식대", 119_176, 124_200, null, 7)))
+                    .build();
+
+            assertThat(renderer.verifyFacts("이번 주는 예산 안에서 잘 쓰고 계세요 👍", ctx)).isFalse();
+            assertThat(renderer.verifyFacts("식대도 이번 주 7건으로 12만 원 넘게 초과될 것 같아요.", ctx))
+                    .isFalse();
+            assertThat(renderer.verifyFacts("식대도 11만 원 넘게 초과될 것 같아요.", ctx)).isTrue();
+            assertThat(renderer.verifyFacts("월말 초과가 27만 원 넘게 예상돼요.", ctx)).isTrue();
+            assertThat(renderer.verifyFacts("식대에서 이번 주 12만 원 넘게 썼어요.", ctx)).isTrue(); // 초과 문장 아님
+        }
+
+        @Test
+        @DisplayName("월말 예상 사용 비율과 '전체 월말 예상 초과' 이름 표시 (#122 실험 8, 31·27주차)")
+        void projectedRateAndTotalLabel() {
+            FeedbackContext ctx = contextBuilder()
+                    .feedbackType(FeedbackType.ALERT)
+                    .predictedMonthEndWon(1_358_038)
+                    .savingsImpactWon(-358_038)
+                    .pacing(new com.planus.backend.domain.aifeedback.core.PacingComparator.PacingResult(
+                            0.30,
+                            0.20,
+                            1.5,
+                            null,
+                            3,
+                            com.planus.backend.domain.aifeedback.core.PacingComparator.PacingDisplay.MEDIAN,
+                            null,
+                            null))
+                    .build();
+
+            String prompt = capturedUserPrompt(ctx);
+            assertThat(prompt).contains("- 이대로면 월말엔 예산의 136%\n");
+            assertThat(prompt).contains("358,038원 멀어짐 (= 전체 월말 예상 초과.");
+        }
+
+        @Test
+        @DisplayName("재시도 때 거절 이유를 프롬프트에 붙인다 (#122 실험 9: 같은 오류 3번 반복 → 폴백)")
+        void retry_includesRejectionReason() {
+            LlmClient client = mock(LlmClient.class);
+            when(llmProvider.getIfAvailable()).thenReturn(client);
+            when(client.complete(anyString(), anyString()))
+                    .thenReturn("이번 주는 예산의 69%를 썼어요.")
+                    .thenReturn("다음 달엔 기타 지출을 미리 정해두면 좋겠어요.");
+
+            FeedbackRenderer.Rendered out = renderer.render(contextBuilder().build());
+
+            assertThat(out.text()).isEqualTo("다음 달엔 기타 지출을 미리 정해두면 좋겠어요.");
+            var captor = org.mockito.ArgumentCaptor.forClass(String.class);
+            verify(client, times(2)).complete(anyString(), captor.capture());
+            assertThat(captor.getAllValues().get(0)).doesNotContain("직전 답변이 거절된 이유");
+            assertThat(captor.getAllValues().get(1)).contains("[직전 답변이 거절된 이유: 내부 용어·기간 표기]");
+        }
+
+        @Test
+        @DisplayName("예산 사용 비율 줄: '지금까지 이번 달 예산의 N%' + 평소 대비 속도")
+        void pacingLine_currentFirstWithSpeed() {
+            FeedbackContext ctx = contextBuilder()
+                    .feedbackType(FeedbackType.ALERT)
+                    .pacing(new com.planus.backend.domain.aifeedback.core.PacingComparator.PacingResult(
+                            1.04,
+                            1.37,
+                            0.76,
+                            null,
+                            3,
+                            com.planus.backend.domain.aifeedback.core.PacingComparator.PacingDisplay.MEDIAN,
+                            null,
+                            null))
+                    .build();
+
+            assertThat(capturedUserPrompt(ctx)).contains("- 지금까지 이번 달 예산의 104%를 씀 (보통 이맘때는 137% — 평소보다 느린 속도)\n");
+        }
+
+        @Test
+        @DisplayName("'N원 넘게' 하한 검사는 초과 금액에만 — 같은 문장의 이번 주 지출액은 제외 (PR 리뷰)")
+        void atLeast_onlyForOverspendAmounts() {
+            FeedbackContext ctx = contextBuilder()
+                    .feedbackType(FeedbackType.ALERT)
+                    .savingsImpactWon(-100_000)
+                    .overspendCategories(List.of(new CategoryOverspend("기타", 80_000, 310_000, null, 5)))
+                    .build();
+
+            assertThat(renderer.verifyFacts("이번 주 30만 원 넘게 썼고, 월말 초과는 10만 원으로 예상돼요.", ctx))
+                    .isTrue();
+            assertThat(renderer.verifyFacts("이번 주 30만 원 넘게 쓰면서 월말 초과는 10만 원으로 예상돼요.", ctx))
+                    .isTrue();
+            assertThat(renderer.verifyFacts("이대로면 월말에 30만 원 넘게 초과할 것 같아요.", ctx))
+                    .isFalse();
+        }
+
+        @Test
+        @DisplayName("남는 초과액을 절약 금액으로 권하면 거절 — 절약 금액은 그 카테고리의 액션 금액과 대조 (PR 리뷰)")
+        void savingsAmount_mustMatchActionReduction() {
+            FeedbackContext ctx = contextBuilder()
+                    .feedbackType(FeedbackType.ALERT)
+                    .savingsImpactWon(-200_000)
+                    .actions(List.of(new ActionSummary("기타", 50_000, null, 0.5)))
+                    .build();
+
+            assertThat(renderer.verifySavingsAmounts("기타에서 150,000원을 줄여보세요.", ctx))
+                    .isFalse();
+            assertThat(renderer.verifySavingsAmounts("기타에서 5만 원 줄이면 월말 초과가 20만 원에서 15만 원으로 줄어요.", ctx))
+                    .isTrue();
+            assertThat(renderer.verifyNumbers("기타에서 5만 원 줄이면 월말 초과가 20만 원에서 15만 원으로 줄어요.", ctx))
+                    .isTrue();
+            assertThat(renderer.verifySavingsAmounts("남은 기간 50,000원만 아끼면 초과가 150,000원으로 낮아져요.", ctx))
+                    .isTrue();
+        }
+
+        @Test
+        @DisplayName("여러 카테고리를 함께 말하면 그 카테고리들의 액션 합과 대조")
+        void savingsAmount_multipleCategoriesUseSum() {
+            FeedbackContext ctx = contextBuilder()
+                    .feedbackType(FeedbackType.ALERT)
+                    .savingsImpactWon(-500_013)
+                    .actions(List.of(
+                            new ActionSummary("교통", 2_362, null, 0.5),
+                            new ActionSummary("의류신발", 5_386, null, 0.5),
+                            new ActionSummary("기타", 18_118, null, 0.5)))
+                    .build();
+
+            assertThat(renderer.verifySavingsAmounts("교통·의류신발·기타에서 총 25,866원 줄이면 초과가 줄어요.", ctx))
+                    .isTrue();
+            assertThat(renderer.verifySavingsAmounts("기타에서 25,866원 줄이면 초과가 줄어요.", ctx))
+                    .isFalse();
+        }
+
+        @Test
+        @DisplayName("모르는 감정 코드는 그대로 둔다")
+        void emotionLabel_unknownKept() {
+            assertThat(FeedbackRenderer.emotionLabel("CALM")).isEqualTo("CALM");
+            assertThat(FeedbackRenderer.emotionLabel(null)).isNull();
         }
 
         @Test
@@ -1119,6 +1447,27 @@ class FeedbackRendererTest {
         private Confidence overallConfidence = Confidence.HIGH;
         private FeedbackRenderer.AnomalyBasis anomalyBasis = null;
         private int anomalyWeeklyCount = 0;
+        private int remainingDaysInMonth = 0;
+
+        FeedbackContextBuilder pacing(com.planus.backend.domain.aifeedback.core.PacingComparator.PacingResult v) {
+            this.pacing = v;
+            return this;
+        }
+
+        FeedbackContextBuilder remainingDaysInMonth(int v) {
+            this.remainingDaysInMonth = v;
+            return this;
+        }
+
+        FeedbackContextBuilder anomalyEmotion(String v) {
+            this.anomalyEmotion = v;
+            return this;
+        }
+
+        FeedbackContextBuilder weekEmotion(FeedbackRenderer.WeekEmotionSummary v) {
+            this.weekEmotion = v;
+            return this;
+        }
 
         FeedbackContextBuilder anomalyWeeklyCount(int v) {
             this.anomalyWeeklyCount = v;
@@ -1201,7 +1550,8 @@ class FeedbackRendererTest {
                     bandWidth,
                     overallConfidence,
                     anomalyBasis,
-                    anomalyWeeklyCount);
+                    anomalyWeeklyCount,
+                    remainingDaysInMonth);
         }
     }
 }

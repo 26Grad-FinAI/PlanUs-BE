@@ -798,16 +798,30 @@ class WalkForwardValidationTest {
                             if (ov.causeSignals() != null) causeSignalsByCategory.put(id, ov.causeSignals());
                         });
             }
-            Map<Integer, Long> categoryMtdSpend = new HashMap<>();
+            // 운영 경로와 같은 입력: 카테고리별 남은 기간 예상 변동 지출 (#122 — 계산기 인자 의미가 이번 달 누적에서 바뀜)
+            LocalDate prevMonthStart = monthStart.minusMonths(1);
+            Map<Integer, Long> categoryRemainingExpected = new HashMap<>();
             for (int catId : catBudget.keySet()) {
-                long spent = history.stream()
+                long varMtdCat = history.stream()
                         .filter(e -> e.isExpense()
+                                && e.isVariable()
                                 && Objects.equals(e.getCategoryId(), catId)
                                 && !e.getDate().isBefore(monthStart)
                                 && !e.getDate().isAfter(weekEnd))
                         .mapToLong(Expense::getAmount)
                         .sum();
-                categoryMtdSpend.put(catId, spent);
+                long priorSum = history.stream()
+                        .filter(e -> e.isVariable()
+                                && Objects.equals(e.getCategoryId(), catId)
+                                && !e.getDate().isBefore(prevMonthStart)
+                                && e.getDate().isBefore(monthStart))
+                        .mapToLong(Expense::getAmount)
+                        .sum();
+                double priorCatRate = priorSum > 0 ? (double) priorSum / prevMonthStart.lengthOfMonth() : 0.0;
+                categoryRemainingExpected.put(
+                        catId,
+                        BudgetProjector.remainingCategoryExpected(
+                                varMtdCat, elapsed, daysInMonth, priorCatRate, null, null));
             }
             List<Expense> thisMonthExpenses = history.stream()
                     .filter(e -> e.isExpense()
@@ -820,7 +834,7 @@ class WalkForwardValidationTest {
                     savingsGap,
                     elapsed,
                     daysInMonth - elapsed,
-                    categoryMtdSpend,
+                    categoryRemainingExpected,
                     causeSignalsByCategory,
                     thisMonthExpenses,
                     List.of(),
@@ -927,7 +941,8 @@ class WalkForwardValidationTest {
                     bw,
                     overall,
                     anomalyBasis,
-                    anomalyWeeklyCount);
+                    anomalyWeeklyCount,
+                    weekEnd.lengthOfMonth() - weekEnd.getDayOfMonth());
 
             System.out.printf("%n=== [검증 4] 제%d주차 (%s ~ %s) ===%n", week, weekStart, weekEnd);
             System.out.printf("예측 월말 지출  : %,d원 / 가용예산 %,d원%n", ctx.predictedMonthEndWon(), AVAILABLE_BUDGET);

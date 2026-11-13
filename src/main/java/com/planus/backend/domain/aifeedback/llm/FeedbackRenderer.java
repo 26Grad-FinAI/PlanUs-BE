@@ -78,8 +78,18 @@ public class FeedbackRenderer {
         - 금액은 제공된 숫자를 그대로 사용할 것. 임의로 반올림하거나 바꾸지 않는다.
         - 절약 제안은 '어느 항목에서 얼마를 줄이면 저축 목표에 어떤 효과'인지 구체적으로 연결한다.
         - 절약 금액·절약 효과(원)는 [절약 액션]에 있는 카테고리와 금액만 쓴다. [절약 액션 대상 아님] 카테고리나 [절약 액션]이 없는 주에는 'N회 줄이면 N만 원', '월 N만 원 아낄 수' 같은 금액을 만들지 않는다. 줄이기를 권하더라도 금액을 붙이지 않는다.
-        - 초과 카테고리의 '이번 달 누적 초과' 금액은 이번 주 신규 금액을 이미 포함한 누적값이다. 두 숫자를 합산하지 않는다. '이번 주 신규'가 이번 달 누적의 일부임을 인식하고 맥락에 맞게 사용한다.
-        - 초과 카테고리의 '이번 주 신규' 금액이 작으면 그 카테고리는 이번 주 원인이 아니라 이전 주 누적임을 인식하고 이번 주 피드백에서 주요 원인으로 다루지 않는다.
+        - 절약 금액은 [절약 액션]에 적힌 그 카테고리에만 붙인다. '다른 항목에서 N원 줄이기'처럼 카테고리를 바꾸지 않는다.
+        - 카테고리의 '월말 예상 초과'와 '전체 월말 예상 초과'(저축 목표에서 멀어지는 금액)는 다른 값이다. 카테고리 초과에서 절약 금액을 빼면 전체 초과가 되는 것처럼 한 문장에 잇지 않는다.
+        - 지금까지 쓴 비율과 월말 예상 비율('이대로면 월말엔 예산의 N%')을 구분한다. 예산 사용 비율은 쓸수록 늘기만 하므로 '내려왔다', '줄었다'고 쓰지 않는다.
+        - 전체 월말 예상 초과가 있으면 '예산 안에서 잘 쓰고 있다'처럼 예산 안인 것으로 쓰지 않는다.
+        - 여러 카테고리에 '각각 N원'을 붙이지 않는다. 금액이 다르면 '식료품 29,675원, 오락문화 14,143원'처럼 따로 쓴다.
+        - 예산 사용 비율은 이번 달 전체 기준이다. '이번 주는 예산의 N%'처럼 이번 주로 쓰지 않는다.
+        - 예산 사용 비율은 [예산 사용 비율]의 '지금까지 이번 달 예산의 N%'를 그대로 쓰고, 평소와 비교할 때는 '평소보다 빠른/느린 속도'로 말한다.
+        - 예산 사용 비율(%)은 '이번 달 예산의 30%를 썼어요'처럼 무엇의 비율인지 밝혀 쓴다. '페이싱', '보통 이맘때 20%인데 지금은 30%'처럼 대상 없이 쓰지 않는다.
+        - [절약 액션]의 '모두 지키면' 효과(월말 초과 A → B)는 적힌 카테고리를 모두 지켰을 때의 결과다. 일부 카테고리만 말하면 'X만 지키면' 줄의 숫자를 쓰고, '모두 지키면' 숫자를 붙이지 않는다.
+        - 절약 효과는 [절약 액션]의 '모두 지키면' 줄대로 '월말 초과가 A원에서 B원으로 줄어요'처럼 줄어드는 폭으로 쓴다. 초과가 남는데 '예산 안에 들어온다', '목표를 지킬 수 있다'고 쓰지 않고, '다 메우기 어렵다', '받아들이자', '받아들이고'처럼 체념하는 말은 쓰지 않는다. 남은 기간이 짧아 줄어드는 폭이 작으면 그 폭만 짧게 말하고 다음 달에 해볼 행동으로 넘어간다. 줄어드는 폭이 작으면 '크게 낮출 수 있다'처럼 과장하지 말고 초과의 주된 원인과 다음 행동을 짚는다.
+        - 초과 카테고리의 '월말 예상 초과'는 지금 속도로 가면 월말에 그 카테고리 예산을 넘을 것으로 예상되는 금액이다. 이미 쓴 금액이 아니므로 '누적됐다', '이미 넘었다'처럼 쓰지 않고 '이대로면 월말에 N원 넘을 것 같아요'처럼 예상으로 쓴다. '이번 주 지출'과 합산하지 않는다.
+        - 초과 카테고리의 '이번 주 지출'이 작으면 그 카테고리는 이번 주 원인이 아니라 이전 주들의 지출 때문임을 인식하고 이번 주 피드백에서 주요 원인으로 다루지 않는다.
         - 원인 신뢰도가 '높음'이 아니면 원인을 단정하지 말고 가볍게만 언급하거나 생략한다.
         - 배수는 무엇의 배수인지 그대로 밝힌다. '한 건' 배수는 그 거래에만 붙이고, 카테고리 전체·이번 주 합계·횟수가 그 배수만큼 늘었다고 쓰지 않는다. '주간 금액' 배수는 금액이 늘었다고만 쓰고 횟수로 바꾸지 않는다.
         - 배수는 제공된 값을 소수 첫째 자리까지 그대로 쓴다. '두 배 가까이', '5배 이상', '약 10배'처럼 근사하지 않는다.
@@ -88,10 +98,10 @@ public class FeedbackRenderer {
         - '한 건' 배수는 "평소 식대 한 건 금액의 9.2배"처럼 한 건 기준임을 밝혀 쓴다. 주간 피드백에서 "평소의 N배", "평소보다 N배"는 일주일 기준으로 읽히므로 한 건 배수에 쓰지 않는다.
         - 횟수(N회·N건)는 표기된 건수만 쓴다. 메모·주목 거래 목록은 일부만 보여주므로 목록 줄 수를 세어 횟수로 쓰지 않는다.
         - 이상 신호 거래의 감정 태그에 따라 피드백 톤을 달리한다:
-          • REGRET / IMPULSE → 명확하게 절제를 권고한다. "이런 소비는 줄여가는 게 좋겠어요" 수준으로 직접적으로 말한다.
-          • NECESSARY → 지출이 불가피했음을 인정하되, 해당 카테고리 예산을 조정하거나 다른 항목을 줄이는 방향을 제안한다.
-          • STRESS_RELIEF → 감정에 공감하되, 예산 영향을 짚고 다른 스트레스 해소 방법을 가볍게 제안한다.
-          • SATISFIED → 사실을 담담하게 전달하고 과도한 칭찬이나 권고 없이 마무리한다.
+          • 후회 / 충동 → 명확하게 절제를 권고한다. "이런 소비는 줄여가는 게 좋겠어요" 수준으로 직접적으로 말한다.
+          • 필요 → 지출이 불가피했음을 인정하되, 해당 카테고리 예산을 조정하거나 다른 항목을 줄이는 방향을 제안한다.
+          • 스트레스 해소 → 감정에 공감하되, 예산 영향을 짚고 다른 스트레스 해소 방법을 가볍게 제안한다.
+          • 만족 → 사실을 담담하게 전달하고 과도한 칭찬이나 권고 없이 마무리한다.
         - 예산에 여유가 있어도 '더 써도 된다'는 식의 조언은 하지 않는다. 저축 목표 달성을 기준으로 판단한다.
         - POSITIVE 주차(초과 카테고리 없음)에도 MEDIUM 이상의 이상 신호가 있으면 마지막 문장에서 1문장만 가볍게 언급한다.
         - 항상 '~요/~어요' 체 존댓말로 일관되게 작성한다.
@@ -144,16 +154,17 @@ public class FeedbackRenderer {
     private String callWithRetry(LlmClient client, FeedbackContext c) {
         String system = systemPrompt(c);
         String user = userPrompt(c);
+        String lastReason = null;
         for (int attempt = 1; attempt <= MAX_LLM_ATTEMPTS; attempt++) {
-            String candidate = client.complete(system, user);
+            String candidate = client.complete(system, lastReason == null ? user : user + retryHint(lastReason));
             if (candidate == null || candidate.isBlank()) {
                 break;
             }
-            boolean numbersOk = verifyNumbers(candidate, c);
-            if (numbersOk && verifyMerchantCounts(candidate, c)) {
+            String reason = firstFailure(candidate, c);
+            if (reason == null) {
                 return candidate;
             }
-            String reason = numbersOk ? "거래처 건수" : "숫자";
+            lastReason = reason;
             if (attempt < MAX_LLM_ATTEMPTS) {
                 log.warn("LLM {} 불일치 — 재시도 {}/{}", reason, attempt, MAX_LLM_ATTEMPTS - 1);
             } else {
@@ -161,6 +172,39 @@ public class FeedbackRenderer {
             }
         }
         return template(c);
+    }
+
+    /**
+     * 재시도 때 붙이는 거절 이유. 이유를 알려주지 않으면 같은 오류를 3번 반복해 템플릿 폴백된다 (#122 실험 9: 21주차 "104%까지 내려왔어요" ×3,
+     * 28주차 "이번 주는 예산의 69%" ×3).
+     */
+    static String retryHint(String reason) {
+        String fix =
+                switch (reason) {
+                    case "숫자" -> "분석 재료에 있는 금액만 쓰고, 금액을 바꾸거나 새로 계산하지 말 것.";
+                    case "거래처 건수" -> "결제 수단·거래처 건수는 '거래처별'에 적힌 숫자만 쓸 것. 카테고리 전체 건수를 거래처 건수로 쓰지 말 것.";
+                    case "체념 표현" -> "'받아들이다', '메우기 어렵다' 같은 말을 쓰지 말고, 줄였을 때 줄어드는 폭과 다음 행동을 말할 것.";
+                    case "내부 용어·기간 표기" ->
+                        "예산 사용 비율은 '지금까지 이번 달 예산의 N%'처럼 이번 달 기준임을 밝히고, '이번 주는 예산의 N%', '비율이 내려왔다·줄었다',"
+                                + " '절약 액션'이라는 말을 쓰지 말 것.";
+                    case "사실과 반대 표현" -> "전체 월말 예상 초과가 있으므로 '예산 안에서 잘 쓰고 있다'고 쓰지 말고, 'N원 넘게'는 실제 금액이 N원 이상일 때만 쓸 것.";
+                    case "'각각' 금액" -> "여러 카테고리에 '각각 N원'을 붙이지 말고 카테고리마다 금액을 따로 쓸 것.";
+                    case "절약 금액" -> "줄이라고 권하는 금액은 [절약 액션]에 적힌 그 카테고리의 금액만 쓸 것. 절약 후 남는 초과액을 줄일 금액으로 쓰지 말 것.";
+                    default -> "분석 재료와 맞지 않는 부분을 고칠 것.";
+                };
+        return "\n\n[직전 답변이 거절된 이유: " + reason + "]\n" + fix + " 나머지 규칙은 그대로 지켜서 다시 작성해줘.";
+    }
+
+    /** 검사를 차례로 돌려 처음 실패한 검사 이름을 반환한다. 모두 통과하면 null. */
+    private String firstFailure(String candidate, FeedbackContext c) {
+        if (!verifyNumbers(candidate, c)) return "숫자";
+        if (!verifyMerchantCounts(candidate, c)) return "거래처 건수";
+        if (!verifyTone(candidate)) return "체념 표현";
+        if (!verifyWording(candidate)) return "내부 용어·기간 표기";
+        if (!verifyFacts(candidate, c)) return "사실과 반대 표현";
+        if (!verifyEach(candidate, c)) return "'각각' 금액";
+        if (!verifySavingsAmounts(candidate, c)) return "절약 금액";
+        return null;
     }
 
     private String callMonthEndWithRetry(LlmClient client, MonthEndContext c) {
@@ -199,6 +243,214 @@ public class FeedbackRenderer {
             Map.of("한", 1, "두", 2, "세", 3, "네", 4, "다섯", 5, "여섯", 6, "일곱", 7, "여덟", 8, "아홉", 9, "열", 10);
 
     private static final String COUNT_NUMBER = "(\\d+|한|두|세|네|다섯|여섯|일곱|여덟|아홉|열)\\s*(?:건|회|번)";
+
+    /** "N건 중 M건"의 뒷부분. */
+    private static final Pattern PART_OF_COUNT = Pattern.compile("\\s*중\\s*" + COUNT_NUMBER);
+
+    /**
+     * 체념 표현. 금지 규칙만으로는 7/60이 남음 (#122 실험 3: "이번 달은 있는 그대로 받아들이고 …"). "어렵"만 보면 "메우긴 어려워 보여요"를
+     * 놓친다 (실험 4, 19주차).
+     */
+    private static final Pattern RESIGNED_TONE = Pattern.compile("받아들이|메우(?:기|긴|기는)\\s*어(?:려|렵)");
+
+    /**
+     * 사용자 판정으로 금지한 표기 (#122 실험 6). 규칙만으로는 남음.
+     * <ul>
+     *   <li>내부 용어 "절약 액션" (4/69: "절약 액션을 모두 지켜도")
+     *   <li>이번 달 예산 사용 비율을 '이번 주'로 ("이번 주는 예산의 41%를 썼어요", 4/69)
+     * </ul>
+     */
+    private static final Pattern BANNED_WORDING =
+            Pattern.compile("절약\\s*액션|이번\\s*주(?:는|에는|에|엔)?\\s*예산(?:의|을|를)\\s*\\d");
+
+    /**
+     * "이번 주 28만 9천 원을 쓰면서 예산의 109%를 사용했어요" — 이번 달 누적 비율을 '이번 달' 없이 이번 주 금액에 붙임 (#122 실험 8, 34주차 ×2).
+     * 같은 문장에 '이번 주'가 있고 '예산의 N%' 앞에 '이번 달·한 달'이 없으면 거절.
+     */
+    private static final Pattern RATE = Pattern.compile("예산(?:의|을|를)\\s*\\d+%");
+
+    /** '예산의 N%' 바로 앞에 이 말이 있으면 이번 달 누적 또는 월말 예상임이 분명하다 (실험 9 오탐: "월말엔 예산의 141%", "지금까지 예산의 57%"). */
+    private static final Pattern RATE_QUALIFIER = Pattern.compile("이번\\s*달|한\\s*달|월말|지금까지|누적");
+
+    private static final Pattern THIS_WEEK = Pattern.compile("이번\\s*주");
+
+    private static boolean weekThenRate(String text) {
+        for (String sentence : text.split("(?<=[.!?])\\s+|\\n")) {
+            if (!THIS_WEEK.matcher(sentence).find()) continue;
+            Matcher m = RATE.matcher(sentence);
+            while (m.find()) {
+                String before = sentence.substring(Math.max(0, m.start() - 12), m.start());
+                if (!RATE_QUALIFIER.matcher(before).find()) return true;
+            }
+        }
+        return false;
+    }
+
+    /** "예산의 104%까지 내려왔어요", "113%로 줄었어요" — 사용 비율은 줄지 않음 (#122 실험 8, 21주차). */
+    private static final Pattern RATE_DOWN = Pattern.compile("\\d+%\\s*(?:까지|로|으로)?\\s*(?:내려왔|내려갔|내려온|줄었|줄어들었|낮아졌)");
+
+    boolean verifyWording(String text) {
+        return !BANNED_WORDING.matcher(text).find()
+                && !weekThenRate(text)
+                && !RATE_DOWN.matcher(text).find();
+    }
+
+    /** 전체 초과가 예상되는데 예산 안인 것처럼 쓰는 표현 (#122 실험 8, 26주차 "예산 안에서 잘 쓰고 계세요"). */
+    private static final Pattern WITHIN_BUDGET = Pattern.compile("예산\\s*안에서\\s*잘|예산\\s*안에서\\s*쓰고|예산을\\s*잘\\s*지키");
+
+    /** "N원 넘게" 바로 뒤가 지출 동사면 지출액이다 ("30만 원 넘게 썼고", "넘게 쓰면서"). */
+    private static final Pattern SPENT_AFTER = Pattern.compile("\\s*(?:을|를)?\\s*(?:썼|쓰|써|쓴|지출|나갔|나가|사용|결제)");
+
+    /** 쉼표·문장부호로 나뉜 구절 중 [start, end)를 포함하는 구절. */
+    private static String clauseAround(String sentence, int start, int end) {
+        int from = Math.max(sentence.lastIndexOf(',', start), sentence.lastIndexOf('，', start)) + 1;
+        int to = sentence.indexOf(',', end);
+        return sentence.substring(from, to < 0 ? sentence.length() : to);
+    }
+
+    /** "N원 넘게/이상" 뒤에 붙는 말. */
+    private static final Pattern AT_LEAST_SUFFIX = Pattern.compile("\\s*(?:넘게|이상|넘는|넘어|넘었)");
+
+    /**
+     * 사실과 반대되는 표현 검사.
+     * <ul>
+     *   <li>전체 월말 예상 초과가 있는데 '예산 안에서 잘 쓰고 계세요'
+     *   <li>초과를 말하는 문장의 'N원 넘게' — 초과 금액 중 N 이상이면서 N에 가까운 값이 없으면 거절 (#122 실험 8, 24주차 "식대 12만 원 넘게
+     *       초과", 실제 119,176원. 숫자 검사는 식대 이번 주 지출 124,200원으로 통과시킴)
+     * </ul>
+     */
+    boolean verifyFacts(String text, FeedbackContext c) {
+        if (c.savingsImpactWon() < 0 && WITHIN_BUDGET.matcher(text).find()) return false;
+        Set<Long> overs = new HashSet<>();
+        if (c.savingsImpactWon() < 0) overs.add(Math.abs(c.savingsImpactWon()));
+        c.overspendCategories().forEach(ov -> overs.add(ov.overAmountWon()));
+        if (overs.isEmpty()) return true;
+        for (String sentence : text.split("(?<=[.!?])\\s+|\\n")) {
+            if (!sentence.contains("초과")) continue;
+            Matcher m = MONEY_PATTERN.matcher(sentence);
+            while (m.find()) {
+                Matcher suffix = AT_LEAST_SUFFIX.matcher(sentence).region(m.end(), sentence.length());
+                if (!suffix.lookingAt()) continue;
+                // 초과를 설명하는 금액만 — "이번 주 30만 원 넘게 썼고, 월말 초과는 10만 원"의 30만은 지출액 (리뷰 지적)
+                if (SPENT_AFTER
+                        .matcher(sentence)
+                        .region(suffix.end(), sentence.length())
+                        .lookingAt()) continue;
+                if (!clauseAround(sentence, m.start(), suffix.end()).contains("초과")) continue;
+                List<MoneyMention> one = extractMoneyMentions(m.group());
+                if (one.isEmpty() || one.getFirst().manWonRange()) continue;
+                long claimed = one.getFirst().value();
+                boolean ok = overs.stream().anyMatch(v -> v >= claimed && isAllowedExpression(claimed, v));
+                if (!ok) return false;
+            }
+        }
+        return true;
+    }
+
+    /**
+     * "식료품과 오락문화에서 각각 2~3만 원씩 초과"처럼 여러 카테고리에 '각각' 금액 하나를 붙이면, 카테고리마다 그 금액이 맞는지 본다 (#122 실험 6,
+     * 18주차: 오락문화는 14,143원). 숫자 검사는 한 카테고리(식료품 29,675원)만 맞아도 통과시킨다.
+     *
+     * <p>카테고리 금액 후보: 초과를 말하는 문장이면 월말 예상 초과만, 아니면 월말 예상 초과·이번 주 지출·절약 액션 금액. '각각' 뒤 금액이 둘 이상이면("각각 5만 원, 2만 원") 따로 쓴 것이므로
+     * 검사하지 않는다.
+     */
+    boolean verifyEach(String text, FeedbackContext c) {
+        Map<String, Set<Long>> overByCategory = new HashMap<>();
+        Map<String, Set<Long>> byCategory = new HashMap<>();
+        for (CategoryOverspend ov : c.overspendCategories()) {
+            overByCategory
+                    .computeIfAbsent(ov.categoryName(), k -> new HashSet<>())
+                    .add(ov.overAmountWon());
+            Set<Long> v = byCategory.computeIfAbsent(ov.categoryName(), k -> new HashSet<>());
+            v.add(ov.overAmountWon());
+            v.add(ov.thisWeekWon());
+        }
+        for (ActionSummary a : c.actions()) {
+            byCategory.computeIfAbsent(a.categoryName(), k -> new HashSet<>()).add(a.reductionWon());
+        }
+        for (String sentence : text.split("(?<=[.!?])\\s+|\\n")) {
+            int i = sentence.indexOf("각각");
+            if (i < 0) continue;
+            // 초과를 말하는 문장이면 초과 금액하고만 비교 — 이번 주 지출(오락문화 18,000원 ≈ 2만)로 통과하지 않게
+            Map<String, Set<Long>> candidates =
+                    sentence.matches(".*(초과|넘).*") && !overByCategory.isEmpty() ? overByCategory : byCategory;
+            String before = sentence.substring(0, i);
+            List<String> names =
+                    candidates.keySet().stream().filter(before::contains).toList();
+            if (names.size() < 2) continue;
+            List<MoneyMention> mentions = extractMoneyMentions(sentence.substring(i));
+            if (mentions.size() != 1) continue;
+            MoneyMention m = mentions.getFirst();
+            for (String name : names) {
+                if (candidates.get(name).stream().noneMatch(v -> eachMatches(m, v))) return false;
+            }
+        }
+        return true;
+    }
+
+    private boolean eachMatches(MoneyMention m, long v) {
+        if (m.manWonRange()) return isInManWonRange(m.rangeFrom() > 0 ? m.rangeFrom() : m.value(), m.value(), v);
+        if (m.rangeFrom() > 0) {
+            // "2~3만 원": 구간 안이거나 양 끝 중 하나로 근사 가능
+            return (v >= m.rangeFrom() && v <= m.value())
+                    || isAllowedExpression(m.rangeFrom(), v)
+                    || isAllowedExpression(m.value(), v);
+        }
+        return isAllowedExpression(m.value(), v);
+    }
+
+    /** 금액 바로 뒤에 붙는 '줄이다·아끼다·절약' — 그 금액이 절약 제안 금액이다. */
+    private static final Pattern SAVE_VERB_AFTER =
+            Pattern.compile("\\s*(?:정도|가량|쯤|씩)?\\s*(?:을|를)?\\s*(?:만|더)?\\s*(?:줄이|줄여|줄인|줄일|아끼|아껴|아낀|아낄|절약)");
+
+    /**
+     * 절약 제안 금액 검사 (리뷰 지적). 숫자 검사는 "다 지키면 남는 초과액"도 허용값에 넣으므로, "기타에서 150,000원을 줄여보세요"(액션 50,000원,
+     * 남는 초과 150,000원)가 통과한다. 금액 바로 뒤가 줄이다·아끼다·절약이면 같은 구절에 나온 카테고리의 reductionWon(여럿이면 합)과 대조한다.
+     * 카테고리 이름이 없으면 액션 금액 중 하나 또는 전체 합과 대조한다.
+     */
+    boolean verifySavingsAmounts(String text, FeedbackContext c) {
+        if (c.actions().isEmpty()) return true;
+        Map<String, Long> reduction = new LinkedHashMap<>();
+        c.actions().forEach(a -> reduction.merge(a.categoryName(), a.reductionWon(), Long::sum));
+        long total = actionTotal(c);
+        for (String sentence : text.split("(?<=[.!?])\\s+|\\n")) {
+            Matcher m = MONEY_PATTERN.matcher(sentence);
+            while (m.find()) {
+                if (!SAVE_VERB_AFTER
+                        .matcher(sentence)
+                        .region(m.end(), sentence.length())
+                        .lookingAt()) continue;
+                List<MoneyMention> one = extractMoneyMentions(m.group());
+                if (one.isEmpty()) continue;
+                MoneyMention mention = one.getFirst();
+                String clause = clauseAround(sentence, m.start(), m.end());
+                String before = clause.substring(0, Math.max(0, clause.indexOf(m.group())));
+                List<String> named =
+                        reduction.keySet().stream().filter(before::contains).toList();
+                Set<Long> expected = new HashSet<>();
+                if (named.isEmpty()) {
+                    expected.addAll(reduction.values());
+                    expected.add(total);
+                } else {
+                    expected.add(named.stream().mapToLong(reduction::get).sum());
+                }
+                boolean ok = expected.stream()
+                        .anyMatch(v -> mention.manWonRange()
+                                ? isInManWonRange(
+                                        mention.rangeFrom() > 0 ? mention.rangeFrom() : mention.value(),
+                                        mention.value(),
+                                        v)
+                                : isAllowedExpression(mention.value(), v));
+                if (!ok) return false;
+            }
+        }
+        return true;
+    }
+
+    /** 사용자 판정으로 금지한 체념 표현("이번 달은 받아들이고", "다 메우긴 어려워요")이 없으면 true. */
+    boolean verifyTone(String text) {
+        return !RESIGNED_TONE.matcher(text).find();
+    }
 
     /** 이름과 건수 사이 허용 구간: 숫자·문장부호·'등' 없이 최대 15자 ("결제가", "거래가 합쳐", "로", "방문"). */
     private static final String COUNT_GAP = "([^\\d.!?\\n,(]{0,15}?)";
@@ -243,7 +495,10 @@ public class FeedbackRenderer {
             if (gap.matches(".*(등|포함|같은|처럼|비롯).*")) continue;
             // 나열 뒤에 모르는 이름이 이어지면("케이스포츠·노래방 7건") 일부 거래처만 셀 수 있으므로 검사하지 않는다 (exp10 18주차)
             if (gap.matches("^\\s*(·|/|와|과|및|랑|이랑|,).*")) continue;
-            int claimed = parseCount(m.group(3));
+            int countAfterName = parseCount(m.group(3));
+            // "토스페이·카카오페이 출금이 12건 중 10건" — 앞 숫자는 카테고리 전체, 거래처 건수는 '중' 뒤 숫자 (#122 실험 4, 26주차 오탐)
+            Matcher partOf = PART_OF_COUNT.matcher(text).region(m.end(), text.length());
+            int claimed = partOf.lookingAt() ? parseCount(partOf.group(1)) : countAfterName;
             // "카카오페이 한 건이 평소의 5.2배"처럼 1건 표현은 여러 거래 중 하나를 가리키므로 총 건수 주장으로 보지 않는다 (exp9 오탐 3건)
             if (claimed == 1) continue;
             Set<String> keys = new LinkedHashSet<>();
@@ -257,6 +512,26 @@ public class FeedbackRenderer {
                 }
             }
             if (keys.isEmpty()) continue;
+            // "카카오페이, 네이버페이 충전이 각각 2건씩" — 합이 아니라 이름마다 (#122 실험 9, 27주차 오탐)
+            if (gap.contains("각각")) {
+                boolean each = true;
+                Matcher e = single.matcher(m.group(1));
+                while (e.find()) {
+                    String name = e.group();
+                    Set<String> one = new LinkedHashSet<>(aliases.getOrDefault(name, List.of()));
+                    for (Map<String, Integer> cat : perCategory) {
+                        for (String key : cat.keySet()) if (key.startsWith(name)) one.add(key);
+                    }
+                    if (one.isEmpty()) continue;
+                    each &= perCategory.stream()
+                            .anyMatch(cat -> one.stream()
+                                            .mapToInt(k -> cat.getOrDefault(k, 0))
+                                            .sum()
+                                    == claimed);
+                }
+                if (!each) return false;
+                continue;
+            }
             boolean consistent = perCategory.stream()
                     .anyMatch(cat ->
                             keys.stream().mapToInt(k -> cat.getOrDefault(k, 0)).sum() == claimed);
@@ -377,6 +652,13 @@ public class FeedbackRenderer {
         values.add(c.predictedMonthEndWon());
         values.add(c.availableBudgetWon());
         values.add(Math.abs(c.savingsImpactWon()));
+        if (!c.actions().isEmpty() && c.savingsImpactWon() < 0) {
+            // 합계 자체는 허용하지 않는다 — "외식을 줄이면 10만 원 이상 절약"처럼 카테고리를 바꾼 금액이 통과함 (exp0 회귀 테스트)
+            values.add(Math.abs(Math.abs(c.savingsImpactWon()) - actionTotal(c)));
+            if (c.actions().size() >= 2) {
+                c.actions().forEach(a -> values.add(Math.abs(Math.abs(c.savingsImpactWon()) - a.reductionWon())));
+            }
+        }
 
         values.add(c.weekTotalWon());
         values.add(c.prevWeekTotalWon());
@@ -452,7 +734,7 @@ public class FeedbackRenderer {
                     long value = Math.round(manWon * 10_000) + rest;
                     // 범위("N만 원대")는 만원 단위 정수만 — "5만 8천 원대" 같은 표현은 범위로 보지 않는다
                     boolean range = rest == 0 && manWon == Math.floor(manWon) && isRangeSuffix(text, m.end());
-                    long from = range && m.group(1) != null ? Long.parseLong(m.group(1)) * 10_000 : 0;
+                    long from = m.group(1) != null && rest == 0 ? Long.parseLong(m.group(1)) * 10_000 : 0;
                     mentions.add(new MoneyMention(value, range, from));
                 } else if (m.group(6) != null) {
                     long value = digit(m.group(6)) * 1_000 + digit(m.group(7)) * 100 + number(m.group(8));
@@ -532,37 +814,50 @@ public class FeedbackRenderer {
         if (c.savingsImpactWon() < 0) {
             sb.append("- 이대로면 저축 목표에서 ")
                     .append(exactWon(Math.abs(c.savingsImpactWon())))
-                    .append(" 멀어짐\n");
+                    .append(" 멀어짐 (= 전체 월말 예상 초과. 카테고리별 초과의 합과 다름 — 예산보다 덜 쓰는 카테고리가 상쇄)\n");
         } else {
             sb.append("- 현재 페이스는 예산 안. 저축 목표 달성 가능\n");
         }
 
         // ── 페이싱 [2] ──
         if (c.pacing() != null) {
-            sb.append("\n[페이싱 비교]\n");
+            sb.append("\n[예산 사용 비율 — 이번 달 예산 중 지금까지 쓴 비율]\n");
             PacingResult p = c.pacing();
             switch (p.displayType()) {
                 case SINGLE ->
-                    sb.append("- 지난달 이맘때는 예산의 ")
-                            .append(pct(p.historicalAvgRate()))
-                            .append("를 썼는데, 지금은 ")
+                    sb.append("- 지금까지 이번 달 예산의 ")
                             .append(pct(p.currentRate()))
-                            .append("\n");
+                            .append("를 씀 (지난달 이맘때는 ")
+                            .append(pct(p.historicalAvgRate()))
+                            .append(" — ")
+                            .append(speed(p.currentRate(), p.historicalAvgRate()))
+                            .append(")\n");
                 case RANGE ->
-                    sb.append("- 보통 이맘때 ")
+                    sb.append("- 지금까지 이번 달 예산의 ")
+                            .append(pct(p.currentRate()))
+                            .append("를 씀 (보통 이맘때는 ")
                             .append(pct(p.referenceMin()))
                             .append("~")
                             .append(pct(p.referenceMax()))
-                            .append(" 쓰셨는데, 지금은 ")
-                            .append(pct(p.currentRate()))
-                            .append("\n");
+                            .append(" — ")
+                            .append(speed(p.currentRate(), p.historicalAvgRate()))
+                            .append(")\n");
                 case MEDIAN ->
-                    sb.append("- 보통 이맘때 ")
-                            .append(pct(p.historicalAvgRate()))
-                            .append(" 쓰셨는데, 지금은 ")
+                    sb.append("- 지금까지 이번 달 예산의 ")
                             .append(pct(p.currentRate()))
-                            .append("\n");
+                            .append("를 씀 (보통 이맘때는 ")
+                            .append(pct(p.historicalAvgRate()))
+                            .append(" — ")
+                            .append(speed(p.currentRate(), p.historicalAvgRate()))
+                            .append(")\n");
             }
+        }
+
+        if (c.pacing() != null && c.availableBudgetWon() > 0) {
+            // 월말 비율이 없으면 LLM이 지금 비율을 월말 값처럼 쓴다 (#122 실험 8, 31주차 "월말에 예산의 30%를 넘겨")
+            sb.append("- 이대로면 월말엔 예산의 ")
+                    .append(pct((double) c.predictedMonthEndWon() / c.availableBudgetWon()))
+                    .append("\n");
         }
 
         // ── 이번 주 소비 감정 분포 ──
@@ -570,7 +865,11 @@ public class FeedbackRenderer {
             sb.append("\n[이번 주 소비 감정]\n");
             c.weekEmotion().counts().forEach((emo, cnt) -> {
                 Long amt = c.weekEmotion().amounts().get(emo);
-                sb.append("- ").append(emo).append(" ").append(cnt).append("건");
+                sb.append("- ")
+                        .append(emotionLabel(emo))
+                        .append(" ")
+                        .append(cnt)
+                        .append("건");
                 if (amt != null) sb.append(" / ").append(exactWon(amt));
                 sb.append("\n");
             });
@@ -589,9 +888,9 @@ public class FeedbackRenderer {
             for (CategoryOverspend ov : c.overspendCategories()) {
                 sb.append("- ")
                         .append(ov.categoryName())
-                        .append(": 이번 달 누적 초과 +")
+                        .append(": 월말 예상 초과 +")
                         .append(exactWon(ov.overAmountWon()))
-                        .append(" (이 중 이번 주 신규 ")
+                        .append(" (이번 주 지출 ")
                         .append(exactWon(ov.thisWeekWon()))
                         .append(", ")
                         .append(ov.thisWeekCount())
@@ -629,7 +928,7 @@ public class FeedbackRenderer {
                 if (cs != null && !cs.emotionCounts().isEmpty()) {
                     sb.append("  감정: ");
                     cs.emotionCounts().forEach((emo, cnt) -> {
-                        sb.append(emo).append(" ").append(cnt).append("건");
+                        sb.append(emotionLabel(emo)).append(" ").append(cnt).append("건");
                         Long amt = cs.emotionAmounts() != null
                                 ? cs.emotionAmounts().get(emo)
                                 : null;
@@ -684,7 +983,7 @@ public class FeedbackRenderer {
             } else {
                 sb.append("\n[이상 신호 — 신뢰도 낮음/중간: 원인 단정 금지, 언급은 선택]\n");
                 if (c.anomalyEmotion() != null && !c.anomalyEmotion().isBlank()) {
-                    sb.append("- 감정 태그: ").append(c.anomalyEmotion()).append("\n");
+                    sb.append("- 감정: ").append(emotionLabel(c.anomalyEmotion())).append("\n");
                 }
             }
         }
@@ -719,7 +1018,7 @@ public class FeedbackRenderer {
                     sb.append(" \"").append(h.memo()).append("\"");
                 }
                 if (h.emotion() != null && !h.emotion().isBlank()) {
-                    sb.append(" (").append(h.emotion()).append(")");
+                    sb.append(" (").append(emotionLabel(h.emotion())).append(")");
                 }
                 sb.append("\n");
             }
@@ -730,7 +1029,11 @@ public class FeedbackRenderer {
             // 액션이 없는 주에도 LLM이 "주 1~2회 줄이면 월 5~10만 원" 같은 금액을 지어냄 (#111 exp5 17주차)
             sb.append("\n[절약 액션] 없음 — 절약 금액이나 절약 효과(원)를 제시하지 말 것\n");
         } else {
-            sb.append("\n[절약 액션]\n");
+            sb.append("\n[절약 액션]");
+            if (c.remainingDaysInMonth() > 0) {
+                sb.append(" (이번 달 남은 기간 ").append(c.remainingDaysInMonth()).append("일)");
+            }
+            sb.append("\n");
             for (ActionSummary a : c.actions()) {
                 sb.append("- ")
                         .append(a.categoryName())
@@ -748,6 +1051,7 @@ public class FeedbackRenderer {
                 }
                 sb.append("\n");
             }
+            appendActionCoverage(sb, c);
         }
 
         // 추가 HIGH 이상치 언급 강제 — 프롬프트 끝에 명시적 지시
@@ -847,9 +1151,71 @@ public class FeedbackRenderer {
             if (weeklyCount > 0) sb.append(" (").append(weeklyCount).append("건)");
         }
         if (emotion != null && !emotion.isBlank()) {
-            sb.append(", 감정 태그: ").append(emotion);
+            sb.append(", 감정: ").append(emotionLabel(emotion));
         }
         sb.append("\n");
+    }
+
+    /**
+     * 절약 액션을 다 지켰을 때 남는 월말 초과. 없으면 LLM이 "8만 5천 원만 줄이면 예산 안에 들어와요"처럼 일부 절약을
+     * 전부인 것처럼 쓴다 (#122 실험 0, 29주차: 초과 196,455원에 절약 85,219원).
+     */
+    private static void appendActionCoverage(StringBuilder sb, FeedbackContext c) {
+        if (c.savingsImpactWon() >= 0) return;
+        long gap = Math.abs(c.savingsImpactWon());
+        // 카테고리가 둘 이상이면 하나씩 지켰을 때의 효과도 준다 — 한 카테고리만 말하면서 전체 효과를 붙이는 오류 (#122 실험 7, 22주차:
+        // "오락문화 56,856원을 아껴보면 월말 초과가 134,328원으로" — 134,328원은 교통까지 합친 결과)
+        if (c.actions().size() >= 2) {
+            for (ActionSummary a : c.actions()) {
+                long single = gap - a.reductionWon();
+                if (single <= 0) continue;
+                sb.append("- ")
+                        .append(a.categoryName())
+                        .append("만 지키면 전체 월말 초과 ")
+                        .append(exactWon(gap))
+                        .append(" → ")
+                        .append(exactWon(single))
+                        .append("\n");
+            }
+        }
+
+        long left = Math.abs(c.savingsImpactWon()) - actionTotal(c);
+        if (left > 0) {
+            sb.append("- ")
+                    .append(actionCategories(c))
+                    .append(" 모두 지키면 전체 월말 초과 ")
+                    .append(exactWon(Math.abs(c.savingsImpactWon())))
+                    .append(" → ")
+                    .append(exactWon(left))
+                    .append("으로 줄어듦");
+        } else {
+            sb.append("- ").append(actionCategories(c)).append(" 모두 지키면 이번 달 예산 안에 들어올 수 있음");
+        }
+        sb.append("\n");
+    }
+
+    private static String actionCategories(FeedbackContext c) {
+        return c.actions().stream().map(ActionSummary::categoryName).collect(java.util.stream.Collectors.joining("·"));
+    }
+
+    private static long actionTotal(FeedbackContext c) {
+        return c.actions().stream().mapToLong(ActionSummary::reductionWon).sum();
+    }
+
+    /**
+     * 감정 태그 코드를 사용자에게 보이는 말로 바꾼다. 프롬프트에 영문 코드가 있으면 LLM이 "SATISFIED 태그"처럼 그대로 옮기기 때문 (#122).
+     * 모르는 값은 그대로 둔다.
+     */
+    static String emotionLabel(String code) {
+        if (code == null) return null;
+        return switch (code) {
+            case "NECESSARY" -> "필요";
+            case "SATISFIED" -> "만족";
+            case "IMPULSE" -> "충동";
+            case "STRESS_RELIEF" -> "스트레스 해소";
+            case "REGRET" -> "후회";
+            default -> code;
+        };
     }
 
     /** 상위 거래처 표시 개수. 넘으면 "외 N건". */
@@ -987,6 +1353,13 @@ public class FeedbackRenderer {
     }
 
     /** 소진율을 퍼센트 문자열로 변환한다. */
+    /** 평소 대비 속도. 비율이 '내려왔다'로 읽히지 않게 속도로 표현한다 (#122 실험 8·9, 21주차 "104%까지 내려왔어요"). */
+    private static String speed(double current, double usual) {
+        if (usual <= 0) return "비교 기준 없음";
+        double r = current / usual;
+        return r > 1.05 ? "평소보다 빠른 속도" : r < 0.95 ? "평소보다 느린 속도" : "평소와 비슷한 속도";
+    }
+
     private static String pct(double rate) {
         return String.format("%.0f%%", rate * 100);
     }
@@ -1018,7 +1391,8 @@ public class FeedbackRenderer {
             BandWidth bandWidth,
             Confidence overallConfidence,
             AnomalyBasis anomalyBasis,
-            int anomalyWeeklyCount) {}
+            int anomalyWeeklyCount,
+            int remainingDaysInMonth) {}
 
     /**
      * 이상치 배수의 기준 (#111). 프롬프트에 무엇의 배수인지 밝히기 위해 전달한다.
@@ -1045,7 +1419,7 @@ public class FeedbackRenderer {
     /**
      * 카테고리별 초과 예상.
      *
-     * @param overAmountWon  MTD 기준 예상 초과액 (이전 주 누적 포함)
+     * @param overAmountWon  월말 예상 초과액 (이번 달 지금까지의 지출로 외삽, 이미 쓴 금액이 아님)
      * @param thisWeekWon    이번 주에 새로 발생한 해당 카테고리 변동 지출
      */
     /**

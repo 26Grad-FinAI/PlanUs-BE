@@ -22,6 +22,28 @@ class BudgetProjectorTest {
     }
 
     @Test
+    void predictCategory_earlyMonthOneOffDoesNotDominate() {
+        // #122 35주차 유형: 31일 중 4일차, 큰 결제로 변동 MTD 24만(일평균 6만), 전월 일평균 1만
+        // 단순 외삽이면 6만 × 31 = 186만. 혼합: w=4/31 → (4/31)·6만 + (27/31)·1만 ≈ 1.645만/일 → 24만 + 1.645만 × 27 ≈ 68.4만
+        long predicted = BudgetProjector.predictCategory(240_000, 0, 4, 31, 10_000, null, null);
+        assertThat(predicted).isBetween(683_000L, 686_000L);
+        assertThat(predicted)
+                .isEqualTo(projector
+                        .project(240_000, 0, 0, 4, 31, 10_000, null, null)
+                        .predictedMonthEndWon());
+    }
+
+    @Test
+    void remainingCategoryExpected_takesSmallerOfBlendedAndCurrentPace() {
+        // PR 리뷰 예: 31일 중 30일, 누적 30만 → 이번 달 속도만이면 남은 1일 1만 원. 지난달이 더 많아도 작은 쪽
+        assertThat(BudgetProjector.remainingCategoryExpected(300_000, 30, 31, 50_000, null, null))
+                .isEqualTo(10_000);
+        // 4일째 큰 결제(24만, 일평균 6만), 지난달 1만/일 → 혼합 444,194원이 이번 달 속도만(1,620,000원)보다 작음
+        assertThat(BudgetProjector.remainingCategoryExpected(240_000, 4, 31, 10_000, null, null))
+                .isBetween(443_000L, 446_000L);
+    }
+
+    @Test
     void project_uses_current_rate_when_no_prior_data() {
         // 과거 일평균 0 → 이번 달 일평균(2만)만 사용. 남은 변동 = 2만 × 20일 = 40만
         var p = projector.project(200_000, 0, 0, 10, 30, 0.0, null, null);
