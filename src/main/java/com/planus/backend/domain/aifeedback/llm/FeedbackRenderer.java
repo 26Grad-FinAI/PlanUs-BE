@@ -239,7 +239,8 @@ public class FeedbackRenderer {
         Matcher m = claim.matcher(text);
         while (m.find()) {
             String gap = m.group(2);
-            if (gap.contains("등") || gap.contains("포함")) continue;
+            // "등·포함·같은·처럼·비롯" — 예시를 든 뒤 카테고리 전체 건수를 말하는 표현 (exp9b 30주차 "역전할머니맥주·욘카츠 같은 외식이 9건")
+            if (gap.matches(".*(등|포함|같은|처럼|비롯).*")) continue;
             int claimed = parseCount(m.group(3));
             // "카카오페이 한 건이 평소의 5.2배"처럼 1건 표현은 여러 거래 중 하나를 가리키므로 총 건수 주장으로 보지 않는다 (exp9 오탐 3건)
             if (claimed == 1) continue;

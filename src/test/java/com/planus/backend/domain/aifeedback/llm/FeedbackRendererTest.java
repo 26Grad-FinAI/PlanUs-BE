@@ -412,6 +412,9 @@ class FeedbackRendererTest {
             assertThat(renderer.verifyMerchantCounts("토스페이 출금 등 13건이 모두 필요한 지출이었어요.", ctx34()))
                     .isTrue();
             assertThat(renderer.verifyMerchantCounts("기타 7건이 쌓였어요.", ctx34())).isTrue();
+            // exp9b 30주차 오탐: 예시("같은")를 든 뒤 카테고리 전체 건수
+            assertThat(renderer.verifyMerchantCounts("카카오페이 같은 결제가 7건 이어졌어요.", ctx34()))
+                    .isTrue();
             assertThat(renderer.verifyMerchantCounts("토스페이·카카오페이 결제가 여러 건 있었어요.", ctx34()))
                     .isTrue();
         }
