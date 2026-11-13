@@ -398,6 +398,15 @@ class FeedbackRendererTest {
         }
 
         @Test
+        @DisplayName("'N건 중 M건'은 뒤 숫자를 거래처 건수로 본다 (#122 실험 4, 26주차 '토스페이·카카오페이 출금이 12건 중 10건' 오탐)")
+        void partOfCount() {
+            assertThat(renderer.verifyMerchantCounts("카카오페이·토스페이 결제가 7건 중 6건이었어요.", ctx34()))
+                    .isTrue();
+            assertThat(renderer.verifyMerchantCounts("카카오페이·토스페이 결제가 7건 중 5건이었어요.", ctx34()))
+                    .isFalse();
+        }
+
+        @Test
         @DisplayName("묶인 거래 횟수도 검사: '롯데월드 3회' 거절, '롯데월드를 네 번' 통과")
         void groupedTransactionCount() {
             assertThat(renderer.verifyMerchantCounts("롯데월드 3회 방문으로 오락문화가 늘었어요.", ctx34()))

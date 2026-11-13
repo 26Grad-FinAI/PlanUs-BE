@@ -203,6 +203,9 @@ public class FeedbackRenderer {
 
     private static final String COUNT_NUMBER = "(\\d+|한|두|세|네|다섯|여섯|일곱|여덟|아홉|열)\\s*(?:건|회|번)";
 
+    /** "N건 중 M건"의 뒷부분. */
+    private static final Pattern PART_OF_COUNT = Pattern.compile("\\s*중\\s*" + COUNT_NUMBER);
+
     /**
      * 체념 표현. 금지 규칙만으로는 7/60이 남음 (#122 실험 3: "이번 달은 있는 그대로 받아들이고 …"). "어렵"만 보면 "메우긴 어려워 보여요"를
      * 놓친다 (실험 4, 19주차).
@@ -257,7 +260,10 @@ public class FeedbackRenderer {
             if (gap.matches(".*(등|포함|같은|처럼|비롯).*")) continue;
             // 나열 뒤에 모르는 이름이 이어지면("케이스포츠·노래방 7건") 일부 거래처만 셀 수 있으므로 검사하지 않는다 (exp10 18주차)
             if (gap.matches("^\\s*(·|/|와|과|및|랑|이랑|,).*")) continue;
-            int claimed = parseCount(m.group(3));
+            int countAfterName = parseCount(m.group(3));
+            // "토스페이·카카오페이 출금이 12건 중 10건" — 앞 숫자는 카테고리 전체, 거래처 건수는 '중' 뒤 숫자 (#122 실험 4, 26주차 오탐)
+            Matcher partOf = PART_OF_COUNT.matcher(text).region(m.end(), text.length());
+            int claimed = partOf.lookingAt() ? parseCount(partOf.group(1)) : countAfterName;
             // "카카오페이 한 건이 평소의 5.2배"처럼 1건 표현은 여러 거래 중 하나를 가리키므로 총 건수 주장으로 보지 않는다 (exp9 오탐 3건)
             if (claimed == 1) continue;
             Set<String> keys = new LinkedHashSet<>();
