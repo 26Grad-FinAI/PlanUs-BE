@@ -1034,9 +1034,7 @@ public class AiFeedbackService {
         Map<Integer, Long> remaining = new HashMap<>();
         varMtd.forEach((cat, mtd) -> {
             double prior = priorVariableDailyRate(window, monthStart, cat);
-            long blended = BudgetProjector.predictCategory(mtd, 0, day, dim, prior, dowWeights, monthStart) - mtd;
-            long currentPaceOnly = Math.round((double) mtd / Math.max(day, 1) * (dim - day));
-            remaining.put(cat, Math.max(0, Math.min(blended, currentPaceOnly))); // 초과 판정과 같이 작은 쪽
+            remaining.put(cat, BudgetProjector.remainingCategoryExpected(mtd, day, dim, prior, dowWeights, monthStart));
         });
         return remaining;
     }

@@ -1064,6 +1064,60 @@ class FeedbackRendererTest {
         }
 
         @Test
+        @DisplayName("'N원 넘게' 하한 검사는 초과 금액에만 — 같은 문장의 이번 주 지출액은 제외 (PR 리뷰)")
+        void atLeast_onlyForOverspendAmounts() {
+            FeedbackContext ctx = contextBuilder()
+                    .feedbackType(FeedbackType.ALERT)
+                    .savingsImpactWon(-100_000)
+                    .overspendCategories(List.of(new CategoryOverspend("기타", 80_000, 310_000, null, 5)))
+                    .build();
+
+            assertThat(renderer.verifyFacts("이번 주 30만 원 넘게 썼고, 월말 초과는 10만 원으로 예상돼요.", ctx))
+                    .isTrue();
+            assertThat(renderer.verifyFacts("이번 주 30만 원 넘게 쓰면서 월말 초과는 10만 원으로 예상돼요.", ctx))
+                    .isTrue();
+            assertThat(renderer.verifyFacts("이대로면 월말에 30만 원 넘게 초과할 것 같아요.", ctx))
+                    .isFalse();
+        }
+
+        @Test
+        @DisplayName("남는 초과액을 절약 금액으로 권하면 거절 — 절약 금액은 그 카테고리의 액션 금액과 대조 (PR 리뷰)")
+        void savingsAmount_mustMatchActionReduction() {
+            FeedbackContext ctx = contextBuilder()
+                    .feedbackType(FeedbackType.ALERT)
+                    .savingsImpactWon(-200_000)
+                    .actions(List.of(new ActionSummary("기타", 50_000, null, 0.5)))
+                    .build();
+
+            assertThat(renderer.verifySavingsAmounts("기타에서 150,000원을 줄여보세요.", ctx))
+                    .isFalse();
+            assertThat(renderer.verifySavingsAmounts("기타에서 5만 원 줄이면 월말 초과가 20만 원에서 15만 원으로 줄어요.", ctx))
+                    .isTrue();
+            assertThat(renderer.verifyNumbers("기타에서 5만 원 줄이면 월말 초과가 20만 원에서 15만 원으로 줄어요.", ctx))
+                    .isTrue();
+            assertThat(renderer.verifySavingsAmounts("남은 기간 50,000원만 아끼면 초과가 150,000원으로 낮아져요.", ctx))
+                    .isTrue();
+        }
+
+        @Test
+        @DisplayName("여러 카테고리를 함께 말하면 그 카테고리들의 액션 합과 대조")
+        void savingsAmount_multipleCategoriesUseSum() {
+            FeedbackContext ctx = contextBuilder()
+                    .feedbackType(FeedbackType.ALERT)
+                    .savingsImpactWon(-500_013)
+                    .actions(List.of(
+                            new ActionSummary("교통", 2_362, null, 0.5),
+                            new ActionSummary("의류신발", 5_386, null, 0.5),
+                            new ActionSummary("기타", 18_118, null, 0.5)))
+                    .build();
+
+            assertThat(renderer.verifySavingsAmounts("교통·의류신발·기타에서 총 25,866원 줄이면 초과가 줄어요.", ctx))
+                    .isTrue();
+            assertThat(renderer.verifySavingsAmounts("기타에서 25,866원 줄이면 초과가 줄어요.", ctx))
+                    .isFalse();
+        }
+
+        @Test
         @DisplayName("모르는 감정 코드는 그대로 둔다")
         void emotionLabel_unknownKept() {
             assertThat(FeedbackRenderer.emotionLabel("CALM")).isEqualTo("CALM");

@@ -61,6 +61,31 @@ public class BudgetProjector {
                 .predictedMonthEndWon();
     }
 
+    /**
+     * 카테고리 하나의 남은 기간 예상 변동 지출. 혼합 예측과 이번 달 속도만의 예측 중 작은 쪽 (#122) — 절약 액션 감축가능액의 기준.
+     * 운영({@code AiFeedbackService})과 측정 하네스가 같은 값을 쓰도록 여기 둔다.
+     */
+    public static long remainingCategoryExpected(
+            long variableMtdWon,
+            int dayOfMonth,
+            int daysInMonth,
+            double priorVariableDailyRateWon,
+            double[] dayOfWeekWeights,
+            LocalDate monthStart) {
+        long blended = predictCategory(
+                        variableMtdWon,
+                        0,
+                        dayOfMonth,
+                        daysInMonth,
+                        priorVariableDailyRateWon,
+                        dayOfWeekWeights,
+                        monthStart)
+                - variableMtdWon;
+        long currentPaceOnly =
+                Math.round((double) variableMtdWon / Math.max(dayOfMonth, 1) * (daysInMonth - dayOfMonth));
+        return Math.max(0, Math.min(blended, currentPaceOnly));
+    }
+
     private static Projection compute(
             long variableMtdWon,
             long fixedPlannedMtdWon,

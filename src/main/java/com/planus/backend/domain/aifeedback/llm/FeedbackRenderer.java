@@ -189,6 +189,7 @@ public class FeedbackRenderer {
                                 + " '절약 액션'이라는 말을 쓰지 말 것.";
                     case "사실과 반대 표현" -> "전체 월말 예상 초과가 있으므로 '예산 안에서 잘 쓰고 있다'고 쓰지 말고, 'N원 넘게'는 실제 금액이 N원 이상일 때만 쓸 것.";
                     case "'각각' 금액" -> "여러 카테고리에 '각각 N원'을 붙이지 말고 카테고리마다 금액을 따로 쓸 것.";
+                    case "절약 금액" -> "줄이라고 권하는 금액은 [절약 액션]에 적힌 그 카테고리의 금액만 쓸 것. 절약 후 남는 초과액을 줄일 금액으로 쓰지 말 것.";
                     default -> "분석 재료와 맞지 않는 부분을 고칠 것.";
                 };
         return "\n\n[직전 답변이 거절된 이유: " + reason + "]\n" + fix + " 나머지 규칙은 그대로 지켜서 다시 작성해줘.";
@@ -202,6 +203,7 @@ public class FeedbackRenderer {
         if (!verifyWording(candidate)) return "내부 용어·기간 표기";
         if (!verifyFacts(candidate, c)) return "사실과 반대 표현";
         if (!verifyEach(candidate, c)) return "'각각' 금액";
+        if (!verifySavingsAmounts(candidate, c)) return "절약 금액";
         return null;
     }
 
@@ -296,6 +298,16 @@ public class FeedbackRenderer {
     /** 전체 초과가 예상되는데 예산 안인 것처럼 쓰는 표현 (#122 실험 8, 26주차 "예산 안에서 잘 쓰고 계세요"). */
     private static final Pattern WITHIN_BUDGET = Pattern.compile("예산\\s*안에서\\s*잘|예산\\s*안에서\\s*쓰고|예산을\\s*잘\\s*지키");
 
+    /** "N원 넘게" 바로 뒤가 지출 동사면 지출액이다 ("30만 원 넘게 썼고", "넘게 쓰면서"). */
+    private static final Pattern SPENT_AFTER = Pattern.compile("\\s*(?:을|를)?\\s*(?:썼|쓰|써|쓴|지출|나갔|나가|사용|결제)");
+
+    /** 쉼표·문장부호로 나뉜 구절 중 [start, end)를 포함하는 구절. */
+    private static String clauseAround(String sentence, int start, int end) {
+        int from = Math.max(sentence.lastIndexOf(',', start), sentence.lastIndexOf('，', start)) + 1;
+        int to = sentence.indexOf(',', end);
+        return sentence.substring(from, to < 0 ? sentence.length() : to);
+    }
+
     /** "N원 넘게/이상" 뒤에 붙는 말. */
     private static final Pattern AT_LEAST_SUFFIX = Pattern.compile("\\s*(?:넘게|이상|넘는|넘어|넘었)");
 
@@ -317,10 +329,14 @@ public class FeedbackRenderer {
             if (!sentence.contains("초과")) continue;
             Matcher m = MONEY_PATTERN.matcher(sentence);
             while (m.find()) {
-                if (!AT_LEAST_SUFFIX
+                Matcher suffix = AT_LEAST_SUFFIX.matcher(sentence).region(m.end(), sentence.length());
+                if (!suffix.lookingAt()) continue;
+                // 초과를 설명하는 금액만 — "이번 주 30만 원 넘게 썼고, 월말 초과는 10만 원"의 30만은 지출액 (리뷰 지적)
+                if (SPENT_AFTER
                         .matcher(sentence)
-                        .region(m.end(), sentence.length())
+                        .region(suffix.end(), sentence.length())
                         .lookingAt()) continue;
+                if (!clauseAround(sentence, m.start(), suffix.end()).contains("초과")) continue;
                 List<MoneyMention> one = extractMoneyMentions(m.group());
                 if (one.isEmpty() || one.getFirst().manWonRange()) continue;
                 long claimed = one.getFirst().value();
@@ -381,6 +397,54 @@ public class FeedbackRenderer {
                     || isAllowedExpression(m.value(), v);
         }
         return isAllowedExpression(m.value(), v);
+    }
+
+    /** 금액 바로 뒤에 붙는 '줄이다·아끼다·절약' — 그 금액이 절약 제안 금액이다. */
+    private static final Pattern SAVE_VERB_AFTER =
+            Pattern.compile("\\s*(?:정도|가량|쯤|씩)?\\s*(?:을|를)?\\s*(?:만|더)?\\s*(?:줄이|줄여|줄인|줄일|아끼|아껴|아낀|아낄|절약)");
+
+    /**
+     * 절약 제안 금액 검사 (리뷰 지적). 숫자 검사는 "다 지키면 남는 초과액"도 허용값에 넣으므로, "기타에서 150,000원을 줄여보세요"(액션 50,000원,
+     * 남는 초과 150,000원)가 통과한다. 금액 바로 뒤가 줄이다·아끼다·절약이면 같은 구절에 나온 카테고리의 reductionWon(여럿이면 합)과 대조한다.
+     * 카테고리 이름이 없으면 액션 금액 중 하나 또는 전체 합과 대조한다.
+     */
+    boolean verifySavingsAmounts(String text, FeedbackContext c) {
+        if (c.actions().isEmpty()) return true;
+        Map<String, Long> reduction = new LinkedHashMap<>();
+        c.actions().forEach(a -> reduction.merge(a.categoryName(), a.reductionWon(), Long::sum));
+        long total = actionTotal(c);
+        for (String sentence : text.split("(?<=[.!?])\\s+|\\n")) {
+            Matcher m = MONEY_PATTERN.matcher(sentence);
+            while (m.find()) {
+                if (!SAVE_VERB_AFTER
+                        .matcher(sentence)
+                        .region(m.end(), sentence.length())
+                        .lookingAt()) continue;
+                List<MoneyMention> one = extractMoneyMentions(m.group());
+                if (one.isEmpty()) continue;
+                MoneyMention mention = one.getFirst();
+                String clause = clauseAround(sentence, m.start(), m.end());
+                String before = clause.substring(0, Math.max(0, clause.indexOf(m.group())));
+                List<String> named =
+                        reduction.keySet().stream().filter(before::contains).toList();
+                Set<Long> expected = new HashSet<>();
+                if (named.isEmpty()) {
+                    expected.addAll(reduction.values());
+                    expected.add(total);
+                } else {
+                    expected.add(named.stream().mapToLong(reduction::get).sum());
+                }
+                boolean ok = expected.stream()
+                        .anyMatch(v -> mention.manWonRange()
+                                ? isInManWonRange(
+                                        mention.rangeFrom() > 0 ? mention.rangeFrom() : mention.value(),
+                                        mention.value(),
+                                        v)
+                                : isAllowedExpression(mention.value(), v));
+                if (!ok) return false;
+            }
+        }
+        return true;
     }
 
     /** 사용자 판정으로 금지한 체념 표현("이번 달은 받아들이고", "다 메우긴 어려워요")이 없으면 true. */
