@@ -62,7 +62,9 @@ public class AiFeedbackService {
 
     private static final Logger log = LoggerFactory.getLogger(AiFeedbackService.class);
 
-    private static final String PROMPT_VERSION = "v2.0";
+    /** v3.0 (#111): 배수 기준 명시, 건수·묶음 표기, 절약 액션 출처 제한, 내부 용어 제거, 거래처별 건수. */
+    private static final String PROMPT_VERSION = "v3.0";
+
     private static final String LOGIC_VERSION = "v2.0";
 
     /** 추세 magnitude 계산에 필요한 최소 주 수 (4주 recent + 4주 prior). */
@@ -313,14 +315,19 @@ public class AiFeedbackService {
                 .sorted(Map.Entry.<Integer, Long>comparingByValue().reversed())
                 .map(e -> {
                     int cat = e.getKey();
-                    long thisWeekAmt = sum(
-                            window,
-                            ex -> ex.getCategoryId() == cat
-                                    && !ex.getDate().isBefore(finalWeekStart)
-                                    && !ex.getDate().isAfter(weekEnd)
-                                    && ex.isVariable());
+                    Pred thisWeekVar = ex -> ex.getCategoryId() == cat
+                            && !ex.getDate().isBefore(finalWeekStart)
+                            && !ex.getDate().isAfter(weekEnd)
+                            && ex.isVariable();
+                    List<String> memos = new ArrayList<>();
+                    for (Expense ex : window) if (thisWeekVar.test(ex)) memos.add(ex.getMemo());
                     return new CategoryOverspend(
-                            Categories.name(cat), e.getValue(), thisWeekAmt, finalCauseSignals.get(cat));
+                            Categories.name(cat),
+                            e.getValue(),
+                            sum(window, thisWeekVar),
+                            finalCauseSignals.get(cat),
+                            count(window, thisWeekVar),
+                            MerchantNames.countByMerchant(memos));
                 })
                 .toList();
 
@@ -336,14 +343,13 @@ public class AiFeedbackService {
 
         // 이상치 카테고리의 이번 주 실지출액 (LLM에 구체적 금액 제공용)
         final int anomalyCatId = top != null ? top.categoryId() : -1;
-        long anomalyWeeklyAmount = anomalyCatId >= 0
-                ? sum(
-                        window,
-                        e -> e.getCategoryId() == anomalyCatId
-                                && !e.getDate().isBefore(weekStart)
-                                && !e.getDate().isAfter(weekEnd)
-                                && e.isVariable())
-                : 0L;
+        final LocalDate anomalyWeekStart = weekStart;
+        Pred anomalyThisWeek = e -> e.getCategoryId() == anomalyCatId
+                && !e.getDate().isBefore(anomalyWeekStart)
+                && !e.getDate().isAfter(weekEnd)
+                && e.isVariable();
+        long anomalyWeeklyAmount = anomalyCatId >= 0 ? sum(window, anomalyThisWeek) : 0L;
+        int anomalyWeeklyCount = anomalyCatId >= 0 ? count(window, anomalyThisWeek) : 0;
         // 이상치 대표 거래의 감정 태그 (LLM 톤 결정용)
         String anomalyEmotion = top != null ? top.rep().getEmotion() : null;
 
@@ -357,17 +363,18 @@ public class AiFeedbackService {
                         == Confidence.HIGH)
                 .limit(MAX_HIGH_ANOMALIES - 1)
                 .map(a -> {
-                    long weeklyAmt = sum(
-                            window,
-                            e -> e.getCategoryId() == a.categoryId()
-                                    && !e.getDate().isBefore(finalWeekStart2)
-                                    && !e.getDate().isAfter(finalWeekEnd2)
-                                    && e.isVariable());
+                    Pred catThisWeek = e -> e.getCategoryId() == a.categoryId()
+                            && !e.getDate().isBefore(finalWeekStart2)
+                            && !e.getDate().isAfter(finalWeekEnd2)
+                            && e.isVariable();
+                    long weeklyAmt = sum(window, catThisWeek);
                     return new FeedbackRenderer.AnomalyInfo(
                             Categories.name(a.categoryId()),
                             a.magnitude(),
                             weeklyAmt,
-                            a.rep().getEmotion());
+                            a.rep().getEmotion(),
+                            a.basis(),
+                            count(window, catThisWeek));
                 })
                 .toList();
 
@@ -430,7 +437,9 @@ public class AiFeedbackService {
                 weekHighlights,
                 feedbackType,
                 bandWidth,
-                overallConfidence);
+                overallConfidence,
+                top != null ? top.basis() : null,
+                anomalyWeeklyCount);
 
         // ── [9] 렌더링 ──
         FeedbackRenderer.Rendered out = renderer.render(ctx);
@@ -820,9 +829,9 @@ public class AiFeedbackService {
                 double[] hist = baselineHistory(catExpenses, d, cat);
                 var z = detector.checkPoint(e.getAmount(), hist, budget);
                 if (z.isPresent()) {
-                    double mag =
-                            hist.length > 0 ? e.getAmount() / Math.max(RobustStats.median(hist), 1) : z.getAsDouble();
-                    Anomaly candidate = new Anomaly(cat, e, mag, hist.length);
+                    double median = hist.length > 0 ? RobustStats.median(hist) : 0;
+                    double mag = hist.length > 0 ? e.getAmount() / Math.max(median, 1) : z.getAsDouble();
+                    Anomaly candidate = new Anomaly(cat, e, mag, hist.length, false, e.getAmount(), Math.round(median));
                     bestPerCat.merge(
                             cat,
                             candidate,
@@ -857,7 +866,7 @@ public class AiFeedbackService {
                             .max(Comparator.comparing(Expense::getExpenseDate))
                             .orElse(null);
                     if (rep != null) {
-                        Anomaly candidate = new Anomaly(cat, rep, mag, histLen);
+                        Anomaly candidate = new Anomaly(cat, rep, mag, histLen, true, Math.round(rm), Math.round(pm));
                         bestPerCat.merge(
                                 cat,
                                 candidate,
@@ -1249,11 +1258,7 @@ public class AiFeedbackService {
             }
         }
 
-        return result.stream()
-                .sorted(Comparator.comparingLong(TransactionHighlight::amountWon)
-                        .reversed())
-                .limit(5)
-                .toList();
+        return TransactionHighlight.groupIdenticalTopN(result, 5);
     }
 
     private static boolean isHighlightEmotion(String emotion) {
@@ -1262,6 +1267,12 @@ public class AiFeedbackService {
 
     private interface Pred {
         boolean test(Expense e);
+    }
+
+    private int count(List<Expense> xs, Pred f) {
+        int n = 0;
+        for (Expense e : xs) if (f.test(e)) n++;
+        return n;
     }
 
     private long sum(List<Expense> xs, Pred f) {
@@ -1276,7 +1287,28 @@ public class AiFeedbackService {
     }
 
     /** 이상치 탐지 결과. histLength = 8주 기준선 내 거래 건수 (Confidence 산출용). */
-    private record Anomaly(int categoryId, Expense rep, double magnitude, int histLength) {}
+    /**
+     * @param trend       true면 추세 이상치(최근 4주 vs 그 전 4주 주당 평균), false면 단발 이상치(한 건 vs 과거 한 건 중앙값)
+     * @param subjectWon  배수의 분자 — 단발: 거래 금액 / 추세: 최근 4주 주당 평균
+     * @param baselineWon 배수의 분모 — 단발: 과거 한 건 중앙값 / 추세: 그 전 4주 주당 평균
+     */
+    private record Anomaly(
+            int categoryId,
+            Expense rep,
+            double magnitude,
+            int histLength,
+            boolean trend,
+            long subjectWon,
+            long baselineWon) {
+
+        /** 프롬프트에 배수 기준을 밝히기 위한 정보 (#111). 기준값이 없으면(과거 거래 없음) null — 렌더러가 기존 표기 사용. */
+        FeedbackRenderer.AnomalyBasis basis() {
+            if (baselineWon <= 0) return null;
+            if (trend) return new FeedbackRenderer.AnomalyBasis(false, subjectWon, baselineWon, null);
+            String label = rep.getMemo() != null && !rep.getMemo().isBlank() ? rep.getMemo() : rep.getTitle();
+            return new FeedbackRenderer.AnomalyBasis(true, subjectWon, baselineWon, label);
+        }
+    }
 
     /** [3.5] 메모 질문 큐 적재 후보. */
     private record AnomalyCandidate(Expense expense, double magnitude) {}

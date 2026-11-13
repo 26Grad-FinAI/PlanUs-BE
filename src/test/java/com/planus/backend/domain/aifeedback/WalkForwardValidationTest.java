@@ -14,6 +14,7 @@ import com.planus.backend.domain.aifeedback.entity.Expense;
 import com.planus.backend.domain.aifeedback.llm.AnthropicLlmClient;
 import com.planus.backend.domain.aifeedback.llm.FeedbackRenderer;
 import com.planus.backend.domain.aifeedback.llm.LlmClient;
+import com.planus.backend.domain.aifeedback.llm.LlmRenderMeter;
 import java.io.BufferedReader;
 import java.io.InputStreamReader;
 import java.time.DayOfWeek;
@@ -59,6 +60,22 @@ class WalkForwardValidationTest {
     private static final long MONTHLY_INCOME = 1_200_000L; // 월 수입 120만원
     private static final long SAVINGS_GOAL = 200_000L; // 저축 목표 20만원
     private static final long AVAILABLE_BUDGET = MONTHLY_INCOME - SAVINGS_GOAL; // 가용예산 100만원
+
+    /** LLM 검증 반복 횟수. 환경변수 LLM_REPEAT로 지정 (기본 1). 숫자 후검증 통과율 측정용. */
+    private static final int LLM_REPEAT = Math.max(
+            1, Integer.parseInt(Optional.ofNullable(System.getenv("LLM_REPEAT")).orElse("1")));
+
+    /**
+     * LLM 검증 대상 주차 제한. 환경변수 LLM_WEEKS (예: "35" 또는 "18,35"). 비어 있으면 전체 주차.
+     * 특정 상황(예: 35주차 횟수 오류)만 반복 측정해 표본을 늘릴 때 사용한다 (#111).
+     */
+    private static final Set<Integer> LLM_WEEKS = Optional.ofNullable(System.getenv("LLM_WEEKS"))
+            .filter(v -> !v.isBlank())
+            .map(v -> Arrays.stream(v.split(","))
+                    .map(String::trim)
+                    .map(Integer::parseInt)
+                    .collect(Collectors.toSet()))
+            .orElse(Set.of());
 
     // YearMonth → (categoryId → 예산)
     private static Map<YearMonth, Map<Integer, Long>> BUDGETS_BY_MONTH;
@@ -538,10 +555,13 @@ class WalkForwardValidationTest {
         Assumptions.assumeTrue(apiKey != null && !apiKey.isBlank(), "ANTHROPIC_API_KEY 미설정 → 스킵");
 
         // AnthropicLlmClient 직접 생성 (리플렉션으로 @Value 필드 주입)
-        AnthropicLlmClient llmClient = new AnthropicLlmClient();
-        setField(llmClient, "apiKey", apiKey);
-        setField(llmClient, "model", "claude-sonnet-4-5");
-        setField(llmClient, "maxTokens", 600);
+        AnthropicLlmClient rawLlmClient = new AnthropicLlmClient();
+        setField(rawLlmClient, "apiKey", apiKey);
+        setField(rawLlmClient, "model", "claude-sonnet-4-5");
+        setField(rawLlmClient, "maxTokens", 600);
+        // 호출을 기록해 1차 통과 / 재시도 후 통과 / 템플릿 폴백을 집계한다 (#111)
+        LlmRenderMeter stats = new LlmRenderMeter();
+        LlmClient llmClient = stats.wrap(rawLlmClient);
 
         // ObjectProvider — getIfAvailable()만 구현
         ObjectProvider<LlmClient> provider = new ObjectProvider<>() {
@@ -585,6 +605,7 @@ class WalkForwardValidationTest {
 
             FeedbackType type = feedbackTypeResolver.resolve(isLowData, savingsImpact, hasHighAnomaly, hasOverBudget);
             if (type != FeedbackType.ALERT) continue;
+            if (!LLM_WEEKS.isEmpty() && !LLM_WEEKS.contains(week)) continue;
 
             // ── overspendCategories (CauseSignalAssembler로 메모·감정 포함) ──
             LocalDate monthStart = weekEnd.withDayOfMonth(1);
@@ -606,8 +627,20 @@ class WalkForwardValidationTest {
                                     && !e.getDate().isAfter(weekEnd))
                             .mapToLong(Expense::getAmount)
                             .sum();
+                    int thisWeekCnt = (int) thisWeek.stream()
+                            .filter(e -> e.isVariable() && Objects.equals(e.getCategoryId(), entry.getKey()))
+                            .count();
+                    List<String> weekMemos = thisWeek.stream()
+                            .filter(e -> e.isVariable() && Objects.equals(e.getCategoryId(), entry.getKey()))
+                            .map(Expense::getMemo)
+                            .toList();
                     overspend.add(new FeedbackRenderer.CategoryOverspend(
-                            Categories.name(entry.getKey()), catSpend - entry.getValue(), thisWeekAmt, cs));
+                            Categories.name(entry.getKey()),
+                            catSpend - entry.getValue(),
+                            thisWeekAmt,
+                            cs,
+                            thisWeekCnt,
+                            MerchantNames.countByMerchant(weekMemos)));
                 }
             }
 
@@ -617,6 +650,7 @@ class WalkForwardValidationTest {
             double anomalyMag = 0;
             Confidence anomalyConf = null;
             String anomalyEmotion = null;
+            FeedbackRenderer.AnomalyBasis anomalyBasis = null;
             for (int catId : catBudget.keySet()) {
                 if (anomalyDetector.isSpikeProne(catId)) continue;
                 long budget = catBudget.getOrDefault(catId, 100_000L);
@@ -647,6 +681,7 @@ class WalkForwardValidationTest {
                         anomalyMag = mag;
                         anomalyConf = conf;
                         anomalyEmotion = e.getEmotion();
+                        anomalyBasis = pointBasis(e, catHist);
                     }
                 }
             }
@@ -657,6 +692,11 @@ class WalkForwardValidationTest {
                             .mapToLong(Expense::getAmount)
                             .sum()
                     : 0L;
+            int anomalyWeeklyCount = anomalyCatId >= 0
+                    ? (int) thisWeek.stream()
+                            .filter(e -> e.isVariable() && Objects.equals(e.getCategoryId(), finalAnomalyCatId))
+                            .count()
+                    : 0;
 
             // ── 추가 HIGH 이상치 (primary 카테고리 제외, HIGH confidence, 최대 2개) ──
             List<FeedbackRenderer.AnomalyInfo> additionalHighAnomalies = new ArrayList<>();
@@ -672,6 +712,7 @@ class WalkForwardValidationTest {
                         .toArray();
                 double bestMag = 0;
                 String bestEmotion = null;
+                FeedbackRenderer.AnomalyBasis bestBasis = null;
                 for (Expense e : thisWeek) {
                     if (!e.isExpense() || !Objects.equals(e.getCategoryId(), catId)) continue;
                     OptionalDouble z =
@@ -689,6 +730,7 @@ class WalkForwardValidationTest {
                     if (mag > bestMag) {
                         bestMag = mag;
                         bestEmotion = e.getEmotion();
+                        bestBasis = pointBasis(e, catHist);
                     }
                 }
                 if (bestMag > 0) {
@@ -698,7 +740,10 @@ class WalkForwardValidationTest {
                             .mapToLong(Expense::getAmount)
                             .sum();
                     additionalHighAnomalies.add(new FeedbackRenderer.AnomalyInfo(
-                            Categories.name(catId), bestMag, catWeeklyAmt, bestEmotion));
+                            Categories.name(catId), bestMag, catWeeklyAmt, bestEmotion, bestBasis, (int)
+                                    thisWeek.stream()
+                                            .filter(e -> e.isVariable() && Objects.equals(e.getCategoryId(), fCatId))
+                                            .count()));
                 }
             }
             additionalHighAnomalies.sort(Comparator.comparingDouble(FeedbackRenderer.AnomalyInfo::magnitude)
@@ -822,11 +867,8 @@ class WalkForwardValidationTest {
                             d, Categories.name(catId), e.getAmount(), e.getMemo(), e.getEmotion()));
                 }
             }
-            List<FeedbackRenderer.TransactionHighlight> topHighlights = highlights.stream()
-                    .sorted(Comparator.comparingLong(FeedbackRenderer.TransactionHighlight::amountWon)
-                            .reversed())
-                    .limit(5)
-                    .toList();
+            List<FeedbackRenderer.TransactionHighlight> topHighlights =
+                    FeedbackRenderer.TransactionHighlight.groupIdenticalTopN(highlights, 5);
 
             // 이번 주 전체 변동지출 감정 분포
             Map<String, Long> wkEmoCounts = new java.util.LinkedHashMap<>();
@@ -883,7 +925,9 @@ class WalkForwardValidationTest {
                     topHighlights,
                     type,
                     bw,
-                    overall);
+                    overall,
+                    anomalyBasis,
+                    anomalyWeeklyCount);
 
             System.out.printf("%n=== [검증 4] 제%d주차 (%s ~ %s) ===%n", week, weekStart, weekEnd);
             System.out.printf("예측 월말 지출  : %,d원 / 가용예산 %,d원%n", ctx.predictedMonthEndWon(), AVAILABLE_BUDGET);
@@ -906,7 +950,12 @@ class WalkForwardValidationTest {
             }
             System.out.println("-".repeat(60));
 
-            FeedbackRenderer.Rendered result = renderer.render(ctx);
+            FeedbackRenderer.Rendered result = null;
+            for (int r = 0; r < LLM_REPEAT; r++) {
+                stats.begin(LlmRenderMeter.legacyRule(renderer, ctx));
+                result = renderer.render(ctx);
+                stats.end(result.text(), "제" + week + "주차", r + 1);
+            }
             System.out.println("신뢰도 : " + result.confidence());
             System.out.println();
             System.out.println(result.text());
@@ -914,6 +963,7 @@ class WalkForwardValidationTest {
         }
 
         System.out.printf("%n총 %d개 ALERT 주차 피드백 생성 완료%n", renderedCount);
+        stats.print("[검증 4] 주간 피드백 (반복 " + LLM_REPEAT + "회)");
         assertThat(renderedCount).isGreaterThanOrEqualTo(0);
     }
 
@@ -927,10 +977,13 @@ class WalkForwardValidationTest {
         String apiKey = System.getenv("ANTHROPIC_API_KEY");
         Assumptions.assumeTrue(apiKey != null && !apiKey.isBlank(), "ANTHROPIC_API_KEY 미설정 → 스킵");
 
-        AnthropicLlmClient llmClient = new AnthropicLlmClient();
-        setField(llmClient, "apiKey", apiKey);
-        setField(llmClient, "model", "claude-sonnet-4-5");
-        setField(llmClient, "maxTokens", 600);
+        AnthropicLlmClient rawLlmClient = new AnthropicLlmClient();
+        setField(rawLlmClient, "apiKey", apiKey);
+        setField(rawLlmClient, "model", "claude-sonnet-4-5");
+        setField(rawLlmClient, "maxTokens", 600);
+        // 호출을 기록해 1차 통과 / 재시도 후 통과 / 템플릿 폴백을 집계한다 (#111)
+        LlmRenderMeter stats = new LlmRenderMeter();
+        LlmClient llmClient = stats.wrap(rawLlmClient);
 
         ObjectProvider<LlmClient> provider = new ObjectProvider<>() {
             public LlmClient getObject() {
@@ -1022,7 +1075,12 @@ class WalkForwardValidationTest {
             }
             System.out.println("-".repeat(60));
 
-            FeedbackRenderer.Rendered result = renderer.renderMonthEnd(ctx);
+            FeedbackRenderer.Rendered result = null;
+            for (int r = 0; r < LLM_REPEAT; r++) {
+                stats.begin(LlmRenderMeter.legacyRule(renderer, ctx));
+                result = renderer.renderMonthEnd(ctx);
+                stats.end(result.text(), ym + " 월말", r + 1);
+            }
             System.out.println("신뢰도 : " + result.confidence());
             System.out.println();
             System.out.println(result.text());
@@ -1030,6 +1088,7 @@ class WalkForwardValidationTest {
         }
 
         System.out.printf("%n총 %d개월 결산 피드백 생성 완료%n", renderedCount);
+        stats.print("[검증 5] 월말 결산 (반복 " + LLM_REPEAT + "회)");
         assertThat(renderedCount).isGreaterThanOrEqualTo(0);
     }
 
@@ -1038,6 +1097,15 @@ class WalkForwardValidationTest {
         var field = obj.getClass().getDeclaredField(fieldName);
         field.setAccessible(true);
         field.set(obj, value);
+    }
+
+    /** 단발 이상치의 배수 기준 (#111) — 서비스의 Anomaly.basis()와 같은 규칙. 과거 거래가 없으면 null. */
+    private static FeedbackRenderer.AnomalyBasis pointBasis(Expense e, double[] catHist) {
+        if (catHist.length == 0) return null;
+        long baseline = Math.round(RobustStats.median(catHist));
+        if (baseline <= 0) return null;
+        String label = e.getMemo() != null && !e.getMemo().isBlank() ? e.getMemo() : e.getTitle();
+        return new FeedbackRenderer.AnomalyBasis(true, e.getAmount(), baseline, label);
     }
 
     /** budgets.csv 로드 → YearMonth → (categoryId → 예산) */

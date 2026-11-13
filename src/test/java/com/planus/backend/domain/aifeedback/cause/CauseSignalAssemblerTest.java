@@ -255,6 +255,28 @@ class CauseSignalAssemblerTest {
         }
 
         @Test
+        @DisplayName("같은 날·금액·메모 거래는 한 건으로 묶고 건수 기록 (#111, 35주차 롯데월드 29,150원 × 4)")
+        void groups_identical_memos_with_count() {
+            List<Expense> expenses = new ArrayList<>();
+            for (int i = 0; i < 4; i++) {
+                expenses.add(variableWithMemo(CATEGORY, WEEK_START, 29_150, "체크카드 롯데월드"));
+            }
+            expenses.add(variableWithMemo(CATEGORY, WEEK_START, 2_000, "체크카드 롯데월드")); // 금액 다름 → 별도
+
+            CauseSignals result = assembler.assemble(CATEGORY, expenses, WEEK_START, WEEK_END, null);
+            assertThat(result.memos()).hasSize(2);
+            assertThat(result.memos())
+                    .anySatisfy(m -> {
+                        assertThat(m.amount()).isEqualTo(29_150);
+                        assertThat(m.count()).isEqualTo(4);
+                    })
+                    .anySatisfy(m -> {
+                        assertThat(m.amount()).isEqualTo(2_000);
+                        assertThat(m.count()).isEqualTo(1);
+                    });
+        }
+
+        @Test
         @DisplayName("메모 없으면 hasMemo=false, 빈 리스트")
         void empty_when_no_memos() {
             List<Expense> expenses = new ArrayList<>();

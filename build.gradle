@@ -83,6 +83,9 @@ tasks.register('testLlm', Test) {
 	useJUnitPlatform {
 		includeTags 'llm'
 	}
+	// 결과가 외부 LLM 응답·환경변수(ANTHROPIC_API_KEY, LLM_REPEAT)에 따라 달라지므로
+	// Gradle이 UP-TO-DATE로 건너뛰지 않고 매번 실행한다 (#111)
+	outputs.upToDateWhen { false }
 	testLogging {
 		showStandardStreams = true
 	}
