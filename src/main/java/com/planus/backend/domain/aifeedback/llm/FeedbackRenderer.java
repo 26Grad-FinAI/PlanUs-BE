@@ -79,6 +79,9 @@ public class FeedbackRenderer {
         - 절약 제안은 '어느 항목에서 얼마를 줄이면 저축 목표에 어떤 효과'인지 구체적으로 연결한다.
         - 절약 금액·절약 효과(원)는 [절약 액션]에 있는 카테고리와 금액만 쓴다. [절약 액션 대상 아님] 카테고리나 [절약 액션]이 없는 주에는 'N회 줄이면 N만 원', '월 N만 원 아낄 수' 같은 금액을 만들지 않는다. 줄이기를 권하더라도 금액을 붙이지 않는다.
         - 절약 금액은 [절약 액션]에 적힌 그 카테고리에만 붙인다. '다른 항목에서 N원 줄이기'처럼 카테고리를 바꾸지 않는다.
+        - 카테고리의 '월말 예상 초과'와 '전체 월말 예상 초과'(저축 목표에서 멀어지는 금액)는 다른 값이다. 카테고리 초과에서 절약 금액을 빼면 전체 초과가 되는 것처럼 한 문장에 잇지 않는다.
+        - 지금까지 쓴 비율과 월말 예상 비율('이대로면 월말엔 예산의 N%')을 구분한다. 예산 사용 비율은 쓸수록 늘기만 하므로 '내려왔다', '줄었다'고 쓰지 않는다.
+        - 전체 월말 예상 초과가 있으면 '예산 안에서 잘 쓰고 있다'처럼 예산 안인 것으로 쓰지 않는다.
         - 여러 카테고리에 '각각 N원'을 붙이지 않는다. 금액이 다르면 '식료품 29,675원, 오락문화 14,143원'처럼 따로 쓴다.
         - 예산 사용 비율은 이번 달 전체 기준이다. '이번 주는 예산의 N%'처럼 이번 주로 쓰지 않는다.
         - 예산 사용 비율(%)은 '이번 달 예산의 30%를 썼어요'처럼 무엇의 비율인지 밝혀 쓴다. '페이싱', '보통 이맘때 20%인데 지금은 30%'처럼 대상 없이 쓰지 않는다.
@@ -174,6 +177,7 @@ public class FeedbackRenderer {
         if (!verifyMerchantCounts(candidate, c)) return "거래처 건수";
         if (!verifyTone(candidate)) return "체념 표현";
         if (!verifyWording(candidate)) return "내부 용어·기간 표기";
+        if (!verifyFacts(candidate, c)) return "사실과 반대 표현";
         if (!verifyEach(candidate, c)) return "'각각' 금액";
         return null;
     }
@@ -234,8 +238,58 @@ public class FeedbackRenderer {
     private static final Pattern BANNED_WORDING =
             Pattern.compile("절약\\s*액션|이번\\s*주(?:는|에는|에|엔)?\\s*(?:이번\\s*달\\s*)?예산의\\s*\\d");
 
+    /**
+     * "이번 주 28만 9천 원을 쓰면서 예산의 109%를 사용했어요" — 이번 달 누적 비율을 '이번 달' 없이 이번 주 금액에 붙임 (#122 실험 8, 34주차 ×2).
+     * 같은 문장에 '이번 주'가 있고 '예산의 N%' 앞에 '이번 달·한 달'이 없으면 거절.
+     */
+    private static final Pattern WEEK_THEN_RATE =
+            Pattern.compile("이번\\s*주[^.!?\\n]*?(?<!이번 달 )(?<!이번달 )(?<!한 달 )(?<!한달 )(?<!이번 달의 )예산의\\s*\\d+%");
+
+    /** "예산의 104%까지 내려왔어요", "113%로 줄었어요" — 사용 비율은 줄지 않음 (#122 실험 8, 21주차). */
+    private static final Pattern RATE_DOWN = Pattern.compile("\\d+%\\s*(?:까지|로|으로)?\\s*(?:내려왔|내려갔|내려온|줄었|줄어들었|낮아졌)");
+
     boolean verifyWording(String text) {
-        return !BANNED_WORDING.matcher(text).find();
+        return !BANNED_WORDING.matcher(text).find()
+                && !WEEK_THEN_RATE.matcher(text).find()
+                && !RATE_DOWN.matcher(text).find();
+    }
+
+    /** 전체 초과가 예상되는데 예산 안인 것처럼 쓰는 표현 (#122 실험 8, 26주차 "예산 안에서 잘 쓰고 계세요"). */
+    private static final Pattern WITHIN_BUDGET = Pattern.compile("예산\\s*안에서\\s*잘|예산\\s*안에서\\s*쓰고|예산을\\s*잘\\s*지키");
+
+    /** "N원 넘게/이상" 뒤에 붙는 말. */
+    private static final Pattern AT_LEAST_SUFFIX = Pattern.compile("\\s*(?:넘게|이상|넘는|넘어|넘었)");
+
+    /**
+     * 사실과 반대되는 표현 검사.
+     * <ul>
+     *   <li>전체 월말 예상 초과가 있는데 '예산 안에서 잘 쓰고 계세요'
+     *   <li>초과를 말하는 문장의 'N원 넘게' — 초과 금액 중 N 이상이면서 N에 가까운 값이 없으면 거절 (#122 실험 8, 24주차 "식대 12만 원 넘게
+     *       초과", 실제 119,176원. 숫자 검사는 식대 이번 주 지출 124,200원으로 통과시킴)
+     * </ul>
+     */
+    boolean verifyFacts(String text, FeedbackContext c) {
+        if (c.savingsImpactWon() < 0 && WITHIN_BUDGET.matcher(text).find()) return false;
+        Set<Long> overs = new HashSet<>();
+        if (c.savingsImpactWon() < 0) overs.add(Math.abs(c.savingsImpactWon()));
+        c.overspendCategories().forEach(ov -> overs.add(ov.overAmountWon()));
+        if (overs.isEmpty()) return true;
+        for (String sentence : text.split("(?<=[.!?])\\s+|\\n")) {
+            if (!sentence.contains("초과")) continue;
+            Matcher m = MONEY_PATTERN.matcher(sentence);
+            while (m.find()) {
+                if (!AT_LEAST_SUFFIX
+                        .matcher(sentence)
+                        .region(m.end(), sentence.length())
+                        .lookingAt()) continue;
+                List<MoneyMention> one = extractMoneyMentions(m.group());
+                if (one.isEmpty() || one.getFirst().manWonRange()) continue;
+                long claimed = one.getFirst().value();
+                boolean ok = overs.stream().anyMatch(v -> v >= claimed && isAllowedExpression(claimed, v));
+                if (!ok) return false;
+            }
+        }
+        return true;
     }
 
     /**
@@ -637,7 +691,7 @@ public class FeedbackRenderer {
         if (c.savingsImpactWon() < 0) {
             sb.append("- 이대로면 저축 목표에서 ")
                     .append(exactWon(Math.abs(c.savingsImpactWon())))
-                    .append(" 멀어짐\n");
+                    .append(" 멀어짐 (= 전체 월말 예상 초과. 카테고리별 초과의 합과 다름 — 예산보다 덜 쓰는 카테고리가 상쇄)\n");
         } else {
             sb.append("- 현재 페이스는 예산 안. 저축 목표 달성 가능\n");
         }
@@ -668,6 +722,13 @@ public class FeedbackRenderer {
                             .append(pct(p.currentRate()))
                             .append("\n");
             }
+        }
+
+        if (c.pacing() != null && c.availableBudgetWon() > 0) {
+            // 월말 비율이 없으면 LLM이 지금 비율을 월말 값처럼 쓴다 (#122 실험 8, 31주차 "월말에 예산의 30%를 넘겨")
+            sb.append("- 이대로면 월말엔 예산의 ")
+                    .append(pct((double) c.predictedMonthEndWon() / c.availableBudgetWon()))
+                    .append("\n");
         }
 
         // ── 이번 주 소비 감정 분포 ──
@@ -981,7 +1042,7 @@ public class FeedbackRenderer {
                 if (single <= 0) continue;
                 sb.append("- ")
                         .append(a.categoryName())
-                        .append("만 지키면 월말 초과 ")
+                        .append("만 지키면 전체 월말 초과 ")
                         .append(exactWon(gap))
                         .append(" → ")
                         .append(exactWon(single))
@@ -993,7 +1054,7 @@ public class FeedbackRenderer {
         if (left > 0) {
             sb.append("- ")
                     .append(actionCategories(c))
-                    .append(" 모두 지키면 월말 초과 ")
+                    .append(" 모두 지키면 전체 월말 초과 ")
                     .append(exactWon(Math.abs(c.savingsImpactWon())))
                     .append(" → ")
                     .append(exactWon(left))
