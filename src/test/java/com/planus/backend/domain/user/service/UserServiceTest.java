@@ -17,6 +17,7 @@ import com.planus.backend.domain.user.dto.UserProfileRequest;
 import com.planus.backend.domain.user.dto.UserProfileResponse;
 import com.planus.backend.domain.user.dto.UserProfileUpdateResponse;
 import com.planus.backend.domain.user.entity.UserAccount;
+import com.planus.backend.domain.user.event.ProfileSavedEvent;
 import com.planus.backend.domain.user.repository.UserAccountRepository;
 import com.planus.backend.global.apiPayload.code.GeneralErrorCode;
 import com.planus.backend.global.apiPayload.exception.GeneralException;
@@ -30,6 +31,7 @@ import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Nested;
 import org.junit.jupiter.api.Test;
+import org.springframework.context.ApplicationEventPublisher;
 
 class UserServiceTest {
 
@@ -38,18 +40,31 @@ class UserServiceTest {
 
     private UserAccountRepository userAccountRepository;
     private ExpenseRepository expenseRepository;
+    private ApplicationEventPublisher eventPublisher;
     private UserService userService;
 
     @BeforeEach
     void setUp() {
         userAccountRepository = mock(UserAccountRepository.class);
         expenseRepository = mock(ExpenseRepository.class);
-        userService = new UserService(userAccountRepository, expenseRepository, FIXED_CLOCK);
+        eventPublisher = mock(ApplicationEventPublisher.class);
+        userService = new UserService(userAccountRepository, expenseRepository, FIXED_CLOCK, eventPublisher);
     }
 
     @Nested
     @DisplayName("saveProfile 성공")
     class SaveProfileSuccess {
+
+        @Test
+        @DisplayName("프로필 저장 시 예산 산출 트리거 이벤트를 발행한다")
+        void saveProfile_publishesProfileSavedEvent() {
+            UserAccount user = spy(UserAccount.builder().id(1L).nickname("김스펜드").build());
+            when(userAccountRepository.findById(1L)).thenReturn(Optional.of(user));
+
+            userService.saveProfile(1L, validRequest());
+
+            verify(eventPublisher).publishEvent(new ProfileSavedEvent(1L));
+        }
 
         @Test
         @DisplayName("프로필 저장 후 가용예산(소득 - 고정지출 - 저축목표)을 반환한다")
@@ -127,6 +142,17 @@ class UserServiceTest {
     class UpdateProfileSuccess {
 
         @Test
+        @DisplayName("프로필 수정 시 예산 산출 트리거 이벤트를 발행한다")
+        void updateProfile_publishesProfileSavedEvent() {
+            UserAccount user = spy(UserAccount.builder().id(1L).nickname("김스펜드").build());
+            when(userAccountRepository.findById(1L)).thenReturn(Optional.of(user));
+
+            userService.updateProfile(1L, validRequest());
+
+            verify(eventPublisher).publishEvent(new ProfileSavedEvent(1L));
+        }
+
+        @Test
         @DisplayName("프로필 수정 후 변경된 가용예산을 반환한다")
         void updateProfile_returnsUpdatedAvailableBudget() {
             UserAccount user = spy(UserAccount.builder().id(1L).nickname("김스펜드").build());
@@ -145,7 +171,7 @@ class UserServiceTest {
 
             UserProfileUpdateResponse response = userService.updateProfile(1L, validRequest());
 
-            assertThat(response.message()).isEqualTo("프로필 수정 완료. 예산 재산출이 트리거됩니다.");
+            assertThat(response.message()).isEqualTo("프로필 수정 완료. 예산 재산출이 시작됩니다.");
         }
 
         @Test

@@ -9,6 +9,7 @@ import com.planus.backend.domain.user.dto.UserProfileRequest;
 import com.planus.backend.domain.user.dto.UserProfileResponse;
 import com.planus.backend.domain.user.dto.UserProfileUpdateResponse;
 import com.planus.backend.domain.user.entity.UserAccount;
+import com.planus.backend.domain.user.event.ProfileSavedEvent;
 import com.planus.backend.domain.user.repository.UserAccountRepository;
 import com.planus.backend.global.apiPayload.code.GeneralErrorCode;
 import com.planus.backend.global.apiPayload.exception.GeneralException;
@@ -21,6 +22,7 @@ import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import lombok.RequiredArgsConstructor;
+import org.springframework.context.ApplicationEventPublisher;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -32,9 +34,10 @@ public class UserService {
     private final UserAccountRepository userAccountRepository;
     private final ExpenseRepository expenseRepository;
     private final Clock clock;
+    private final ApplicationEventPublisher eventPublisher;
 
     /**
-     * 사용자 프로필을 저장하고 가용예산을 반환한다.
+     * 사용자 프로필을 저장하고 가용예산을 반환한다. 커밋 후 AI 예산 산출이 자동으로 시작된다.
      *
      * @param userId  JWT 필터가 주입한 사용자 ID
      * @param request 프로필 요청 DTO
@@ -55,12 +58,14 @@ public class UserService {
                 request.employmentStatus(),
                 request.homeOwnership(),
                 request.selfIntroduction());
+        // 커밋 후 예산 산출 자동 트리거 (ProfileBudgetPlanTrigger)
+        eventPublisher.publishEvent(new ProfileSavedEvent(userId));
 
         return UserConverter.toProfileResponse(user);
     }
 
     /**
-     * 사용자 프로필을 수정한다.
+     * 사용자 프로필을 수정한다. 커밋 후 AI 예산 산출이 자동으로 다시 시작된다.
      *
      * @param userId  JWT 필터가 주입한 사용자 ID
      * @param request 수정할 프로필 요청 DTO
@@ -81,6 +86,8 @@ public class UserService {
                 request.employmentStatus(),
                 request.homeOwnership(),
                 request.selfIntroduction());
+        // 커밋 후 예산 산출 자동 트리거 (ProfileBudgetPlanTrigger)
+        eventPublisher.publishEvent(new ProfileSavedEvent(userId));
 
         return UserConverter.toProfileUpdateResponse(user);
     }
