@@ -52,11 +52,35 @@ class SavingsSimulationServiceTest {
         simulationRepo = mock(SavingSimulationRepository.class);
         objectMapper = new ObjectMapper();
 
+        // 기본: 12월 5일 — 11월은 지난 달이라 실제 합계를 쓴다
         service = new SavingsSimulationService(
-                feedbackRepo, budgetRepo, budgetCatRepo, expenseRepo, userRepo, simulationRepo, objectMapper);
+                feedbackRepo,
+                budgetRepo,
+                budgetCatRepo,
+                expenseRepo,
+                userRepo,
+                simulationRepo,
+                objectMapper,
+                fixedClock(LocalDate.of(2026, 12, 5)));
     }
 
     // ── 공통 헬퍼 ──
+
+    private static com.planus.backend.domain.aifeedback.entity.Expense variable(
+            int categoryId, long amount, LocalDate date) {
+        return com.planus.backend.domain.aifeedback.entity.Expense.builder()
+                .userId(1L)
+                .categoryId(categoryId)
+                .type("EXPENSE")
+                .amount(amount)
+                .expenseDate(date.atTime(12, 0))
+                .build();
+    }
+
+    private static java.time.Clock fixedClock(LocalDate date) {
+        return java.time.Clock.fixed(
+                date.atStartOfDay(java.time.ZoneId.systemDefault()).toInstant(), java.time.ZoneId.systemDefault());
+    }
 
     private String buildPayloadWithEnrichedActions() throws Exception {
         Map<String, Object> payload = new LinkedHashMap<>();
@@ -256,7 +280,7 @@ class SavingsSimulationServiceTest {
             @Test
             @DisplayName("적자 상태에서 절약 시 균형 도달 메시지")
             void deficit_toBalance() throws Exception {
-                // 가용예산 = 3,000,000 - 0 - 500,000 = 2,500,000
+                // 저축액 = 수입 3,000,000 − 고정 0 − 변동 3,050,000 = −50,000 (가용예산 2,500,000은 이미 목표를 뺀 값)
                 UserAccount user = userWithGoal(3_000_000, 0, 500_000);
                 when(userRepo.findById(1L)).thenReturn(Optional.of(user));
 
@@ -264,15 +288,15 @@ class SavingsSimulationServiceTest {
                 when(feedbackRepo.findByUserIdAndPeriodTypeOrderByPeriodStartDesc(1L, "WEEKLY"))
                         .thenReturn(List.of(feedbackWith(payload)));
 
-                // 현재 소비 > 가용예산 → 적자
+                // 변동지출 > 수입 − 고정지출 → 적자
                 when(expenseRepo.sumVariableExpensesByPeriod(eq(1L), any(), any()))
-                        .thenReturn(2_550_000L);
+                        .thenReturn(3_050_000L);
 
                 SimulateRequest request = new SimulateRequest("2026-11", List.of(7, 5));
                 SimulateResponse result = service.simulate(1L, request);
 
                 assertThat(result.displayType()).isEqualTo(DisplayType.DEFICIT);
-                assertThat(result.currentMonthlySavings()).isEqualTo(-50_000); // 2,500,000 - 2,550,000
+                assertThat(result.currentMonthlySavings()).isEqualTo(-50_000); // 3,000,000 - 3,050,000
                 assertThat(result.projectedMonthlySavings()).isEqualTo(10_000); // -50,000 + 60,000
                 assertThat(result.reductionTotal()).isEqualTo(60_000);
                 assertThat(result.selectedActions()).hasSize(2);
@@ -288,9 +312,9 @@ class SavingsSimulationServiceTest {
                 when(feedbackRepo.findByUserIdAndPeriodTypeOrderByPeriodStartDesc(1L, "WEEKLY"))
                         .thenReturn(List.of(feedbackWith(payload)));
 
-                // 가용예산 2,500,000 - 소비 2,060,000 = 저축 440,000 < 목표 500,000
+                // 저축 = 3,000,000 - 소비 2,560,000 = 440,000 < 목표 500,000
                 when(expenseRepo.sumVariableExpensesByPeriod(eq(1L), any(), any()))
-                        .thenReturn(2_060_000L);
+                        .thenReturn(2_560_000L);
 
                 SimulateRequest request = new SimulateRequest("2026-11", List.of(7, 5));
                 SimulateResponse result = service.simulate(1L, request);
@@ -310,9 +334,9 @@ class SavingsSimulationServiceTest {
                 when(feedbackRepo.findByUserIdAndPeriodTypeOrderByPeriodStartDesc(1L, "WEEKLY"))
                         .thenReturn(List.of(feedbackWith(payload)));
 
-                // 가용예산 2,500,000 - 소비 1,900,000 = 저축 600,000 > 목표 500,000
+                // 저축 = 3,000,000 - 소비 2,400,000 = 600,000 > 목표 500,000
                 when(expenseRepo.sumVariableExpensesByPeriod(eq(1L), any(), any()))
-                        .thenReturn(1_900_000L);
+                        .thenReturn(2_400_000L);
 
                 SimulateRequest request = new SimulateRequest("2026-11", List.of(7, 5));
                 SimulateResponse result = service.simulate(1L, request);
@@ -339,6 +363,98 @@ class SavingsSimulationServiceTest {
 
                 assertThat(result.displayType()).isEqualTo(DisplayType.SURPLUS);
                 assertThat(result.reductionTotal()).isEqualTo(40_000);
+                // 카테고리 거래 없음 → 월 절약액 0 (월 기준이 없음)
+                assertThat(result.monthlySaving()).isZero();
+            }
+
+            @Test
+            @DisplayName("월 절약액 = 남은 기간 감축 비율 × 직전 3개월 월평균, 연 = 월 × 12 (#127)")
+            void monthlyAndAnnualSaving() throws Exception {
+                service = new SavingsSimulationService(
+                        feedbackRepo,
+                        budgetRepo,
+                        budgetCatRepo,
+                        expenseRepo,
+                        userRepo,
+                        simulationRepo,
+                        objectMapper,
+                        fixedClock(LocalDate.of(2026, 11, 16)));
+                UserAccount user = userWithGoal(3_000_000, 0, 0);
+                when(userRepo.findById(1L)).thenReturn(Optional.of(user));
+                when(feedbackRepo.findByUserIdAndPeriodTypeOrderByPeriodStartDesc(1L, "WEEKLY"))
+                        .thenReturn(List.of(feedbackWith(buildPayloadWithEnrichedActions())));
+                when(expenseRepo.sumVariableExpensesByPeriod(eq(1L), any(), any()))
+                        .thenReturn(1_000_000L);
+                // 식대(7): 8·9·10월 각 300,000원, 11월 1~16일 160,000원 (일평균 10,000)
+                when(expenseRepo.findByUserIdAndCategoryIdAndExpenseDateBetween(eq(1L), eq(7), any(), any()))
+                        .thenReturn(List.of(
+                                variable(7, 300_000, LocalDate.of(2026, 8, 10)),
+                                variable(7, 300_000, LocalDate.of(2026, 9, 10)),
+                                variable(7, 300_000, LocalDate.of(2026, 10, 10)),
+                                variable(7, 160_000, LocalDate.of(2026, 11, 5))));
+
+                SimulateResponse result = service.simulate(1L, new SimulateRequest("2026-11", List.of(7)));
+
+                // 남은 14일 예상 = min(혼합, 이번 달 속도만 10,000 × 14 = 140,000). 혼합 일평균 = (16/30)·10,000 + (14/30)·9,677 ≈ 9,849
+                // → 남은 기간 ≈ 137,892원. 감축 40,000 ÷ 137,892 ≈ 29% → 월 ≈ 0.29 × 300,000 ≈ 87,000원
+                SuggestResponse.ActionCard card = result.selectedActions().getFirst();
+                assertThat(card.reductionWon()).isEqualTo(40_000);
+                assertThat(card.monthlySavingWon()).isBetween(86_000L, 88_000L);
+                assertThat(card.annualSavingWon()).isEqualTo(card.monthlySavingWon() * 12);
+                assertThat(result.annualSaving()).isEqualTo(result.monthlySaving() * 12);
+                assertThat(result.message())
+                        .isEqualTo(String.format(
+                                "월 %,d원, 1년 %,d원을 더 저축할 수 있습니다", result.monthlySaving(), result.annualSaving()));
+            }
+
+            @Test
+            @DisplayName("저축 목표를 두 번 빼지 않는다 — 목표를 채우고 남으면 GOAL (#127)")
+            void savingsGoal_notSubtractedTwice() throws Exception {
+                // 수입 2,000,000, 목표 1,000,000 → 가용예산 1,000,000. 변동 800,000 → 저축 1,200,000 ≥ 목표
+                // 이전: 가용예산 − 소비 = 200,000 < 목표 → "저축 목표 미달"(RECOVER)로 잘못 분류
+                UserAccount user = userWithGoal(2_000_000, 0, 1_000_000);
+                when(userRepo.findById(1L)).thenReturn(Optional.of(user));
+                when(feedbackRepo.findByUserIdAndPeriodTypeOrderByPeriodStartDesc(1L, "WEEKLY"))
+                        .thenReturn(List.of(feedbackWith(buildPayloadWithEnrichedActions())));
+                when(expenseRepo.sumVariableExpensesByPeriod(eq(1L), any(), any()))
+                        .thenReturn(800_000L);
+
+                SimulateResponse result = service.simulate(1L, new SimulateRequest("2026-11", List.of(7)));
+
+                assertThat(result.displayType()).isEqualTo(DisplayType.GOAL);
+                assertThat(result.currentMonthlySavings()).isEqualTo(1_200_000);
+            }
+
+            @Test
+            @DisplayName("진행 중인 달은 지금까지 쓴 돈이 아니라 월말 예측으로 계산 (#127)")
+            void currentMonth_usesMonthEndProjection() throws Exception {
+                service = new SavingsSimulationService(
+                        feedbackRepo,
+                        budgetRepo,
+                        budgetCatRepo,
+                        expenseRepo,
+                        userRepo,
+                        simulationRepo,
+                        objectMapper,
+                        fixedClock(LocalDate.of(2026, 11, 4)));
+                UserAccount user = userWithGoal(3_000_000, 0, 500_000);
+                when(userRepo.findById(1L)).thenReturn(Optional.of(user));
+                when(feedbackRepo.findByUserIdAndPeriodTypeOrderByPeriodStartDesc(1L, "WEEKLY"))
+                        .thenReturn(List.of(feedbackWith(buildPayloadWithEnrichedActions())));
+                // 11/1~11/4 변동 400,000 (일평균 100,000), 10월 변동 900,000 (일평균 29,032)
+                when(expenseRepo.sumVariableExpensesByPeriod(
+                                eq(1L), eq(LocalDate.of(2026, 11, 1).atStartOfDay()), any()))
+                        .thenReturn(400_000L);
+                when(expenseRepo.sumVariableExpensesByPeriod(
+                                eq(1L), eq(LocalDate.of(2026, 10, 1).atStartOfDay()), any()))
+                        .thenReturn(900_000L);
+
+                SimulateResponse result = service.simulate(1L, new SimulateRequest("2026-11", List.of(7)));
+
+                // 혼합 일평균 = (4/30)·100,000 + (26/30)·29,032 ≈ 38,495 → 월말 예측 ≈ 400,000 + 38,495 × 26 ≈ 1,400,860
+                // 저축 ≈ 3,000,000 − 1,400,860 ≈ 1,599,140 (지금까지 쓴 돈만 쓰면 2,600,000으로 과대)
+                assertThat(result.currentMonthlySavings()).isBetween(1_598_000L, 1_600_500L);
+                assertThat(result.displayType()).isEqualTo(DisplayType.GOAL);
             }
         }
 
