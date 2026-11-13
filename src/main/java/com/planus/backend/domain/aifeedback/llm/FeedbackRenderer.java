@@ -259,13 +259,13 @@ public class FeedbackRenderer {
      * </ul>
      */
     private static final Pattern BANNED_WORDING =
-            Pattern.compile("절약\\s*액션|이번\\s*주(?:는|에는|에|엔)?\\s*(?:이번\\s*달\\s*)?예산의\\s*\\d");
+            Pattern.compile("절약\\s*액션|이번\\s*주(?:는|에는|에|엔)?\\s*예산(?:의|을|를)\\s*\\d");
 
     /**
      * "이번 주 28만 9천 원을 쓰면서 예산의 109%를 사용했어요" — 이번 달 누적 비율을 '이번 달' 없이 이번 주 금액에 붙임 (#122 실험 8, 34주차 ×2).
      * 같은 문장에 '이번 주'가 있고 '예산의 N%' 앞에 '이번 달·한 달'이 없으면 거절.
      */
-    private static final Pattern RATE = Pattern.compile("예산의\\s*\\d+%");
+    private static final Pattern RATE = Pattern.compile("예산(?:의|을|를)\\s*\\d+%");
 
     /** '예산의 N%' 바로 앞에 이 말이 있으면 이번 달 누적 또는 월말 예상임이 분명하다 (실험 9 오탐: "월말엔 예산의 141%", "지금까지 예산의 57%"). */
     private static final Pattern RATE_QUALIFIER = Pattern.compile("이번\\s*달|한\\s*달|월말|지금까지|누적");

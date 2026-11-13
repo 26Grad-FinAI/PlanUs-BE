@@ -979,6 +979,11 @@ class FeedbackRendererTest {
                     .isTrue();
             assertThat(renderer.verifyWording("이번 주는 15만 원 정도 썼고, 예산의 84%까지 왔어요."))
                     .isFalse();
+            // 실험 10: '이번 달'이 붙으면 허용 (사용자 판정), '예산을 N%'도 비율로 검사
+            assertThat(renderer.verifyWording("이번 주는 이번 달 예산의 15%를 써서 평소보다 느린 속도예요."))
+                    .isTrue();
+            assertThat(renderer.verifyWording("이번 주는 289,142원을 써서 예산을 109% 사용했어요."))
+                    .isFalse();
         }
 
         @Test
