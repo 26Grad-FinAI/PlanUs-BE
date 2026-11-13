@@ -122,8 +122,7 @@ class SavingsActionCalculatorTest {
         @Test
         @DisplayName("maxReducible은 남은 기간 예상 지출 × reductionRatio")
         void max_reducible_based_on_remaining_expected() {
-            // 경과 15일, 잔여 15일, 카테고리 MTD = 150,000
-            // 일평균 = 10,000, 남은 예상 = 150,000, maxReducible = 75,000 (50%)
+            // 남은 기간 예상 지출 = 150,000 → maxReducible = 75,000 (50%)
             // 초과분 = 200,000, gap = 200,000 → min(200k, 200k, 75k) = 75,000
             Map<Integer, Long> overspend = Map.of(2, 200_000L);
             List<ActionPlan> plans = calculator.calculate(

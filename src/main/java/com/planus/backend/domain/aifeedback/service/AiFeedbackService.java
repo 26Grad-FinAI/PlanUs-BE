@@ -249,7 +249,7 @@ public class AiFeedbackService {
             burnRate = available > 0 ? (double) predictedMonthEnd / available : 0;
 
             // ── [5] 카테고리별 초과 + 원인 신호 조립 ──
-            overspend = computeOverspend(window, catBudget, monthStart, weekEnd, day, dim);
+            overspend = computeOverspend(window, catBudget, monthStart, weekEnd, day, dim, dowWeights);
             causeSignalsByCategory = new HashMap<>();
             for (int cat : overspend.keySet()) {
                 CauseSignals signals = causeAssembler.assemble(cat, window, weekStart, weekEnd, profile);
@@ -267,14 +267,15 @@ public class AiFeedbackService {
             // ── [7] 절약 액션 ──
             long savingsGap = -savingsImpact;
             if (feedbackType == FeedbackType.ALERT && savingsGap > 0) {
-                Map<Integer, Long> categoryMtdSpend = buildCategoryMtdSpend(window, monthStart, weekEnd);
+                Map<Integer, Long> categoryRemainingExpected =
+                        buildCategoryRemainingExpected(window, monthStart, weekEnd, day, dim, dowWeights);
                 List<Long> sensitiveAreas = parseSensitiveAreas(profile);
                 actions = savingsCalculator.calculate(
                         overspend,
                         savingsGap,
                         day,
                         dim - day,
-                        categoryMtdSpend,
+                        categoryRemainingExpected,
                         causeSignalsByCategory,
                         window.stream()
                                 .filter(e -> inMonth(e, monthStart, weekEnd) && e.isExpense())
@@ -978,14 +979,21 @@ public class AiFeedbackService {
         }
     }
 
-    /** 카테고리별 초과 예상(선형 근사: 변동 MTD를 월말까지 외삽 + 고정·예정 MTD). */
+    /**
+     * 카테고리별 초과 예상. 전체 예측과 같은 {@link BudgetProjector}로 계산한다 — 이번 달 변동 일평균과 전월 같은 카테고리 일평균을 경과일
+     * 비율로 섞는다.
+     *
+     * <p>이전에는 "이번 달 변동 ÷ 경과일 × 월 일수"로 단순 외삽해, 월초 큰 결제 한 건이 한 달 내내 반복되는 것처럼 커졌다 (#122 실험 0, 35주차:
+     * 4일째 기타 +1,621,585원·오락문화 +803,650원 vs 전체 예상 초과 668,463원).
+     */
     private Map<Integer, Long> computeOverspend(
             List<Expense> window,
             Map<Integer, Long> catBudget,
             LocalDate monthStart,
             LocalDate weekEnd,
             int day,
-            int dim) {
+            int dim,
+            double[] dowWeights) {
         Map<Integer, Long> overspend = new HashMap<>();
         for (var entry : catBudget.entrySet()) {
             int cat = entry.getKey();
@@ -997,7 +1005,9 @@ public class AiFeedbackService {
                             && inMonth(e, monthStart, weekEnd)
                             && e.isExpense()
                             && !e.isVariable());
-            long predictedCat = Math.round((double) varMtd / Math.max(day, 1) * dim) + fixMtd;
+            double priorCatRate = priorVariableDailyRate(window, monthStart, cat);
+            long predictedCat =
+                    BudgetProjector.predictCategory(varMtd, fixMtd, day, dim, priorCatRate, dowWeights, monthStart);
             long over = predictedCat - entry.getValue();
             if (over > 0) overspend.put(cat, over);
         }
@@ -1005,16 +1015,25 @@ public class AiFeedbackService {
     }
 
     /**
-     * 카테고리별 이번 달 누적 변동 지출. 고정 지출은 감축 불가이므로 제외.
-     * [7] SavingsActionCalculator의 남은 기간 감축가능액 계산에 사용.
+     * 카테고리별 남은 기간 예상 변동 지출 (고정 지출은 감축 불가이므로 제외). [7] SavingsActionCalculator의 감축가능액 계산에 사용.
+     *
+     * <p>카테고리 초과({@link #computeOverspend})와 같은 예측식을 쓴다. 이전에는 "이번 달 변동 ÷ 경과일 × 남은 일수"라 월초 큰 결제가
+     * 남은 기간 내내 반복되는 것처럼 커져, 부족분 전부를 한 카테고리에서 줄이라는 액션이 나왔다 (#122 실험 0, 35주차: 4일째 기타 668,463원).
      */
-    private Map<Integer, Long> buildCategoryMtdSpend(List<Expense> window, LocalDate monthStart, LocalDate weekEnd) {
-        Map<Integer, Long> map = new HashMap<>();
+    private Map<Integer, Long> buildCategoryRemainingExpected(
+            List<Expense> window, LocalDate monthStart, LocalDate weekEnd, int day, int dim, double[] dowWeights) {
+        Map<Integer, Long> varMtd = new HashMap<>();
         for (Expense e : window) {
             if (!e.isVariable() || !inMonth(e, monthStart, weekEnd)) continue;
-            map.merge(e.getCategoryId(), e.getAmount(), Long::sum);
+            varMtd.merge(e.getCategoryId(), e.getAmount(), Long::sum);
         }
-        return map;
+        Map<Integer, Long> remaining = new HashMap<>();
+        varMtd.forEach((cat, mtd) -> {
+            double prior = priorVariableDailyRate(window, monthStart, cat);
+            long predicted = BudgetProjector.predictCategory(mtd, 0, day, dim, prior, dowWeights, monthStart);
+            remaining.put(cat, Math.max(0, predicted - mtd));
+        });
+        return remaining;
     }
 
     /**
@@ -1150,9 +1169,15 @@ public class AiFeedbackService {
      * @return 전월 변동 지출 일평균(원), 거래 없으면 0.0
      */
     private double priorVariableDailyRate(List<Expense> window, LocalDate monthStart) {
+        return priorVariableDailyRate(window, monthStart, null);
+    }
+
+    /** 전월 변동 지출 일평균. categoryId가 null이면 전체, 아니면 해당 카테고리만. */
+    private double priorVariableDailyRate(List<Expense> window, LocalDate monthStart, Integer categoryId) {
         LocalDate prevMonth = monthStart.minusMonths(1);
         long sum = window.stream()
                 .filter(e -> e.isVariable()
+                        && (categoryId == null || categoryId.equals(e.getCategoryId()))
                         && !e.getDate().isBefore(prevMonth)
                         && e.getDate().isBefore(monthStart))
                 .mapToLong(Expense::getAmount)

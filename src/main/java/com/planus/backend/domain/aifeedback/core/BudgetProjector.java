@@ -27,6 +27,49 @@ public class BudgetProjector {
             double priorVariableDailyRateWon,
             double[] dayOfWeekWeights,
             LocalDate monthStart) {
+        return compute(
+                variableMtdWon,
+                fixedPlannedMtdWon,
+                remainingFixedPlannedWon,
+                dayOfMonth,
+                daysInMonth,
+                priorVariableDailyRateWon,
+                dayOfWeekWeights,
+                monthStart);
+    }
+
+    /**
+     * 카테고리 하나의 월말 예측. 전체 예측({@link #project})과 같은 식이다 (#122). 남은 고정·예정 지출은 카테고리별로 추정하지 않는다.
+     */
+    public static long predictCategory(
+            long variableMtdWon,
+            long fixedPlannedMtdWon,
+            int dayOfMonth,
+            int daysInMonth,
+            double priorVariableDailyRateWon,
+            double[] dayOfWeekWeights,
+            LocalDate monthStart) {
+        return compute(
+                        variableMtdWon,
+                        fixedPlannedMtdWon,
+                        0,
+                        dayOfMonth,
+                        daysInMonth,
+                        priorVariableDailyRateWon,
+                        dayOfWeekWeights,
+                        monthStart)
+                .predictedMonthEndWon();
+    }
+
+    private static Projection compute(
+            long variableMtdWon,
+            long fixedPlannedMtdWon,
+            long remainingFixedPlannedWon,
+            int dayOfMonth,
+            int daysInMonth,
+            double priorVariableDailyRateWon,
+            double[] dayOfWeekWeights,
+            LocalDate monthStart) {
         double w = (double) dayOfMonth / daysInMonth;
         double currentRate = (dayOfMonth > 0) ? (double) variableMtdWon / dayOfMonth : 0.0;
         double blendedRate =

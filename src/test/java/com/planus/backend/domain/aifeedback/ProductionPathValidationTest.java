@@ -169,6 +169,41 @@ class ProductionPathValidationTest {
     }
 
     @Test
+    @Tag("llm")
+    @DisplayName("주간 프롬프트 출력 (LLM 호출 없음) — 분석 로직 변경 전후 비교용")
+    void productionPath_prompts() throws Exception {
+        List<Expense> expenses = loadTransactions();
+        LocalDate dataEnd = expenses.stream()
+                .map(Expense::getDate)
+                .max(Comparator.naturalOrder())
+                .orElseThrow();
+        Map<YearMonth, Map<Integer, Long>> budgets = withDefaultBudgets(loadBudgets(), dataEnd);
+        LocalDate firstMonday = expenses.stream()
+                .map(Expense::getDate)
+                .min(Comparator.naturalOrder())
+                .orElseThrow()
+                .with(TemporalAdjusters.nextOrSame(DayOfWeek.MONDAY));
+        String[] last = {null};
+        LlmClient fake = (system, user) -> {
+            last[0] = user;
+            return "이번 주 피드백이에요.";
+        };
+        AiFeedbackService service = new Store(expenses, budgets).service(fake);
+
+        int printed = 0;
+        for (int week = FIRST_WEEK; ; week++) {
+            LocalDate weekEnd = firstMonday.plusWeeks(week).minusDays(1);
+            if (weekEnd.isAfter(dataEnd)) break;
+            last[0] = null;
+            service.generateWeekly(USER_ID, weekEnd);
+            if (last[0] == null) continue;
+            System.out.printf("%n[제%d주차] (%s)%n%s%n", week, weekEnd, last[0]);
+            printed++;
+        }
+        assertThat(printed).isGreaterThan(0);
+    }
+
+    @Test
     @DisplayName("[스모크] 가짜 LLM으로 운영 경로 조립 확인 — 35주차 프롬프트에 운영 정의 데이터가 들어감")
     void productionPath_smoke() throws Exception {
         List<Expense> expenses = loadTransactions();
