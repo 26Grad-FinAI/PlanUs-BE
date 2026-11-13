@@ -79,7 +79,9 @@ public class FeedbackRenderer {
         - 절약 제안은 '어느 항목에서 얼마를 줄이면 저축 목표에 어떤 효과'인지 구체적으로 연결한다.
         - 절약 금액·절약 효과(원)는 [절약 액션]에 있는 카테고리와 금액만 쓴다. [절약 액션 대상 아님] 카테고리나 [절약 액션]이 없는 주에는 'N회 줄이면 N만 원', '월 N만 원 아낄 수' 같은 금액을 만들지 않는다. 줄이기를 권하더라도 금액을 붙이지 않는다.
         - 절약 금액은 [절약 액션]에 적힌 그 카테고리에만 붙인다. '다른 항목에서 N원 줄이기'처럼 카테고리를 바꾸지 않는다.
-        - 절약 효과는 [절약 액션]의 '다 지키면' 줄대로 '월말 초과가 A원에서 B원으로 줄어요'처럼 줄어드는 폭으로 쓴다. 초과가 남는데 '예산 안에 들어온다', '목표를 지킬 수 있다'고 쓰지 않고, '다 메우기 어렵다', '받아들이자', '받아들이고'처럼 체념하는 말은 쓰지 않는다. 남은 기간이 짧아 줄어드는 폭이 작으면 그 폭만 짧게 말하고 다음 달에 해볼 행동으로 넘어간다. 줄어드는 폭이 작으면 '크게 낮출 수 있다'처럼 과장하지 말고 초과의 주된 원인과 다음 행동을 짚는다.
+        - 예산 사용 비율(%)은 '이번 달 예산의 30%를 썼어요'처럼 무엇의 비율인지 밝혀 쓴다. '페이싱', '보통 이맘때 20%인데 지금은 30%'처럼 대상 없이 쓰지 않는다.
+        - [절약 액션]의 '모두 지키면' 효과(월말 초과 A → B)는 적힌 카테고리를 모두 지켰을 때의 결과다. 일부 카테고리만 말하면서 그 효과를 붙이지 않는다. 효과를 말하려면 적힌 카테고리를 모두 함께 말한다.
+        - 절약 효과는 [절약 액션]의 '모두 지키면' 줄대로 '월말 초과가 A원에서 B원으로 줄어요'처럼 줄어드는 폭으로 쓴다. 초과가 남는데 '예산 안에 들어온다', '목표를 지킬 수 있다'고 쓰지 않고, '다 메우기 어렵다', '받아들이자', '받아들이고'처럼 체념하는 말은 쓰지 않는다. 남은 기간이 짧아 줄어드는 폭이 작으면 그 폭만 짧게 말하고 다음 달에 해볼 행동으로 넘어간다. 줄어드는 폭이 작으면 '크게 낮출 수 있다'처럼 과장하지 말고 초과의 주된 원인과 다음 행동을 짚는다.
         - 초과 카테고리의 '월말 예상 초과'는 지금 속도로 가면 월말에 그 카테고리 예산을 넘을 것으로 예상되는 금액이다. 이미 쓴 금액이 아니므로 '누적됐다', '이미 넘었다'처럼 쓰지 않고 '이대로면 월말에 N원 넘을 것 같아요'처럼 예상으로 쓴다. '이번 주 지출'과 합산하지 않는다.
         - 초과 카테고리의 '이번 주 지출'이 작으면 그 카테고리는 이번 주 원인이 아니라 이전 주들의 지출 때문임을 인식하고 이번 주 피드백에서 주요 원인으로 다루지 않는다.
         - 원인 신뢰도가 '높음'이 아니면 원인을 단정하지 말고 가볍게만 언급하거나 생략한다.
@@ -563,27 +565,27 @@ public class FeedbackRenderer {
 
         // ── 페이싱 [2] ──
         if (c.pacing() != null) {
-            sb.append("\n[페이싱 비교]\n");
+            sb.append("\n[예산 사용 비율 — 이번 달 예산 중 지금까지 쓴 비율]\n");
             PacingResult p = c.pacing();
             switch (p.displayType()) {
                 case SINGLE ->
                     sb.append("- 지난달 이맘때는 예산의 ")
                             .append(pct(p.historicalAvgRate()))
-                            .append("를 썼는데, 지금은 ")
+                            .append("를 썼는데, 지금은 예산의 ")
                             .append(pct(p.currentRate()))
                             .append("\n");
                 case RANGE ->
-                    sb.append("- 보통 이맘때 ")
+                    sb.append("- 보통 이맘때 예산의 ")
                             .append(pct(p.referenceMin()))
                             .append("~")
                             .append(pct(p.referenceMax()))
-                            .append(" 쓰셨는데, 지금은 ")
+                            .append(" 쓰셨는데, 지금은 예산의 ")
                             .append(pct(p.currentRate()))
                             .append("\n");
                 case MEDIAN ->
-                    sb.append("- 보통 이맘때 ")
+                    sb.append("- 보통 이맘때 예산의 ")
                             .append(pct(p.historicalAvgRate()))
-                            .append(" 쓰셨는데, 지금은 ")
+                            .append(" 쓰셨는데, 지금은 예산의 ")
                             .append(pct(p.currentRate()))
                             .append("\n");
             }
@@ -894,15 +896,21 @@ public class FeedbackRenderer {
 
         long left = Math.abs(c.savingsImpactWon()) - actionTotal(c);
         if (left > 0) {
-            sb.append("- 다 지키면 월말 초과 ")
+            sb.append("- ")
+                    .append(actionCategories(c))
+                    .append(" 모두 지키면 월말 초과 ")
                     .append(exactWon(Math.abs(c.savingsImpactWon())))
                     .append(" → ")
                     .append(exactWon(left))
                     .append("으로 줄어듦");
         } else {
-            sb.append("- 다 지키면 이번 달 예산 안에 들어올 수 있음");
+            sb.append("- ").append(actionCategories(c)).append(" 모두 지키면 이번 달 예산 안에 들어올 수 있음");
         }
         sb.append("\n");
+    }
+
+    private static String actionCategories(FeedbackContext c) {
+        return c.actions().stream().map(ActionSummary::categoryName).collect(java.util.stream.Collectors.joining("·"));
     }
 
     private static long actionTotal(FeedbackContext c) {

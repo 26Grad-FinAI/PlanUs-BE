@@ -63,7 +63,7 @@ public class AiFeedbackService {
     private static final Logger log = LoggerFactory.getLogger(AiFeedbackService.class);
 
     /** v3.0 (#111): 배수 기준 명시, 건수·묶음 표기, 절약 액션 출처 제한, 내부 용어 제거, 거래처별 건수. */
-    private static final String PROMPT_VERSION = "v3.4";
+    private static final String PROMPT_VERSION = "v3.5";
 
     private static final String LOGIC_VERSION = "v2.0";
 
@@ -985,6 +985,9 @@ public class AiFeedbackService {
      *
      * <p>이전에는 "이번 달 변동 ÷ 경과일 × 월 일수"로 단순 외삽해, 월초 큰 결제 한 건이 한 달 내내 반복되는 것처럼 커졌다 (#122 실험 0, 35주차:
      * 4일째 기타 +1,621,585원·오락문화 +803,650원 vs 전체 예상 초과 668,463원).
+     *
+     * <p>단, 혼합식만 쓰면 이번 달에 아직 적게 쓴 카테고리도 지난달 습관만으로 초과 경고가 된다 (실험 5, 18주차 6/7: 기타·식대 — 사용자 판정
+     * 틀림). 그래서 두 예측(이번 달 속도만 / 지난달과 혼합) 중 작은 쪽을 쓴다 — 둘 다 예산을 넘어야 초과로 본다.
      */
     private Map<Integer, Long> computeOverspend(
             List<Expense> window,
@@ -1006,9 +1009,10 @@ public class AiFeedbackService {
                             && e.isExpense()
                             && !e.isVariable());
             double priorCatRate = priorVariableDailyRate(window, monthStart, cat);
-            long predictedCat =
+            long blended =
                     BudgetProjector.predictCategory(varMtd, fixMtd, day, dim, priorCatRate, dowWeights, monthStart);
-            long over = predictedCat - entry.getValue();
+            long currentPaceOnly = Math.round((double) varMtd / Math.max(day, 1) * dim) + fixMtd;
+            long over = Math.min(blended, currentPaceOnly) - entry.getValue();
             if (over > 0) overspend.put(cat, over);
         }
         return overspend;
@@ -1030,8 +1034,9 @@ public class AiFeedbackService {
         Map<Integer, Long> remaining = new HashMap<>();
         varMtd.forEach((cat, mtd) -> {
             double prior = priorVariableDailyRate(window, monthStart, cat);
-            long predicted = BudgetProjector.predictCategory(mtd, 0, day, dim, prior, dowWeights, monthStart);
-            remaining.put(cat, Math.max(0, predicted - mtd));
+            long blended = BudgetProjector.predictCategory(mtd, 0, day, dim, prior, dowWeights, monthStart) - mtd;
+            long currentPaceOnly = Math.round((double) mtd / Math.max(day, 1) * (dim - day));
+            remaining.put(cat, Math.max(0, Math.min(blended, currentPaceOnly))); // 초과 판정과 같이 작은 쪽
         });
         return remaining;
     }

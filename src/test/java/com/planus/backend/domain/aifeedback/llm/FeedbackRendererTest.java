@@ -867,7 +867,7 @@ class FeedbackRendererTest {
 
             assertThat(capturedUserPrompt(ctx))
                     .contains("[절약 액션] (이번 달 남은 기간 10일)\n")
-                    .contains("- 다 지키면 월말 초과 196,455원 → 111,236원으로 줄어듦");
+                    .contains("- 기타 모두 지키면 월말 초과 196,455원 → 111,236원으로 줄어듦");
             assertThat(renderer.verifyNumbers("기타에서 85,219원 줄이면 월말 초과가 19만 6천 원에서 11만 원대로 줄어요.", ctx))
                     .isTrue();
         }
@@ -884,7 +884,7 @@ class FeedbackRendererTest {
 
             String prompt = capturedUserPrompt(ctx);
             assertThat(prompt).contains("[절약 액션]\n");
-            assertThat(prompt).contains("- 다 지키면 이번 달 예산 안에 들어올 수 있음");
+            assertThat(prompt).contains("- 기타·식료품 모두 지키면 이번 달 예산 안에 들어올 수 있음");
         }
 
         @Test
