@@ -613,6 +613,43 @@ class SavingsSimulationServiceTest {
                 assertThat(change.before()).isEqualTo(30_000);
                 assertThat(change.after()).isEqualTo(10_000);
             }
+
+            @Test
+            @DisplayName("예산 총액이 이미 가용예산을 넘은 상태여도 감축은 성공한다 (#129)")
+            void appliesEvenWhenBudgetAlreadyAboveAvailable() throws Exception {
+                // 소득 3,000,000 − 저축 목표 500,000 = 가용예산 2,500,000인데 예산 총액은 4,000,000
+                UserAccount user = userWithGoal(3_000_000, 0, 500_000);
+                when(userRepo.findById(1L)).thenReturn(Optional.of(user));
+
+                String payload = buildPayloadWithEnrichedActions();
+                when(feedbackRepo.findByUserIdAndPeriodTypeOrderByPeriodStartDesc(1L, "WEEKLY"))
+                        .thenReturn(List.of(feedbackWith(payload)));
+                when(simulationRepo.findByUserIdAndFeedbackIdAndIsAppliedTrue(1L, 1L))
+                        .thenReturn(Optional.empty());
+
+                Budget budget = Budget.builder()
+                        .id(10L)
+                        .userId(1L)
+                        .yearMonth(LocalDate.of(2026, 11, 1))
+                        .totalBudget(4_000_000)
+                        .build();
+                when(budgetRepo.findByUserIdAndYearMonth(1L, LocalDate.of(2026, 11, 1)))
+                        .thenReturn(Optional.of(budget));
+
+                BudgetCategory cat7 = BudgetCategory.builder()
+                        .budgetId(10L)
+                        .categoryId(7)
+                        .amount(200_000)
+                        .build();
+                when(budgetCatRepo.findByBudgetId(10L)).thenReturn(List.of(cat7));
+                when(simulationRepo.save(any(SavingSimulation.class))).thenAnswer(inv -> inv.getArgument(0));
+
+                ApplyResponse result = service.apply(1L, new ApplyRequest("2026-11", List.of(7)));
+
+                assertThat(result.applied()).isTrue();
+                assertThat(result.newTotalBudget()).isEqualTo(3_960_000);
+                assertThat(result.monthlySavings()).isZero();
+            }
         }
 
         @Nested
