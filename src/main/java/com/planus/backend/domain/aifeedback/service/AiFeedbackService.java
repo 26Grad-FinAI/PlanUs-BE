@@ -157,11 +157,34 @@ public class AiFeedbackService {
      * @return 저장된 피드백, 생성 불가 시 빈 Optional
      */
     public Optional<AiFeedback> generateWeekly(Long userId, LocalDate weekEnd) {
+        return generateWeekly(userId, weekEnd, false);
+    }
+
+    /**
+     * 주간 피드백을 생성한다. 같은 주 피드백이 이미 저장돼 있으면 새로 만들지 않고 그대로 반환한다 —
+     * 재실행해도 LLM 호출과 {@link FeedbackCreatedEvent}(절약 시뮬레이션 재실행)가 반복되지 않는다 (#130).
+     *
+     * @param userId  대상 사용자 ID
+     * @param weekEnd 분석 대상 주의 마지막 날(일요일)
+     * @param force   true면 기존 피드백이 있어도 다시 생성해 덮어쓴다 (개발·검증용)
+     * @return 저장된(또는 기존) 피드백, 생성 불가 시 빈 Optional
+     */
+    public Optional<AiFeedback> generateWeekly(Long userId, LocalDate weekEnd, boolean force) {
+        LocalDate weekStart = weekEnd.minusDays(6);
+
+        if (!force) {
+            Optional<AiFeedback> existing = feedbackRepo.findByUserIdAndPeriodTypeAndPeriodStartAndPeriodEnd(
+                    userId, "WEEKLY", weekStart, weekEnd);
+            if (existing.isPresent()) {
+                log.info("주간 피드백 이미 존재 — 생성 생략: userId={}, weekEnd={}", userId, weekEnd);
+                return existing;
+            }
+        }
+
         // ── [0] 사용자·예산 로드 ──
         UserAccount user = userRepo.findById(userId).orElse(null);
         if (user == null) return Optional.empty();
 
-        LocalDate weekStart = weekEnd.minusDays(6);
         LocalDate monthStart = weekEnd.withDayOfMonth(1);
         int dim = weekEnd.lengthOfMonth();
         int day = weekEnd.getDayOfMonth();
