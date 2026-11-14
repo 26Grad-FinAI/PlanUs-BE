@@ -4,6 +4,9 @@ import com.planus.backend.domain.aifeedback.action.ActionPlan;
 import java.time.LocalDate;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
+import java.util.regex.Matcher;
+import java.util.regex.Pattern;
 import java.util.stream.Collectors;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -26,21 +29,43 @@ public class ActionEnricher {
 
     private static final Logger log = LoggerFactory.getLogger(ActionEnricher.class);
 
+    /** currentBehavior 최대 글자 수. */
+    static final int MAX_CURRENT_LEN = 25;
+
+    /** targetBehavior 최대 글자 수. */
+    static final int MAX_TARGET_LEN = 25;
+
+    /** contextInsight 최대 글자 수. */
+    static final int MAX_INSIGHT_LEN = 30;
+
+    /** 한 필드에 허용하는 숫자 개수 (#131). */
+    static final int MAX_NUMBERS_PER_FIELD = 2;
+
+    private static final Pattern NUMBER = Pattern.compile("\\d[\\d,]*(?:\\.\\d+)?");
+
+    private static final Pattern DECIMAL = Pattern.compile("\\d\\.\\d");
+
+    private static final Set<String> ACTION_TYPES = Set.of("REDUCE_FREQUENCY", "REDUCE_UNIT_PRICE", "LIMIT_IMPULSE");
+
     private static final String SYSTEM_PROMPT =
             """
-            당신은 개인 재무 코치입니다. 사용자의 과소비 카테고리에 대해 행동 수준의 절약 제안을 생성합니다.
+            당신은 20대를 위한 친근한 소비 코치입니다. 사용자의 과소비 카테고리에 대해, 카드 한 장에서 바로 읽고 바로 실천할 수 있는 짧은 절약 제안을 만듭니다.
 
-            제공된 도구를 사용하여 각 카테고리의 소비 패턴(빈도, 요일, 감정)을 분석하세요.
-            도구의 기간: '이번 달'은 이번 달 1일 ~ 기준일, '평소'는 직전 3개월이다. 절약 제안은 이번 달을 위한 것이므로 현재 행동은 이번 달 통계로 쓰고, 평소는 비교할 때만 쓴다.
-            비율·합계·평균은 도구가 준 값을 그대로 쓰고 직접 계산하지 않는다. 서로 다른 기간의 숫자를 한 문장에 섞지 않는다.
-            이번 달 거래가 3건 미만이면 비율(%)을 쓰지 말고 평소 통계로 설명한다.
+            도구로 각 카테고리의 소비 패턴(빈도, 요일, 감정)을 조회해 무엇이 문제인지 파악하세요. 도구 값은 '이번 달'(이번 달 1일~기준일)과 '평소'(직전 3개월) 기준입니다. 현재 행동은 이번 달 기준으로만 쓰고, 평소는 비교할 때만 씁니다. 서로 다른 기간의 숫자를 한 문장에 섞지 않습니다.
+            분석은 직접 계산하지 말고 도구가 준 값을 쓰되, 문장에는 핵심만 풀어 씁니다.
 
-            각 카테고리에 대해 다음을 포함한 EnrichedAction을 생성하세요:
-            - actionType: "REDUCE_FREQUENCY" (빈도 줄이기), "REDUCE_UNIT_PRICE" (건당 금액 줄이기), "LIMIT_IMPULSE" (충동 소비 억제) 중 하나
-            - currentBehavior: 현재 행동 패턴을 구체적 수치로 설명 (예: "주 4.2회 외식")
-            - targetBehavior: 목표 행동을 구체적으로 설명 (예: "주 2회로 감소")
-            - contextInsight: 요일/감정 패턴에서 발견한 인사이트 (예: "금요일 저녁 외식이 전체의 60%")
+            각 카테고리에 대해 다음을 생성하세요. 필드마다 글자 수 상한이 있고, 넘으면 버려집니다.
+            - actionType: "REDUCE_FREQUENCY"(횟수 줄이기), "REDUCE_UNIT_PRICE"(건당 금액 줄이기), "LIMIT_IMPULSE"(충동 소비 억제) 중 하나
+            - currentBehavior (25자 이내): 이번 달 소비 습관을 한 줄로. 횟수는 정수, '이번 달' 기준. 예: "이번 달 쇼핑 3번, 한 번에 6만 원꼴"
+            - targetBehavior (25자 이내): 지금 바로 해볼 수 있는 행동 하나. 숫자 목표보다 행동으로. 예: "사고 싶을 땐 하루 미루고 결정하기"
+            - contextInsight (30자 이내): 패턴에서 눈에 띄는 점 한 가지. 예: "주말 충동구매가 대부분이에요"
             - behaviorFeasibility: 행동 변화의 실현 가능성 (0.0~1.0)
+
+            문장 규칙:
+            - 숫자는 한 필드에 최대 2개. 퍼센트(%)와 소수(0.75회, 3.5배)는 쓰지 않습니다. '주 N회'처럼 주 평균으로 환산하지 말고 이번 달 건수를 그대로 씁니다.
+            - 이번 달 거래가 3건 미만이면 비율·패턴을 단정하지 말고 숫자 없이 가볍게 씁니다.
+            - '~했습니다' 대신 '~요'체로 친근하게 씁니다. 분석 보고서처럼 쓰지 않습니다.
+            - 감정 태그 이름(IMPULSE 등)이나 도구 용어는 그대로 쓰지 않고 일상어로 풀어 씁니다.
 
             반드시 JSON 배열로 응답하세요. categoryId, reductionWon, dominantFactor, feasibilityScore는 입력값을 그대로 사용하세요.
             """;
@@ -84,8 +109,11 @@ public class ActionEnricher {
 
     /**
      * LLM 응답에서 행동 필드만 가져오고, 금액·카테고리 값은 원본 ActionPlan에서 사용한다.
+     *
+     * <p>행동 문구는 {@link #cleanText}로 길이·형식을 검사해, 어긴 필드만 null로 비운다 (#131). null은 {@link #toBasicEnriched}와
+     * 같은 "문구 없음" 상태라 클라이언트가 이미 처리한다.
      */
-    private List<EnrichedAction> mergeBehavior(List<ActionPlan> base, List<EnrichedAction> llm) {
+    List<EnrichedAction> mergeBehavior(List<ActionPlan> base, List<EnrichedAction> llm) {
         Map<Integer, EnrichedAction> byCat = llm == null
                 ? Map.of()
                 : llm.stream().collect(Collectors.toMap(EnrichedAction::categoryId, a -> a, (a, b) -> a));
@@ -101,13 +129,29 @@ public class ActionEnricher {
                             a.reductionWon(),
                             a.dominantFactor(),
                             a.feasibilityScore(),
-                            e.actionType(),
-                            e.currentBehavior(),
-                            e.targetBehavior(),
-                            e.contextInsight(),
+                            e.actionType() != null && ACTION_TYPES.contains(e.actionType()) ? e.actionType() : null,
+                            cleanText(e.currentBehavior(), MAX_CURRENT_LEN),
+                            cleanText(e.targetBehavior(), MAX_TARGET_LEN),
+                            cleanText(e.contextInsight(), MAX_INSIGHT_LEN),
                             bf);
                 })
                 .toList();
+    }
+
+    /**
+     * 행동 문구 검사. 비었거나, 글자 수 상한을 넘거나, 퍼센트·소수가 있거나, 숫자가 {@value #MAX_NUMBERS_PER_FIELD}개를 넘으면 null.
+     *
+     * @return 앞뒤 공백을 뺀 문구, 기준을 어기면 null
+     */
+    static String cleanText(String text, int maxLen) {
+        if (text == null) return null;
+        String t = text.strip();
+        if (t.isEmpty() || t.length() > maxLen) return null;
+        if (t.contains("%") || t.contains("퍼센트") || DECIMAL.matcher(t).find()) return null;
+        int numbers = 0;
+        Matcher m = NUMBER.matcher(t);
+        while (m.find()) numbers++;
+        return numbers > MAX_NUMBERS_PER_FIELD ? null : t;
     }
 
     /**
