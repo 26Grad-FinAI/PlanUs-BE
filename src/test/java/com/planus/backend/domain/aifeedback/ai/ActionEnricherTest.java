@@ -76,6 +76,37 @@ class ActionEnricherTest {
     }
 
     @Nested
+    @DisplayName("cleanTarget()")
+    class CleanTarget {
+
+        @Test
+        @DisplayName("실천할 행동은 그대로 쓴다")
+        void keepsActions() {
+            assertThat(ActionEnricher.cleanTarget("사고 싶을 땐 하루 미루고 결정하기")).isNotNull();
+            assertThat(ActionEnricher.cleanTarget("배달은 주말에만 시키기")).isNotNull();
+            assertThat(ActionEnricher.cleanTarget("배달은 주 2번만 시키기")).isNotNull();
+        }
+
+        @Test
+        @DisplayName("수치 목표·결과 표현은 상황 설명이므로 null")
+        void rejectsNumericGoals() {
+            assertThat(ActionEnricher.cleanTarget("건당 평균 6,500원 이하로 감소")).isNull();
+            assertThat(ActionEnricher.cleanTarget("월 1회 이하로 줄이기")).isNull();
+            assertThat(ActionEnricher.cleanTarget("충동 구매를 월 2회 미만으로")).isNull();
+            assertThat(ActionEnricher.cleanTarget("지출 20% 감소")).isNull();
+            assertThat(ActionEnricher.cleanTarget("주 3회 이내로 유지")).isNull();
+        }
+
+        @Test
+        @DisplayName("기본 형식 검사(글자 수·소수 등)도 함께 적용")
+        void appliesBaseRules() {
+            assertThat(ActionEnricher.cleanTarget(null)).isNull();
+            assertThat(ActionEnricher.cleanTarget("가".repeat(26))).isNull();
+            assertThat(ActionEnricher.cleanTarget("주 1.5회만 시키기")).isNull();
+        }
+    }
+
+    @Nested
     @DisplayName("mergeBehavior()")
     class MergeBehavior {
 
@@ -126,6 +157,27 @@ class ActionEnricherTest {
             assertThat(result.contextInsight()).isNull();
             assertThat(result.targetBehavior()).isEqualTo("사고 싶을 땐 하루 미루고 결정하기");
             assertThat(result.actionType()).isEqualTo("REDUCE_FREQUENCY");
+        }
+
+        @Test
+        @DisplayName("목표 행동이 수치 목표면 그 필드만 null (#131)")
+        void blanksNumericTarget() {
+            EnrichedAction llm = new EnrichedAction(
+                    7,
+                    40000,
+                    "FREQUENCY",
+                    0.74,
+                    "REDUCE_UNIT_PRICE",
+                    "이번 달 쇼핑 3번, 한 번에 6만 원꼴",
+                    "건당 평균 6,500원 이하로 감소",
+                    "주말 충동구매가 대부분이에요",
+                    0.8);
+
+            EnrichedAction result = enricher.mergeBehavior(base, List.of(llm)).get(0);
+
+            assertThat(result.targetBehavior()).isNull();
+            assertThat(result.currentBehavior()).isEqualTo("이번 달 쇼핑 3번, 한 번에 6만 원꼴");
+            assertThat(result.contextInsight()).isEqualTo("주말 충동구매가 대부분이에요");
         }
 
         @Test
