@@ -238,12 +238,10 @@ public class SavingsSimulationService {
             totalReduction += actualReduction;
         }
 
-        // 총 예산 갱신
+        // 총 예산 갱신. 이 API는 예산을 줄이기만 하므로 가용예산 초과 검사를 하지 않는다 —
+        // 예산 총액은 소득·고정지출과 무관하게 정해져 있어, 검사하면 이미 기준을 넘은 사용자는 아무리 줄여도 거부된다 (#129)
         long newTotal = budget.getTotalBudget() - totalReduction;
         long available = user.availableBudget();
-        if (newTotal > available + user.getMonthlySavingsGoal()) {
-            throw new GeneralException(GeneralErrorCode.BUDGET_EXCEEDED);
-        }
         budget.updateTotalBudget(newTotal);
 
         // 적용 이력 저장
@@ -267,7 +265,10 @@ public class SavingsSimulationService {
         }
         simulationRepo.save(simulation);
 
-        long monthlySavings = available - newTotal + user.getMonthlySavingsGoal();
+        // simulate와 같은 지출 기준 저축액 (수입 − 고정지출 − 예상 변동지출) + 실제 적용한 감축액.
+        // 예산 총액은 소득과 무관하게 정해져 있어 예산에서 역산하면 simulate와 어긋난다 (#129)
+        long currentSavings = available + user.getMonthlySavingsGoal() - expectedVariableSpend(userId, monthStart);
+        long monthlySavings = Math.max(0, currentSavings + totalReduction);
         return new ApplyResponse(true, changes, newTotal, monthlySavings);
     }
 
