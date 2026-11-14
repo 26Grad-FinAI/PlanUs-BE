@@ -351,7 +351,7 @@ class AiFeedbackServiceTest {
         // update()가 호출되면 feedbackText, payload, 버전이 모두 갱신됨
         assertThat(existing.getFeedbackText()).isEqualTo("좋은 소비 습관이에요.");
         assertThat(existing.getPayload()).isNotNull();
-        assertThat(existing.getPromptVersion()).isEqualTo("v3.9");
+        assertThat(existing.getPromptVersion()).isEqualTo("v4.0");
         assertThat(existing.getLogicVersion()).isEqualTo("v2.0");
         verify(feedbackRepo).save(existing);
     }
@@ -383,7 +383,7 @@ class AiFeedbackServiceTest {
 
         assertThat(result).isPresent();
         AiFeedback fb = result.get();
-        assertThat(fb.getPromptVersion()).isEqualTo("v3.9");
+        assertThat(fb.getPromptVersion()).isEqualTo("v4.0");
         assertThat(fb.getLogicVersion()).isEqualTo("v2.0");
     }
 
@@ -425,7 +425,7 @@ class AiFeedbackServiceTest {
         assertThat(result).isPresent();
         String payload = result.get().getPayload();
         var tree = new ObjectMapper().readTree(payload);
-        assertThat(tree.path("version").path("prompt").asText()).isEqualTo("v3.9");
+        assertThat(tree.path("version").path("prompt").asText()).isEqualTo("v4.0");
         assertThat(tree.path("version").path("logic").asText()).isEqualTo("v2.0");
     }
 

@@ -1218,14 +1218,54 @@ class FeedbackRendererTest {
         }
 
         @Test
-        @DisplayName("시스템 규칙: 배수의 대상 명시 + 소수 첫째 자리까지 그대로")
+        @DisplayName("시스템 프롬프트: 말투·구조 블록이 숫자 규칙보다 앞에 있고, 숫자 개수 제한과 높임 어미 금지를 담는다 (#132)")
+        void systemPrompt_toneComesFirst() {
+            FeedbackContext ctx =
+                    contextBuilder().feedbackType(FeedbackType.ALERT).build();
+
+            String system = capturedSystemPrompt(ctx);
+
+            assertThat(system.indexOf("[말투와 구조")).isGreaterThanOrEqualTo(0);
+            assertThat(system.indexOf("[말투와 구조")).isLessThan(system.indexOf("[숫자·사실 규칙"));
+            assertThat(system)
+                    .contains("문장은 최대 3개")
+                    .contains("반말('~했어', '~하자')은 쓰지 않는다")
+                    .contains("꼭 필요한 2~3개만")
+                    .contains("'쓰셔서', '~하시며' 같은 높임 어미")
+                    .contains("나쁜 예:")
+                    .contains("좋은 예:");
+        }
+
+        @Test
+        @DisplayName("월말 시스템 프롬프트: 상투적 격려 금지, 숫자 2개 이내 (#132)")
+        void monthEndSystemPrompt_tone() {
+            LlmClient client = mock(LlmClient.class);
+            when(llmProvider.getIfAvailable()).thenReturn(client);
+            when(client.complete(anyString(), anyString())).thenReturn("이번 달 결산이에요.");
+            renderer.renderMonthEnd(new FeedbackRenderer.MonthEndContext(
+                    java.time.YearMonth.of(2026, 3), 1_940_547, 1_000_000, -940_547, List.of(), List.of()));
+
+            var captor = org.mockito.ArgumentCaptor.forClass(String.class);
+            verify(client).complete(captor.capture(), anyString());
+            assertThat(captor.getValue())
+                    .contains("[말투와 구조")
+                    .contains("문장은 최대 4개")
+                    .contains("반말('~했어', '~하자')은 쓰지 않는다")
+                    .contains("숫자는 2개 이내")
+                    .contains("상투적인 격려는 쓰지 않는다")
+                    .contains("제안에는 금액(원)이나 절약 효과를 붙이지 않는다");
+        }
+
+        @Test
+        @DisplayName("시스템 규칙: 배수의 대상 명시 + 반올림은 허용하되 실제 값에서 벗어나지 않게")
         void systemPrompt_multiplierRules() {
             FeedbackContext ctx =
                     contextBuilder().feedbackType(FeedbackType.ALERT).build();
 
             assertThat(capturedSystemPrompt(ctx))
                     .contains("'한 건' 배수는 그 거래에만 붙이고")
-                    .contains("배수는 제공된 값을 소수 첫째 자리까지 그대로 쓴다")
+                    .contains("'6배쯤'처럼 반올림해서 쉽게 말해도 되지만")
+                    .doesNotContain("소수 첫째 자리까지 그대로 쓴다")
                     .contains("한 건 배수에 쓰지 않는다")
                     .contains("사용자에게 보이는 문장에 쓰지 않는다")
                     .doesNotContain("MTD")
