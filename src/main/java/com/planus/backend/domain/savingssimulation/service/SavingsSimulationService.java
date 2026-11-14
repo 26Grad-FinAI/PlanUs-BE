@@ -265,8 +265,10 @@ public class SavingsSimulationService {
         }
         simulationRepo.save(simulation);
 
-        // 예산을 배분하고 남는 금액 (소득 − 고정지출 − 예산). 예산이 기준을 넘은 경우 음수가 되지 않도록 0으로 맞춘다 (#129)
-        long monthlySavings = Math.max(0, available - newTotal + user.getMonthlySavingsGoal());
+        // simulate와 같은 지출 기준 저축액 (수입 − 고정지출 − 예상 변동지출) + 실제 적용한 감축액.
+        // 예산 총액은 소득과 무관하게 정해져 있어 예산에서 역산하면 simulate와 어긋난다 (#129)
+        long currentSavings = available + user.getMonthlySavingsGoal() - expectedVariableSpend(userId, monthStart);
+        long monthlySavings = Math.max(0, currentSavings + totalReduction);
         return new ApplyResponse(true, changes, newTotal, monthlySavings);
     }
 

@@ -617,8 +617,11 @@ class SavingsSimulationServiceTest {
             @Test
             @DisplayName("예산 총액이 이미 가용예산을 넘은 상태여도 감축은 성공한다 (#129)")
             void appliesEvenWhenBudgetAlreadyAboveAvailable() throws Exception {
-                // 소득 3,000,000 − 저축 목표 500,000 = 가용예산 2,500,000인데 예산 총액은 4,000,000
-                UserAccount user = userWithGoal(3_000_000, 0, 500_000);
+                // 소득 3,000,000 = 가용예산 3,000,000인데 예산 총액은 4,000,000
+                UserAccount user = userWithGoal(3_000_000, 0, 0);
+                // 예상 변동지출 2,000,000원 — 예산 총액(4,000,000원)과 다르다
+                when(expenseRepo.sumVariableExpensesByPeriod(eq(1L), any(), any()))
+                        .thenReturn(2_000_000L);
                 when(userRepo.findById(1L)).thenReturn(Optional.of(user));
 
                 String payload = buildPayloadWithEnrichedActions();
@@ -648,7 +651,8 @@ class SavingsSimulationServiceTest {
 
                 assertThat(result.applied()).isTrue();
                 assertThat(result.newTotalBudget()).isEqualTo(3_960_000);
-                assertThat(result.monthlySavings()).isZero();
+                // simulate와 같은 기준: (3,000,000 − 2,000,000) + 감축 40,000
+                assertThat(result.monthlySavings()).isEqualTo(1_040_000);
             }
         }
 
