@@ -11,9 +11,9 @@ package com.planus.backend.domain.aifeedback.ai;
  * @param dominantFactor      초과 원인 ("FREQUENCY" / "UNIT_PRICE" / "BOTH" / null)
  * @param feasibilityScore    실행 가능성 점수
  * @param actionType          행동 유형 ("REDUCE_FREQUENCY" / "REDUCE_UNIT_PRICE" / "LIMIT_IMPULSE")
- * @param currentBehavior     현재 행동 설명 (예: "주 4.2회 외식")
- * @param targetBehavior      목표 행동 설명 (예: "주 2회로 감소")
- * @param contextInsight      맥락 인사이트 (예: "금요일 저녁 외식이 전체의 60%")
+ * @param currentBehavior     현재 행동 한 줄 요약, 25자 이내 (예: "이번 달 쇼핑 3번, 한 번에 6만 원꼴")
+ * @param targetBehavior      바로 해볼 행동, 25자 이내 (예: "사고 싶을 땐 하루 미루고 결정하기")
+ * @param contextInsight      패턴 한 줄, 30자 이내 (예: "주말 충동구매가 대부분이에요")
  * @param behaviorFeasibility 행동 실현 가능성 (0.0~1.0)
  */
 public record EnrichedAction(
