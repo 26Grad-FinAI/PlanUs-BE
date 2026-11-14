@@ -296,7 +296,37 @@ class AiFeedbackServiceTest {
     }
 
     @Test
-    @DisplayName("기존 피드백 있으면 update() 호출")
+    @DisplayName("같은 주 피드백이 이미 있으면 기존 피드백을 반환하고 분석·LLM·저장을 하지 않는다 (#130)")
+    void generateWeekly_existingFeedback_skipsGeneration() {
+        stubCommon();
+        stubNormalActivity();
+        stubPositive();
+
+        AiFeedback existing = AiFeedback.builder()
+                .id(99L)
+                .userId(USER_ID)
+                .periodType("WEEKLY")
+                .periodStart(WEEK_START)
+                .periodEnd(WEEK_END)
+                .feedbackText("old text")
+                .confidence("LOW")
+                .feedbackType("POSITIVE")
+                .createdAt(LocalDateTime.now())
+                .build();
+        when(feedbackRepo.findByUserIdAndPeriodTypeAndPeriodStartAndPeriodEnd(USER_ID, "WEEKLY", WEEK_START, WEEK_END))
+                .thenReturn(Optional.of(existing));
+
+        Optional<AiFeedback> result = service.generateWeekly(USER_ID, WEEK_END);
+
+        assertThat(result).containsSame(existing);
+        assertThat(existing.getFeedbackText()).isEqualTo("old text");
+        verifyNoInteractions(renderer);
+        verifyNoInteractions(expenseRepo);
+        verify(feedbackRepo, never()).save(any());
+    }
+
+    @Test
+    @DisplayName("force=true면 기존 피드백이 있어도 update() 호출")
     void generateWeekly_upsert_existingFeedback() {
         stubCommon();
         stubNormalActivity();
@@ -316,7 +346,7 @@ class AiFeedbackServiceTest {
         when(feedbackRepo.findByUserIdAndPeriodTypeAndPeriodStartAndPeriodEnd(USER_ID, "WEEKLY", WEEK_START, WEEK_END))
                 .thenReturn(Optional.of(existing));
 
-        service.generateWeekly(USER_ID, WEEK_END);
+        service.generateWeekly(USER_ID, WEEK_END, true);
 
         // update()가 호출되면 feedbackText, payload, 버전이 모두 갱신됨
         assertThat(existing.getFeedbackText()).isEqualTo("좋은 소비 습관이에요.");

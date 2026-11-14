@@ -48,6 +48,7 @@ public class AiFeedbackDevController {
                     - created=true: 피드백 생성 성공. id, confidence, adviceType, feedback 포함.
                     - created=false: generateWeekly가 Optional.empty를 반환한 경우 또는 오류 발생. reason 또는 error 필드에 상세 사유 포함.
                     **주의사항:**
+                    - 같은 주 피드백이 이미 있으면 기존 피드백을 그대로 반환한다(LLM 미호출). 다시 생성하려면 force=true.
                     - dev/local 프로필에서만 활성화된다. 운영 환경에서는 접근 불가.""")
     @GetMapping("/run-weekly")
     public Map<String, Object> runWeekly(
@@ -55,10 +56,13 @@ public class AiFeedbackDevController {
             @Parameter(description = "주간 종료일", example = "2026-10-25")
                     @RequestParam
                     @DateTimeFormat(iso = DateTimeFormat.ISO.DATE)
-                    LocalDate weekEnd) {
+                    LocalDate weekEnd,
+            @Parameter(description = "true면 같은 주 피드백이 있어도 다시 생성해 덮어씀 (기본 false)", example = "false")
+                    @RequestParam(defaultValue = "false")
+                    boolean force) {
         try {
             return feedbackService
-                    .generateWeekly(userId, weekEnd)
+                    .generateWeekly(userId, weekEnd, force)
                     .<Map<String, Object>>map(fb -> {
                         Map<String, Object> response = new HashMap<>();
                         response.put("created", true);
