@@ -82,13 +82,35 @@ public class AnomalyDetector {
         return rising(weekly, wIndex, categoryBudgetWon) && rising(weekly, wIndex - 1, categoryBudgetWon);
     }
 
-    private boolean rising(double[] weekly, int w, long budgetWon) {
-        if (w < 6) return false; // 직전 4주(w-6..w-3) + 최근 2주(w-1..w) 확보 필요
+    /**
+     * 추세 구간 통계. 확정 판정({@link #trendConfirmed})과 같은 구간을 쓴다 (#138):
+     * 최근 2주(w-1, w) 주당 평균 vs 그 앞 4주(w-6..w-3, 비중첩) 주당 평균.
+     *
+     * @param recentMean 최근 2주 주당 평균(원)
+     * @param priorMean  그 앞 4주 주당 평균(원)
+     * @param ratio      recentMean ÷ priorMean. priorMean이 0이면 추세 확정 기준 배수({@code trendRatio})
+     */
+    public record TrendStats(double recentMean, double priorMean, double ratio) {}
+
+    /**
+     * 주 {@code w} 기준 추세 구간 통계. 확정 여부와 무관하게 계산한다.
+     * 신뢰도·프롬프트의 배수가 확정 판정과 다른 구간에서 나오지 않도록 호출부는 이 값을 그대로 쓴다.
+     *
+     * @return 구간이 모자라면(w &lt; 6) null
+     */
+    public TrendStats trendStats(double[] weekly, int w) {
+        if (w < 6) return null; // 직전 4주(w-6..w-3) + 최근 2주(w-1..w) 확보 필요
         double[] recent = {weekly[w - 1], weekly[w]};
         double[] prior = Arrays.copyOfRange(weekly, w - 6, w - 2); // w-6,w-5,w-4,w-3 (비중첩)
         double rm = RobustStats.mean(recent), pm = RobustStats.mean(prior);
+        return new TrendStats(rm, pm, pm > 0 ? rm / pm : p.getTrendRatio());
+    }
+
+    private boolean rising(double[] weekly, int w, long budgetWon) {
+        TrendStats t = trendStats(weekly, w);
+        if (t == null) return false;
         double frac = budgetWon * p.getTrendFrac();
-        if (pm <= 0) return rm > 0 && rm >= frac;
-        return rm >= pm * p.getTrendRatio() && (rm - pm) >= frac;
+        if (t.priorMean() <= 0) return t.recentMean() > 0 && t.recentMean() >= frac;
+        return t.recentMean() >= t.priorMean() * p.getTrendRatio() && (t.recentMean() - t.priorMean()) >= frac;
     }
 }
