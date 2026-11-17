@@ -1156,9 +1156,9 @@ public class FeedbackRenderer {
                     .append(mag)
                     .append("배 [한 건 배수]");
         } else {
-            sb.append("최근 4주 주당 평균 ")
+            sb.append("최근 2주 주당 평균 ")
                     .append(exactWon(basis.subjectWon()))
-                    .append("이 그 전 4주 주당 평균(")
+                    .append("이 그 앞 4주 주당 평균(")
                     .append(exactWon(basis.baselineWon()))
                     .append(")의 ")
                     .append(mag)
@@ -1415,9 +1415,9 @@ public class FeedbackRenderer {
     /**
      * 이상치 배수의 기준 (#111). 프롬프트에 무엇의 배수인지 밝히기 위해 전달한다.
      *
-     * @param singleTransaction true면 단발 이상치: 한 건 금액 ÷ 과거 한 건 중앙값. false면 추세: 최근 4주 주당 평균 ÷ 그 전 4주 주당 평균
-     * @param subjectWon        배수의 분자 (한 건 금액 또는 최근 4주 주당 평균)
-     * @param baselineWon       배수의 분모 (과거 한 건 중앙값 또는 그 전 4주 주당 평균)
+     * @param singleTransaction true면 단발 이상치: 한 건 금액 ÷ 과거 한 건 중앙값. false면 추세: 최근 2주 주당 평균 ÷ 그 앞 4주 주당 평균
+     * @param subjectWon        배수의 분자 (한 건 금액 또는 최근 2주 주당 평균)
+     * @param baselineWon       배수의 분모 (과거 한 건 중앙값 또는 그 앞 4주 주당 평균)
      * @param subjectLabel      단발 이상치 거래의 메모·내역 (추세면 null)
      */
     public record AnomalyBasis(boolean singleTransaction, long subjectWon, long baselineWon, String subjectLabel) {}

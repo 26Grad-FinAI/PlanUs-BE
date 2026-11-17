@@ -70,6 +70,39 @@ class AnomalyDetectorTest {
         assertThat(detector.trendConfirmed(weekly, 7, budget)).isFalse();
     }
 
+    // ---------- 추세 배수 (trendStats, #138) ----------
+
+    @Test
+    void trendStats_ratio_is_recent2_over_prior4_used_by_confirmation() {
+        // 확정 판정과 같은 구간: 최근 2주(인덱스 6,7) vs 그 앞 4주(인덱스 1~4, 5는 비움)
+        double[] weekly = {25_000, 10_000, 10_000, 10_000, 10_000, 20_000, 20_000, 20_000};
+        AnomalyDetector.TrendStats t = detector.trendStats(weekly, 7);
+        assertThat(t.recentMean()).isEqualTo(20_000);
+        assertThat(t.priorMean()).isEqualTo(10_000);
+        assertThat(t.ratio()).isEqualTo(2.0);
+    }
+
+    @Test
+    void trendStats_ratio_of_confirmed_trend_is_at_least_trend_ratio() {
+        // 최근 4주 ÷ 그 전 4주로 계산하면 1.27배(확정 기준 1.40 미만)지만, 확정 구간 기준으로는 2.0배.
+        // 확정된 추세의 배수가 확정 기준보다 낮게 보고되던 불일치 회귀 (#138)
+        long budget = 100_000;
+        double[] weekly = {25_000, 10_000, 10_000, 10_000, 10_000, 20_000, 20_000, 20_000};
+        assertThat(detector.trendConfirmed(weekly, 7, budget)).isTrue();
+        assertThat(detector.trendStats(weekly, 7).ratio()).isGreaterThanOrEqualTo(p.getTrendRatio());
+    }
+
+    @Test
+    void trendStats_returns_null_when_not_enough_weeks() {
+        assertThat(detector.trendStats(new double[] {1, 2, 3, 4, 5}, 4)).isNull();
+    }
+
+    @Test
+    void trendStats_ratio_falls_back_to_trend_ratio_when_prior_is_zero() {
+        double[] weekly = {0, 0, 0, 0, 0, 0, 50_000, 50_000};
+        assertThat(detector.trendStats(weekly, 7).ratio()).isEqualTo(p.getTrendRatio());
+    }
+
     // ---------- 고빈도 분류 ----------
 
     @Test

@@ -63,9 +63,9 @@ public class AiFeedbackService {
     private static final Logger log = LoggerFactory.getLogger(AiFeedbackService.class);
 
     /** v3.0 (#111): 배수 기준 명시, 건수·묶음 표기, 절약 액션 출처 제한, 내부 용어 제거, 거래처별 건수. */
-    private static final String PROMPT_VERSION = "v4.0";
+    private static final String PROMPT_VERSION = "v4.1";
 
-    private static final String LOGIC_VERSION = "v2.0";
+    private static final String LOGIC_VERSION = "v2.1";
 
     /** 추세 magnitude 계산에 필요한 최소 주 수 (4주 recent + 4주 prior). */
     private static final int TREND_MIN_WEEKS = 8;
@@ -874,11 +874,11 @@ public class AiFeedbackService {
 
                 double[] weekly = weeklySeries(window, cat, weekEnd, weeks);
                 if (detector.trendConfirmed(weekly, weeks - 1, catBudget.getOrDefault(cat, 0L))) {
-                    double[] recent4 = Arrays.copyOfRange(weekly, weeks - 4, weeks);
-                    double[] prior4 = Arrays.copyOfRange(weekly, weeks - 8, weeks - 4);
-                    double rm = RobustStats.mean(recent4);
-                    double pm = RobustStats.mean(prior4);
-                    double mag = pm > 0 ? rm / pm : p.getTrendRatio();
+                    // 확정 판정과 같은 구간(최근 2주 vs 그 앞 4주)의 배수를 그대로 쓴다 (#138)
+                    AnomalyDetector.TrendStats trend = detector.trendStats(weekly, weeks - 1);
+                    double rm = trend.recentMean();
+                    double pm = trend.priorMean();
+                    double mag = trend.ratio();
 
                     int histLen = (int) byCat.getOrDefault(cat, List.of()).stream()
                             .filter(x -> x.getDate().isBefore(weekStart))
@@ -1340,9 +1340,9 @@ public class AiFeedbackService {
 
     /** 이상치 탐지 결과. histLength = 8주 기준선 내 거래 건수 (Confidence 산출용). */
     /**
-     * @param trend       true면 추세 이상치(최근 4주 vs 그 전 4주 주당 평균), false면 단발 이상치(한 건 vs 과거 한 건 중앙값)
-     * @param subjectWon  배수의 분자 — 단발: 거래 금액 / 추세: 최근 4주 주당 평균
-     * @param baselineWon 배수의 분모 — 단발: 과거 한 건 중앙값 / 추세: 그 전 4주 주당 평균
+     * @param trend       true면 추세 이상치(최근 2주 vs 그 앞 4주 주당 평균), false면 단발 이상치(한 건 vs 과거 한 건 중앙값)
+     * @param subjectWon  배수의 분자 — 단발: 거래 금액 / 추세: 최근 2주 주당 평균
+     * @param baselineWon 배수의 분모 — 단발: 과거 한 건 중앙값 / 추세: 그 앞 4주 주당 평균
      */
     private record Anomaly(
             int categoryId,

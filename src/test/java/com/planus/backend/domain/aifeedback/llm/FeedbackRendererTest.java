@@ -664,7 +664,7 @@ class FeedbackRendererTest {
         }
 
         @Test
-        @DisplayName("추세 이상치: 최근 4주 주당 평균 vs 그 전 4주 주당 평균으로 표기")
+        @DisplayName("추세 이상치: 최근 2주 주당 평균 vs 그 앞 4주 주당 평균으로 표기")
         void trend_basisSpelledOut() {
             FeedbackContext ctx = contextBuilder()
                     .feedbackType(FeedbackType.ALERT)
@@ -672,7 +672,7 @@ class FeedbackRendererTest {
                     .build();
 
             assertThat(capturedUserPrompt(ctx))
-                    .contains("- 식대: 최근 4주 주당 평균 180,000원이 그 전 4주 주당 평균(100,000원)의 1.8배 [주간 금액 배수]");
+                    .contains("- 식대: 최근 2주 주당 평균 180,000원이 그 앞 4주 주당 평균(100,000원)의 1.8배 [주간 금액 배수]");
         }
 
         @Test
