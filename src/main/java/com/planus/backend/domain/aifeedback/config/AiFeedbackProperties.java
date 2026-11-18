@@ -192,7 +192,11 @@ public class AiFeedbackProperties {
         return baselineWeeks;
     }
 
+    /**
+     * 과거 비교 기간(주). 조회 범위가 이 값으로 정해지므로 피드백의 '평소'(직전 4주 평균, #144)를 계산하려면 4주 이상이어야 한다.
+     */
     public void setBaselineWeeks(int v) {
+        if (v < 4) throw new IllegalArgumentException("baseline-weeks는 4 이상이어야 합니다 (직전 4주 평균 계산): " + v);
         baselineWeeks = v;
     }
 

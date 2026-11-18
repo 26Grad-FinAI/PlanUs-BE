@@ -45,20 +45,34 @@ class CauseSignalAssemblerTest {
         }
 
         @Test
-        @DisplayName("분모는 activeWeeks가 아닌 BASELINE_WEEKS(7) — 빈도 증가 감지")
-        void denominator_is_baseline_weeks_not_active_weeks() {
-            // 과거 7주 중 3주에만 지출: 총 165,000원
-            // activeWeeks=3으로 나누면 55,000 → 이번 주 60,000은 1.09배 (신호 없음)
-            // BASELINE_WEEKS=7로 나누면 23,571 → 이번 주 60,000은 2.5배 (신호 발생)
+        @DisplayName("분모는 activeWeeks가 아닌 직전 4주 — 피드백의 '평소'(직전 4주 주당 평균)와 같은 기준 (#144)")
+        void denominator_is_recent_four_weeks_not_active_weeks() {
+            // 직전 4주 중 3주에만 지출: 총 160,000원
+            // activeWeeks=3으로 나누면 53,333 → 이번 주 75,000은 1.41배 (신호 없음)
+            // 4주로 나누면 40,000 → 이번 주 75,000은 1.88배 (신호 발생)
             List<Expense> expenses = new ArrayList<>();
             expenses.add(variable(CATEGORY, WEEK_START.minusWeeks(1), 50_000));
-            expenses.add(variable(CATEGORY, WEEK_START.minusWeeks(3), 60_000));
-            expenses.add(variable(CATEGORY, WEEK_START.minusWeeks(5), 55_000));
-            expenses.add(variable(CATEGORY, WEEK_START, 60_000));
+            expenses.add(variable(CATEGORY, WEEK_START.minusWeeks(2), 50_000));
+            expenses.add(variable(CATEGORY, WEEK_START.minusWeeks(4), 60_000));
+            expenses.add(variable(CATEGORY, WEEK_START, 75_000));
 
             CauseSignals result = assembler.assemble(CATEGORY, expenses, WEEK_START, WEEK_END, null);
             assertThat(result.selfRatio()).isNotNull();
-            assertThat(result.selfRatio()).isGreaterThan(2.0);
+            assertThat(result.selfRatio()).isCloseTo(1.875, org.assertj.core.api.Assertions.within(1e-9));
+        }
+
+        @Test
+        @DisplayName("직전 4주보다 오래된 지출은 '평소'에 넣지 않는다 (#144)")
+        void older_than_four_weeks_excluded() {
+            List<Expense> expenses = new ArrayList<>();
+            expenses.add(variable(CATEGORY, WEEK_START.minusWeeks(1), 40_000));
+            expenses.add(variable(CATEGORY, WEEK_START.minusWeeks(2), 40_000));
+            expenses.add(variable(CATEGORY, WEEK_START.minusWeeks(3), 40_000));
+            expenses.add(variable(CATEGORY, WEEK_START.minusWeeks(6), 1_000_000)); // 7주 기준이면 평균이 크게 올라 신호가 사라짐
+            expenses.add(variable(CATEGORY, WEEK_START, 90_000));
+
+            CauseSignals result = assembler.assemble(CATEGORY, expenses, WEEK_START, WEEK_END, null);
+            assertThat(result.selfRatio()).isCloseTo(3.0, org.assertj.core.api.Assertions.within(1e-9));
         }
 
         @Test

@@ -63,9 +63,14 @@ public class AiFeedbackService {
     private static final Logger log = LoggerFactory.getLogger(AiFeedbackService.class);
 
     /** v3.0 (#111): 배수 기준 명시, 건수·묶음 표기, 절약 액션 출처 제한, 내부 용어 제거, 거래처별 건수. */
-    private static final String PROMPT_VERSION = "v4.1";
+    private static final String PROMPT_VERSION = "v4.3";
 
-    private static final String LOGIC_VERSION = "v2.1";
+    private static final String LOGIC_VERSION = "v2.2";
+
+    /** 피드백의 '평소' = 이번 주를 뺀 직전 {@value}주 주당 평균 (#144). */
+    static final int RECENT_WEEKS = 4;
+
+    static final int RECENT_MIN_ACTIVE_WEEKS = 3;
 
     /** 추세 magnitude 계산에 필요한 최소 주 수 (4주 recent + 4주 prior). */
     private static final int TREND_MIN_WEEKS = 8;
@@ -235,6 +240,7 @@ public class AiFeedbackService {
         Map<Integer, Long> overspend = Map.of();
         Map<Integer, CauseSignals> causeSignalsByCategory = Map.of();
         List<ActionPlan> actions = List.of();
+        Map<Integer, Long> categoryRemainingExpected = Map.of();
         List<EnrichedAction> enrichedActions = List.of();
         long predictedMonthEnd = 0;
         long savingsImpact = 0;
@@ -290,7 +296,7 @@ public class AiFeedbackService {
             // ── [7] 절약 액션 ──
             long savingsGap = -savingsImpact;
             if (feedbackType == FeedbackType.ALERT && savingsGap > 0) {
-                Map<Integer, Long> categoryRemainingExpected =
+                categoryRemainingExpected =
                         buildCategoryRemainingExpected(window, monthStart, weekEnd, day, dim, dowWeights);
                 List<Long> sensitiveAreas = parseSensitiveAreas(profile);
                 actions = savingsCalculator.calculate(
@@ -355,9 +361,14 @@ public class AiFeedbackService {
                 })
                 .toList();
 
+        final Map<Integer, Long> finalRemainingExpected = categoryRemainingExpected;
         List<ActionSummary> actionSummaries = actions.stream()
                 .map(a -> new ActionSummary(
-                        Categories.name(a.categoryId()), a.reductionWon(), a.dominantFactor(), a.feasibilityScore()))
+                        Categories.name(a.categoryId()),
+                        a.reductionWon(),
+                        a.dominantFactor(),
+                        a.feasibilityScore(),
+                        finalRemainingExpected.getOrDefault(a.categoryId(), 0L)))
                 .toList();
 
         // 월 경계를 넘는 주(예: 6/29~7/5)는 BandWidth 톤 억제:
@@ -397,7 +408,7 @@ public class AiFeedbackService {
                             a.magnitude(),
                             weeklyAmt,
                             a.rep().getEmotion(),
-                            a.basis(),
+                            withBaselineWeeks(a.basis()),
                             count(window, catThisWeek));
                 })
                 .toList();
@@ -436,6 +447,9 @@ public class AiFeedbackService {
                         && !e.getDate().isBefore(prevWeekStart)
                         && !e.getDate().isAfter(prevWeekEnd));
 
+        // 직전 4주 주당 평균 변동지출 (#144) — 피드백의 '평소'. 이번 주는 빼고, 지출이 있는 주가 3주 미만이면 기준으로 쓰지 않는다
+        long recent4WeekAvgWon = recentWeeklyAverage(window, weekStart, RECENT_WEEKS, RECENT_MIN_ACTIVE_WEEKS);
+
         // 예산 준수율 (UserProfile에 저장된 최근 12주 비율)
         double complianceRate = profile != null ? profile.getComplianceRate() : 0.0;
 
@@ -462,9 +476,10 @@ public class AiFeedbackService {
                 feedbackType,
                 bandWidth,
                 overallConfidence,
-                top != null ? top.basis() : null,
+                top != null ? withBaselineWeeks(top.basis()) : null,
                 anomalyWeeklyCount,
-                dim - day);
+                dim - day,
+                recent4WeekAvgWon);
 
         // ── [9] 렌더링 ──
         FeedbackRenderer.Rendered out = renderer.render(ctx);
@@ -1149,6 +1164,35 @@ public class AiFeedbackService {
     }
 
     /** 카테고리 주간 합계(변동만), oldest→current, 길이 weeks. 현재 주 = 인덱스 weeks-1. */
+    /** 단발 이상치 기준(한 건 중앙값)에 실제 계산 기간을 붙인다 — 문구의 "최근 N주"가 설정값과 어긋나지 않게. */
+    private FeedbackRenderer.AnomalyBasis withBaselineWeeks(FeedbackRenderer.AnomalyBasis b) {
+        if (b == null || !b.singleTransaction()) return b;
+        return new FeedbackRenderer.AnomalyBasis(
+                true, b.subjectWon(), b.baselineWon(), b.subjectLabel(), p.getBaselineWeeks());
+    }
+
+    /**
+     * 이번 주 시작 전 {@code weeks}주의 주당 평균 변동지출. 지출이 있는 주가 {@code minActive}주 미만이면 0 (기록이 짧은 사용자에게 낮은 평균을
+     * '평소'로 보여 주지 않기 위해). 지출이 없던 주도 0원으로 평균에 넣는다.
+     */
+    static long recentWeeklyAverage(List<Expense> window, LocalDate weekStart, int weeks, int minActive) {
+        long total = 0;
+        int active = 0;
+        for (int w = 1; w <= weeks; w++) {
+            LocalDate from = weekStart.minusWeeks(w),
+                    to = weekStart.minusWeeks(w - 1).minusDays(1);
+            long sum = window.stream()
+                    .filter(e -> e.isVariable()
+                            && !e.getDate().isBefore(from)
+                            && !e.getDate().isAfter(to))
+                    .mapToLong(Expense::getAmount)
+                    .sum();
+            if (sum > 0) active++;
+            total += sum;
+        }
+        return active < minActive ? 0 : Math.round((double) total / weeks);
+    }
+
     private double[] weeklySeries(List<Expense> window, int cat, LocalDate weekEnd, int weeks) {
         double[] arr = new double[weeks];
         for (Expense e : window) {
