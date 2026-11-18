@@ -2,6 +2,7 @@ package com.planus.backend.domain.aifeedback.eval;
 
 import java.util.Arrays;
 import java.util.List;
+import java.util.Locale;
 import java.util.Random;
 
 /** 사람 판정 집계용 통계 (#140, 테스트 전용). */
@@ -109,8 +110,37 @@ public final class JudgingStats {
         return lf;
     }
 
-    /** 테스트·보고서용: 구간을 "a–b%"로. */
+    /**
+     * 짝지은 부호 뒤집기 순열 검정 (양측, 정확 계산). 버전 비교에서 같은 주차의 반복 응답을 독립 표본으로 세지 않기 위해 쓴다.
+     *
+     * <p>주차마다 d = (A 버전 틀린 수) − (B 버전 틀린 수)를 구한다. 두 버전이 같다면 주차 안에서 버전 라벨을 바꿔도 분포가 같으므로, 각 d의 부호를
+     * 독립적으로 뒤집은 합 S의 분포에서 |S| ≥ |관측 합|일 확률을 p로 한다. d는 정수이므로 합의 분포를 동적 계획법으로 정확히 구한다.
+     *
+     * @param diffs 주차별 틀린 수 차이 (두 버전에 모두 있는 주차만)
+     */
+    public static double pairedSignFlip(List<Integer> diffs) {
+        int max = diffs.stream().mapToInt(Math::abs).sum();
+        if (max == 0) return 1.0;
+        double[] dist = new double[2 * max + 1]; // 인덱스 = 합 + max
+        dist[max] = 1.0;
+        for (int d : diffs) {
+            if (d == 0) continue;
+            double[] next = new double[dist.length];
+            for (int s = 0; s < dist.length; s++) {
+                if (dist[s] == 0) continue;
+                next[s + d] += dist[s] / 2;
+                next[s - d] += dist[s] / 2;
+            }
+            dist = next;
+        }
+        int observed = Math.abs(diffs.stream().mapToInt(Integer::intValue).sum());
+        double p = 0;
+        for (int s = 0; s < dist.length; s++) if (Math.abs(s - max) >= observed) p += dist[s];
+        return Math.min(1.0, p);
+    }
+
+    /** 테스트·보고서용: 구간을 "a–b%"로. 소수점 표기가 실행 환경 로캘에 따라 바뀌지 않게 고정한다. */
     public static String pct(Interval i) {
-        return String.format("%.0f–%.0f%%", i.lo() * 100, i.hi() * 100);
+        return String.format(Locale.ROOT, "%.0f–%.0f%%", i.lo() * 100, i.hi() * 100);
     }
 }

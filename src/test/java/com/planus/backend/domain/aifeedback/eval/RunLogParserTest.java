@@ -84,4 +84,21 @@ class RunLogParserTest {
             assertThat(s.kind()).isEqualTo(Kind.WEEKLY);
         });
     }
+
+    @Test
+    void 통과_응답이_없는_주차의_프롬프트를_앞_주차에_붙이지_않는다() {
+        ParsedRun run = RunLogParser.parse(List.of(
+                "    === [운영 경로] 주간 피드백 (반복 1회) — 숫자 후검증 집계 ===",
+                "    --- 검증을 통과한 LLM 응답 1건 (누락 조사 대상) ---",
+                "    [제17주차 r1 / 시도 1] 응답",
+                "    --- 컨텍스트별 프롬프트 2건 (응답 숫자 대조용) ---",
+                "    [제17주차]",
+                "    17주차 재료",
+                "    [제18주차]",
+                "    18주차 재료 (모든 시도가 거절돼 폴백)",
+                "BUILD SUCCESSFUL"));
+
+        assertThat(run.prompts().get("제17주차")).isEqualTo("17주차 재료");
+        assertThat(run.prompts().get("제18주차")).contains("18주차 재료");
+    }
 }

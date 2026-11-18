@@ -1,5 +1,6 @@
 package com.planus.backend.domain.aifeedback.eval;
 
+import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.planus.backend.domain.aifeedback.eval.JudgingStats.Interval;
 import com.planus.backend.domain.aifeedback.eval.RunLogParser.Kind;
@@ -9,13 +10,17 @@ import java.io.IOException;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
+import java.security.MessageDigest;
+import java.security.NoSuchAlgorithmException;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Collections;
 import java.util.EnumSet;
+import java.util.HexFormat;
 import java.util.LinkedHashMap;
 import java.util.LinkedHashSet;
 import java.util.List;
+import java.util.Locale;
 import java.util.Map;
 import java.util.Random;
 import java.util.Set;
@@ -45,10 +50,10 @@ public final class BlindJudging {
     private static final ObjectMapper JSON = new ObjectMapper();
 
     /** 키 파일 한 줄. */
-    public record KeyRow(String id, String version, String kind, String context, int rep) {}
+    public record KeyRow(String id, String version, String kind, String context, int rep, String responseSha) {}
 
     /** 판정 시트 한 줄. error가 null이면 아직 판정하지 않은 항목. */
-    public record Judgement(String id, Boolean error, String types, String memo) {}
+    public record Judgement(String id, Boolean error, String types, String memo, String responseSha) {}
 
     private BlindJudging() {}
 
@@ -150,18 +155,22 @@ public final class BlindJudging {
             }
         }
         Collections.shuffle(items, new Random(seed));
+        if (subsetSize > items.size()) throw new IllegalArgumentException("부분 시트 항목 수가 전체보다 큽니다: " + subsetSize);
 
-        Path itemDir = outDir.resolve("items");
-        Path keyDir = outDir.resolve("_key");
+        // 입력 검증을 모두 마친 뒤, 임시 폴더에서 완성하고 마지막에 최종 경로로 옮긴다.
+        // 중간에 실패해도 최종 경로가 생기지 않아 같은 경로로 다시 실행할 수 있다.
+        Path parent = outDir.toAbsolutePath().getParent();
+        Files.createDirectories(parent);
+        Path tmp = Files.createTempDirectory(parent, outDir.getFileName() + ".tmp-");
+        Path itemDir = tmp.resolve("items");
+        Path keyDir = tmp.resolve("_key");
         Files.createDirectories(itemDir);
         Files.createDirectories(keyDir);
 
         List<List<String>> sheet = new ArrayList<>();
         sheet.add(List.of(SHEET_HEADER_ID, "구분", "응답", COL_LABEL, COL_TYPE, "메모"));
         List<List<String>> key = new ArrayList<>();
-        key.add(List.of("id", "version", "kind", "context", "rep"));
-
-        if (subsetSize > items.size()) throw new IllegalArgumentException("부분 시트 항목 수가 전체보다 큽니다: " + subsetSize);
+        key.add(List.of("id", "version", "kind", "context", "rep", "response_sha"));
         Set<Integer> subset =
                 stratifiedSample(items.stream().map(Item::version).toList(), subsetSize, new Random(seed + 1));
         List<List<String>> subsetSheet = new ArrayList<>();
@@ -186,20 +195,25 @@ public final class BlindJudging {
                     it.version(),
                     kind,
                     it.sample().context(),
-                    String.valueOf(it.sample().rep())));
+                    String.valueOf(it.sample().rep()),
+                    sha(it.sample().text())));
+            // 도구가 읽는 원본 (버전 정보 없음). Markdown은 사람이 읽는 용도로만 쓴다.
+            Files.writeString(itemDir.resolve(id + ".json"), JSON.writeValueAsString(pageItem), StandardCharsets.UTF_8);
             Files.writeString(
                     itemDir.resolve(id + ".md"),
                     "# " + id + " (" + kind + ")\n\n## 응답\n\n" + it.sample().text()
                             + "\n\n## 분석 재료 (이 응답을 만든 프롬프트)\n\n```\n" + it.prompt() + "\n```\n",
                     StandardCharsets.UTF_8);
         }
-        Csv.write(outDir.resolve(FULL_SHEET), sheet);
-        writePage(outDir.resolve(pageName(FULL_SHEET)), "판정자1", fullPage);
+        Csv.write(tmp.resolve(FULL_SHEET), sheet);
+        writePage(tmp.resolve(pageName(FULL_SHEET)), "판정자1", fullPage);
         if (subsetSize > 0) {
-            Csv.write(outDir.resolve(SUBSET_SHEET), subsetSheet);
-            writePage(outDir.resolve(pageName(SUBSET_SHEET)), "판정자2", subsetPage);
+            Csv.write(tmp.resolve(SUBSET_SHEET), subsetSheet);
+            writePage(tmp.resolve(pageName(SUBSET_SHEET)), "판정자2", subsetPage);
         }
         Csv.write(keyDir.resolve("key.csv"), key);
+        // 같은 상위 폴더 안의 이름 변경. 그사이 outDir이 생겼으면 실패해 기존 폴더를 덮지 않는다
+        Files.move(tmp, outDir);
         return items.size();
     }
 
@@ -209,11 +223,24 @@ public final class BlindJudging {
     static List<Map<String, String>> readItems(Path exportDir, List<String> ids) throws IOException {
         List<Map<String, String>> items = new ArrayList<>();
         for (String id : ids) {
+            Path json = exportDir.resolve("items").resolve(id + ".json");
+            if (Files.exists(json)) {
+                JsonNode n = JSON.readTree(Files.readString(json, StandardCharsets.UTF_8));
+                items.add(Map.of(
+                        "id", id,
+                        "kind", n.get("kind").asText(),
+                        "response", n.get("response").asText(),
+                        "prompt", n.get("prompt").asText()));
+                continue;
+            }
+            // JSON이 없는 이전 내보내기: 마지막 '분석 재료' 머리말을 기준으로 나눈다 (응답 안의 코드 펜스에 영향받지 않게)
             String md = Files.readString(exportDir.resolve("items").resolve(id + ".md"), StandardCharsets.UTF_8);
             String kind = md.substring(md.indexOf('(') + 1, md.indexOf(')'));
             String head = "## 응답\n\n";
-            String response = md.substring(md.indexOf(head) + head.length(), md.indexOf("\n\n## 분석 재료"));
-            String prompt = md.substring(md.indexOf("```\n") + 4, md.lastIndexOf("\n```"));
+            String promptHead = "\n\n## 분석 재료 (이 응답을 만든 프롬프트)\n\n```\n";
+            int promptAt = md.lastIndexOf(promptHead);
+            String response = md.substring(md.indexOf(head) + head.length(), promptAt);
+            String prompt = md.substring(promptAt + promptHead.length(), md.lastIndexOf("\n```"));
             items.add(Map.of("id", id, "kind", kind, "response", response, "prompt", prompt));
         }
         return items;
@@ -236,7 +263,24 @@ public final class BlindJudging {
         // <script> 안에 넣는 JSON — 응답에 "</script>"가 있어도 태그가 닫히지 않도록 "</"를 이스케이프
         String json =
                 JSON.writeValueAsString(Map.of("title", title, "items", items)).replace("</", "<\\/");
-        Files.writeString(path, template.replace("__TITLE__", title).replace("__DATA__", json), StandardCharsets.UTF_8);
+        Files.writeString(
+                path, template.replace("__TITLE__", htmlText(title)).replace("__DATA__", json), StandardCharsets.UTF_8);
+    }
+
+    /** HTML 텍스트 문맥에 넣을 값 인코딩 (제목이 마크업으로 해석되지 않게). */
+    static String htmlText(String v) {
+        return v.replace("&", "&amp;").replace("<", "&lt;").replace(">", "&gt;").replace("\"", "&quot;");
+    }
+
+    /** 응답 원문 지문. 다른 내보내기의 시트를 같은 id로 섞어 집계하지 않도록 키와 시트를 대조한다. */
+    static String sha(String text) {
+        try {
+            byte[] h = MessageDigest.getInstance("SHA-256")
+                    .digest(text.replace("\r", "").getBytes(StandardCharsets.UTF_8));
+            return HexFormat.of().formatHex(h).substring(0, 16);
+        } catch (NoSuchAlgorithmException e) {
+            throw new IllegalStateException(e);
+        }
     }
 
     /**
@@ -307,7 +351,7 @@ public final class BlindJudging {
         if (missing > 0) r.append(String.format("판정하지 않은 항목 %d개는 집계에서 뺐습니다.%n%n", missing));
 
         r.append("| 버전 | 구분 | 틀림 | 비율 | 95% 구간 (Wilson) | 95% 구간 (주차 단위 부트스트랩) |\n|---|---|---|---|---|---|\n");
-        Map<String, int[]> totals = new LinkedHashMap<>();
+        Map<String, Map<String, int[]>> contextsByVersion = new LinkedHashMap<>();
         for (String v : versions) {
             for (String kind : List.of("주간", "월말", "전체")) {
                 Map<String, int[]> byContext = new TreeMap<>();
@@ -327,20 +371,34 @@ public final class BlindJudging {
                 Interval b =
                         JudgingStats.clusterBootstrap(new ArrayList<>(byContext.values()), BOOTSTRAP_ITERATIONS, 140);
                 r.append(String.format(
+                        Locale.ROOT,
                         "| %s | %s | %d/%d | %.1f%% | %s | %s |%n",
-                        v, kind, err, n, 100.0 * err / n, JudgingStats.pct(w), JudgingStats.pct(b)));
-                if (kind.equals("전체")) totals.put(v, new int[] {err, n});
+                        v,
+                        kind,
+                        err,
+                        n,
+                        100.0 * err / n,
+                        JudgingStats.pct(w),
+                        JudgingStats.pct(b)));
+                if (kind.equals("전체")) contextsByVersion.put(v, byContext);
             }
         }
 
-        if (totals.size() >= 2) {
-            r.append("\n버전 간 차이 (전체, Fisher 정확 검정 양측 — 같은 주차 반복 응답이라 p값은 낙관적)\n\n");
-            List<String> vs = new ArrayList<>(totals.keySet());
+        if (contextsByVersion.size() >= 2) {
+            // 같은 주차를 여러 번 렌더한 응답은 독립이 아니므로, 주차끼리 짝을 지어 버전 라벨을 바꾸는 순열 검정을 쓴다
+            r.append("\n버전 간 차이 (전체, 주차 단위 짝지은 부호 뒤집기 순열 검정 양측 — 두 버전에 모두 있는 주차만)\n\n");
+            List<String> vs = new ArrayList<>(contextsByVersion.keySet());
             for (int a = 0; a < vs.size(); a++) {
                 for (int b = a + 1; b < vs.size(); b++) {
-                    int[] x = totals.get(vs.get(a)), y = totals.get(vs.get(b));
-                    double p = JudgingStats.fisherTwoSided(x[0], x[1] - x[0], y[0], y[1] - y[0]);
-                    r.append(String.format("- %s vs %s: p = %.3g%n", vs.get(a), vs.get(b), p));
+                    Map<String, int[]> x = contextsByVersion.get(vs.get(a)), y = contextsByVersion.get(vs.get(b));
+                    List<Integer> diffs = new ArrayList<>();
+                    for (var e : x.entrySet()) {
+                        int[] other = y.get(e.getKey());
+                        if (other != null && other[1] == e.getValue()[1]) diffs.add(e.getValue()[0] - other[0]);
+                    }
+                    double p = JudgingStats.pairedSignFlip(diffs);
+                    r.append(String.format(
+                            Locale.ROOT, "- %s vs %s: p = %.3g (주차 %d개)%n", vs.get(a), vs.get(b), p, diffs.size()));
                 }
             }
         }
@@ -379,11 +437,12 @@ public final class BlindJudging {
         }
         double kappa = JudgingStats.cohenKappa(x, y);
         r.append(String.format(
+                Locale.ROOT,
                 "함께 판정 %d개, 일치 %d개 (%.1f%%), Cohen's κ = %s%n%n",
                 x.size(),
                 x.size() - disagree.size(),
                 100.0 * (x.size() - disagree.size()) / x.size(),
-                Double.isNaN(kappa) ? "계산 불가 (판정이 한쪽으로만 몰림)" : String.format("%.2f", kappa)));
+                Double.isNaN(kappa) ? "계산 불가 (판정이 한쪽으로만 몰림)" : String.format(Locale.ROOT, "%.2f", kappa)));
         Collections.sort(disagree);
         r.append("불일치 항목 (합의 대상): ")
                 .append(disagree.isEmpty() ? "없음" : String.join(", ", disagree))
@@ -395,6 +454,14 @@ public final class BlindJudging {
      * 불일치 항목에는 비교 시트(판정기)의 유형·메모를 붙여 사람이 원인을 볼 수 있게 한다.
      */
     static String agreement(Map<String, Judgement> base, Map<String, Judgement> other) {
+        List<String> mismatched = base.keySet().stream()
+                .filter(id -> other.containsKey(id))
+                .filter(id -> !base.get(id).responseSha().isEmpty()
+                        && !other.get(id).responseSha().isEmpty()
+                        && !base.get(id).responseSha().equals(other.get(id).responseSha()))
+                .sorted()
+                .toList();
+        if (!mismatched.isEmpty()) throw new IllegalStateException("두 시트의 같은 id에 다른 응답이 있습니다 (다른 내보내기): " + mismatched);
         StringBuilder r = new StringBuilder("# 판정 일치도 (버전 정보 없음)\n\n");
         appendAgreement(r, base, other);
         int both = 0, xx = 0, xo = 0, ox = 0, oo = 0;
@@ -432,7 +499,13 @@ public final class BlindJudging {
             if (row.size() < 5 || row.get(0).isBlank()) continue;
             key.put(
                     row.get(0),
-                    new KeyRow(row.get(0), row.get(1), row.get(2), row.get(3), Integer.parseInt(row.get(4))));
+                    new KeyRow(
+                            row.get(0),
+                            row.get(1),
+                            row.get(2),
+                            row.get(3),
+                            Integer.parseInt(row.get(4)),
+                            row.size() > 5 ? row.get(5) : "")); // 이전 내보내기에는 지문 열이 없음
         }
         return key;
     }
@@ -444,11 +517,12 @@ public final class BlindJudging {
         int idCol = header.indexOf(SHEET_HEADER_ID),
                 labelCol = header.indexOf(COL_LABEL),
                 typeCol = header.indexOf(COL_TYPE),
-                memoCol = header.indexOf("메모");
+                memoCol = header.indexOf("메모"),
+                responseCol = header.indexOf("응답");
         if (idCol < 0 || labelCol < 0) throw new IllegalStateException("시트 머리글에 id·판정 열이 없습니다: " + sheet);
 
         Map<String, Judgement> out = new LinkedHashMap<>();
-        Set<String> unknown = new LinkedHashSet<>();
+        Set<String> unknown = new LinkedHashSet<>(), mismatched = new LinkedHashSet<>();
         for (List<String> row : rows.subList(1, rows.size())) {
             String id = cell(row, idCol);
             if (id.isBlank()) continue;
@@ -456,15 +530,25 @@ public final class BlindJudging {
                 unknown.add(id);
                 continue;
             }
+            String response = responseCol >= 0 ? cell(row, responseCol) : "";
+            String responseSha = response.isBlank() ? "" : sha(response);
+            // 응답이 담긴 시트는 키의 지문과 대조한다 (같은 id라도 다른 내보내기의 응답이면 거부)
+            if (key != null && !responseSha.isEmpty()) {
+                String expected = key.get(id).responseSha();
+                if (!expected.isEmpty() && !expected.equals(responseSha)) mismatched.add(id);
+            }
             out.put(
                     id,
                     new Judgement(
                             id,
                             parseLabel(cell(row, labelCol), id),
                             typeCol >= 0 ? cell(row, typeCol) : "",
-                            memoCol >= 0 ? cell(row, memoCol) : ""));
+                            memoCol >= 0 ? cell(row, memoCol) : "",
+                            responseSha));
         }
         if (!unknown.isEmpty()) throw new IllegalStateException("키에 없는 id: " + unknown + " (" + sheet + ")");
+        if (!mismatched.isEmpty())
+            throw new IllegalStateException("다른 내보내기의 응답입니다 (키의 응답 지문과 다름): " + mismatched + " (" + sheet + ")");
         return out;
     }
 

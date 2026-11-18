@@ -133,6 +133,10 @@
     ['원인', '원인을 재료와 다르게 연결', '재료는 "횟수 증가"인데 "건당 금액이 커져서"'],
     ['기타', '위에 없는 오류 (메모에 설명)', ''],
   ];
+  if (!DATA.items.length) {
+    document.querySelector('main').innerHTML = '<p style="padding:24px">판정할 항목이 없어요.</p>';
+    return;
+  }
   const KEY = 'planus-judging:' + DATA.title + ':' + DATA.items.length + ':' + DATA.items[0].id;
   const state = JSON.parse(localStorage.getItem(KEY) || '{}'); // id -> {v:'O'|'X'|'H', t:[], m:''}
   let idx = 0, filter = 'all';
@@ -265,7 +269,8 @@
     renderList();
   });
   document.addEventListener('keydown', e => {
-    if (e.target.tagName === 'TEXTAREA') return;
+    if (e.target.tagName === 'TEXTAREA' || e.target.tagName === 'INPUT') return;
+    if (e.key === 'Enter' && e.target.tagName === 'BUTTON') return; // 포커스된 버튼의 Enter는 그 버튼 동작 그대로
     if (e.key === '1') setVerdict('O');
     else if (e.key === '2') setVerdict('X');
     else if (e.key === '3') setVerdict('H');
@@ -313,21 +318,29 @@
     const rows = parseCsv(await f.text());
     const h = rows[0], iId = h.indexOf('id'), iV = h.indexOf(HEADER[3]), iT = h.indexOf('오류 유형'), iM = h.indexOf('메모');
     if (iId < 0 || iV < 0) return alert('판정 시트 형식이 아니에요.');
-    const ids = new Set(DATA.items.map(it => it.id));
-    let n = 0;
+    const iR = h.indexOf('응답');
+    const byId = new Map(DATA.items.map(it => [it.id, it]));
+    const norm = x => (x || '').replace(/\r/g, '');
+    let n = 0, skipped = 0, bad = 0;
     rows.slice(1).forEach(r => {
-      if (!ids.has(r[iId])) return;
+      const it = byId.get(r[iId]);
+      if (!it) return;
+      // 같은 id라도 다른 내보내기의 응답이면 불러오지 않는다
+      if (iR >= 0 && r[iR] && norm(r[iR]) !== norm(it.response)) { skipped++; return; }
       let m = iM >= 0 ? r[iM] || '' : '', v = (r[iV] || '').trim().toUpperCase();
-      if (m.startsWith('[애매]')) { v = 'H'; m = m.slice(4).trim(); }
-      const t = iT >= 0 && r[iT] ? r[iT].split(/[,;/]/).map(x => x.trim()).filter(Boolean) : [];
-      if (v || m || t.length) { state[r[iId]] = {v: v || undefined, t, m}; n++; }
+      if (v === '맞음') v = 'O';
+      if (v === '틀림') v = 'X';
+      if (v && v !== 'O' && v !== 'X') { bad++; return; }
+      // [애매]는 O/X가 비어 있을 때만 보류로 본다 (O/X가 있으면 판정 값을 따른다)
+      if (m.startsWith('[애매]')) { m = m.slice(4).trim(); if (!v) v = 'H'; }
+      const t = v === 'X' && iT >= 0 && r[iT] ? r[iT].split(/[,;/]/).map(x => x.trim()).filter(Boolean) : [];
+      if (v || m || t.length) { state[it.id] = {v: v || undefined, t, m}; n++; }
     });
     save();
     renderItem();
-    alert(`${n}개 항목을 불러왔어요.`);
+    alert(`${n}개 항목을 불러왔어요.` + (skipped ? ` 다른 판정 자료의 응답 ${skipped}개는 건너뛰었어요.` : '') + (bad ? ` 판정 값이 O/X가 아닌 ${bad}개는 건너뛰었어요.` : ''));
   };
 
-  window.addEventListener('beforeunload', save);
   renderItem();
 })();
 </script>

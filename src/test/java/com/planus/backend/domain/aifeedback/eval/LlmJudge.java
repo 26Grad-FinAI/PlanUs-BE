@@ -44,6 +44,9 @@ import java.util.concurrent.atomic.AtomicLong;
 public final class LlmJudge {
 
     static final String DEFAULT_MODEL = "claude-opus-5-5";
+    /** 판정기 지시문(systemPrompt의 고정 문구) 버전. 문구를 바꾸면 올려서 이전 판정을 재사용하지 않게 한다. */
+    static final String JUDGE_PROMPT_VERSION = "1";
+
     static final List<String> ERROR_TYPES =
             List.of("숫자출처", "대상기준", "기간", "절약효과", "사실반대", "건수", "내부용어", "톤", "원인", "기타");
     /** 사실 오류 — 사용자가 숫자·사실을 잘못 알게 되는 유형 (#140 판정자 기준). 나머지 유형은 조언 품질. */
@@ -187,15 +190,78 @@ public final class LlmJudge {
                 memo.toString().strip());
     }
 
-    /** 지표 시트 한 줄: 해당 지표에 걸리면 X. 응답 본문은 넣지 않는다 (집계용). */
+    /** 판정은 X인데 오류 유형이 없는 경우의 표시. 놓치지 않도록 사실 오류로 센다. */
+    static final String UNTYPED = "미분류";
+
+    /**
+     * 지표 시트 한 줄: 해당 지표에 걸리면 X, 해당하지 않는 응답은 판정을 비워 집계에서 뺀다. 유형 열에는 그 지표의 유형만 쓴다. 응답 본문은 넣지 않는다.
+     */
     static List<String> metricRow(Verdict v, Metric m, String kind) {
-        boolean x =
+        boolean untyped = Boolean.TRUE.equals(v.error()) && v.types().isEmpty();
+        List<String> types =
                 switch (m) {
-                    case FACT -> v.types().stream().anyMatch(FACT_ERROR_TYPES::contains);
-                    case ADVICE -> v.types().stream().anyMatch(t -> !FACT_ERROR_TYPES.contains(t));
-                    case MISSING_WEEK_TOTAL -> v.missingWeekTotal();
+                    case FACT ->
+                        untyped
+                                ? List.of(UNTYPED)
+                                : v.types().stream()
+                                        .filter(FACT_ERROR_TYPES::contains)
+                                        .toList();
+                    case ADVICE ->
+                        v.types().stream()
+                                .filter(t -> !FACT_ERROR_TYPES.contains(t))
+                                .toList();
+                    case MISSING_WEEK_TOTAL -> List.of();
                 };
-        return List.of(v.id(), kind, "", x ? "X" : "O", String.join(", ", v.types()), "");
+        String label =
+                switch (m) {
+                    case FACT, ADVICE -> types.isEmpty() ? "O" : "X";
+                    // 이번 주 총지출은 주간 피드백에만 해당 — 월말 응답은 집계에서 뺀다
+                    case MISSING_WEEK_TOTAL -> kind.equals("주간") ? (v.missingWeekTotal() ? "X" : "O") : "";
+                };
+        return List.of(v.id(), kind, "", label, String.join(", ", types), "");
+    }
+
+    /** 판정 설정 지문: 이 값이 같은 기록만 재사용한다 (기준서·지시문·모델·effort 중 하나라도 바뀌면 다시 판정). */
+    static Map<String, String> config(String model, String effort, String rubric) {
+        return Map.of(
+                "model", model,
+                "effort", effort,
+                "prompt_version", JUDGE_PROMPT_VERSION,
+                "rubric_sha", BlindJudging.sha(rubric));
+    }
+
+    /** JSONL에서 같은 설정으로 끝난 판정만 읽는다. 잘린 줄(중단 중 쓰다 만 기록)은 건너뛴다. */
+    static Map<String, Verdict> loadDone(Path raw, Map<String, String> config) throws IOException {
+        Map<String, Verdict> done = new LinkedHashMap<>();
+        if (!Files.exists(raw)) return done;
+        int broken = 0, otherConfig = 0;
+        for (String line : Files.readAllLines(raw, StandardCharsets.UTF_8)) {
+            if (line.isBlank()) continue;
+            JsonNode n;
+            try {
+                n = JSON.readTree(line);
+            } catch (IOException e) {
+                broken++;
+                continue;
+            }
+            if (!n.has("json")) continue;
+            boolean same = config.entrySet().stream()
+                    .allMatch(c -> c.getValue().equals(n.path(c.getKey()).asText(null)));
+            if (!same) {
+                otherConfig++;
+                continue;
+            }
+            try {
+                done.put(
+                        n.get("id").asText(),
+                        parse(n.get("id").asText(), n.get("json").asText()));
+            } catch (IOException e) {
+                broken++;
+            }
+        }
+        if (broken > 0) System.out.printf("기록 중 읽을 수 없는 줄 %d개를 건너뜁니다 (다시 판정).%n", broken);
+        if (otherConfig > 0) System.out.printf("판정 설정이 다른 이전 기록 %d개는 재사용하지 않습니다.%n", otherConfig);
+        return done;
     }
 
     // ── 실행 ──
@@ -211,16 +277,8 @@ public final class LlmJudge {
         if (!onlyIds.isEmpty()) ids.retainAll(onlyIds);
 
         Path raw = Path.of(outCsv.toString().replaceAll("\\.csv$", "") + ".jsonl");
-        Map<String, Verdict> done = new LinkedHashMap<>();
-        if (Files.exists(raw)) {
-            for (String line : Files.readAllLines(raw, StandardCharsets.UTF_8)) {
-                JsonNode n = JSON.readTree(line);
-                if (n.has("json"))
-                    done.put(
-                            n.get("id").asText(),
-                            parse(n.get("id").asText(), n.get("json").asText()));
-            }
-        }
+        Map<String, String> config = config(model, effort, rubric);
+        Map<String, Verdict> done = loadDone(raw, config);
         List<String> todo = ids.stream().filter(id -> !done.containsKey(id)).toList();
         System.out.printf(
                 "판정 대상 %d개 (이미 판정 %d개, 새로 호출 %d개), 모델 %s, effort %s%n",
@@ -233,6 +291,7 @@ public final class LlmJudge {
                 out = new AtomicLong(),
                 cacheRead = new AtomicLong(),
                 cacheWrite = new AtomicLong();
+        int failed;
         AnthropicClient client = AnthropicOkHttpClient.fromEnv();
         ExecutorService pool = Executors.newFixedThreadPool(CONCURRENCY);
         try {
@@ -248,7 +307,9 @@ public final class LlmJudge {
                     cacheWrite.addAndGet(m.usage().cacheCreationInputTokens().orElse(0L));
                     Map<String, Object> rec = new LinkedHashMap<>();
                     rec.put("id", id);
-                    rec.put("model", model);
+                    rec.putAll(config);
+                    // 서버 측 폴백이 다른 모델로 응답했을 수 있으므로 실제 응답 모델을 따로 남긴다
+                    rec.put("model_used", m.model().asString());
                     rec.put(
                             "stop_reason",
                             m.stopReason().map(StopReason::asString).orElse(""));
@@ -285,7 +346,7 @@ public final class LlmJudge {
                     return null;
                 }));
             }
-            int failed = 0;
+            failed = 0;
             for (Future<?> f : futures) {
                 try {
                     f.get();
@@ -329,6 +390,14 @@ public final class LlmJudge {
         System.out.printf(
                 "이번 실행 토큰: 입력 %d (캐시 읽기 %d, 캐시 쓰기 %d), 출력 %d%n",
                 in.get(), cacheRead.get(), cacheWrite.get(), out.get());
+        long untyped = done.values().stream()
+                .filter(v -> Boolean.TRUE.equals(v.error()) && v.types().isEmpty())
+                .count();
+        if (untyped > 0) System.out.printf("오류 유형 없는 X 판정 %d개 — 사실 오류(%s)로 셉니다.%n", untyped, UNTYPED);
+        // 판정이 빠진 항목이 있으면 결과를 쓴 뒤 실패로 끝내, 일부만 판정된 결과를 완료로 착각하지 않게 한다
+        long missingVerdicts = ids.stream().filter(id -> !done.containsKey(id)).count();
+        if (failed > 0 || missingVerdicts > 0)
+            throw new IllegalStateException("판정하지 못한 항목 " + missingVerdicts + "개 (호출 실패 " + failed + "건) — 다시 실행하세요.");
     }
 
     static Set<String> ids(String v) {

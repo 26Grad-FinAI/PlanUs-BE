@@ -5,11 +5,9 @@ import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.ArrayList;
-import java.util.HashSet;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
-import java.util.Set;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 
@@ -20,8 +18,8 @@ import java.util.regex.Pattern;
  * <p>Gradle은 테스트 표준 출력을 4칸 들여 찍으므로, 들여쓴 줄만 테스트 출력으로 본다. 들여쓰지 않은 줄(Gradle 자체 출력)이 나오면 프롬프트 구간이
  * 끝난 것으로 본다.
  *
- * <p>프롬프트 안에도 "[예산·저축 — 1순위]"처럼 대괄호 줄이 있으므로, 프롬프트 머리 줄은 통과 응답에서 본 컨텍스트 이름("[제17주차]", "[2026-02 월말]")일
- * 때만 인정한다. 모든 시도가 거절돼 템플릿으로 나간 컨텍스트는 판정할 LLM 응답이 없으므로 빠져도 된다.
+ * <p>프롬프트 안에도 "[예산·저축 — 1순위]"처럼 대괄호 줄이 있으므로, 프롬프트 머리 줄은 컨텍스트 이름 형식("[제17주차]", "[2026-02 월말]")일 때만
+ * 인정한다. 모든 시도가 거절돼 템플릿으로 나간 컨텍스트의 프롬프트도 따로 저장된다 (판정할 응답은 없음).
  */
 public final class RunLogParser {
 
@@ -57,7 +55,8 @@ public final class RunLogParser {
     private static final String INDENT = "    ";
     private static final Pattern ACCEPTED_LINE =
             Pattern.compile("^\\[(.+?)(?: r(\\d+))? / 시도 \\d+(?: \\| [^\\]]*)?\\] (.*)$");
-    private static final Pattern HEADER_LINE = Pattern.compile("^\\[(.+)\\]$");
+    /** 컨텍스트 머리 줄 형식: "[제17주차]", "[2026-02 월말]". 프롬프트 안의 "[예산·저축 — 1순위]" 같은 줄과 구분된다. */
+    private static final Pattern HEADER_LINE = Pattern.compile("^\\[(제\\d+주차|\\d{4}-\\d{2} 월말)\\]$");
 
     private enum Section {
         NONE,
@@ -73,7 +72,6 @@ public final class RunLogParser {
 
     public static ParsedRun parse(List<String> lines) {
         List<Sample> samples = new ArrayList<>();
-        Set<String> contexts = new HashSet<>();
         Map<String, String> prompts = new LinkedHashMap<>();
 
         Section section = Section.NONE;
@@ -112,12 +110,12 @@ public final class RunLogParser {
                         String context = m.group(1);
                         int rep = m.group(2) != null ? Integer.parseInt(m.group(2)) : 0;
                         samples.add(new Sample(context, rep, kind, m.group(3).replace(" ⏎ ", "\n")));
-                        contexts.add(context);
                     }
                 }
                 case PROMPTS -> {
                     Matcher h = HEADER_LINE.matcher(line);
-                    if (h.matches() && contexts.contains(h.group(1))) {
+                    // 모든 시도가 거절돼 통과 응답이 없는 컨텍스트도 머리 줄로 인정해, 그 프롬프트가 앞 컨텍스트에 붙지 않게 한다
+                    if (h.matches()) {
                         flush(prompts, promptLabel, prompt);
                         promptLabel = h.group(1);
                     } else if (promptLabel != null) {

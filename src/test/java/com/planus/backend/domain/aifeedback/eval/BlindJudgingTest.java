@@ -38,7 +38,15 @@ class BlindJudgingTest {
         Map<String, KeyRow> key = BlindJudging.readKey(out.resolve("_key/key.csv"));
         assertThat(key).hasSize(6);
         assertThat(key.values()).extracting(KeyRow::version).containsOnly("vA", "vB");
-        assertThat(Files.list(out.resolve("items")).count()).isEqualTo(6);
+        // 항목마다 사람이 읽는 Markdown과 도구가 읽는 JSON
+        assertThat(Files.list(out.resolve("items")).filter(f -> f.toString().endsWith(".md")))
+                .hasSize(6);
+        assertThat(Files.list(out.resolve("items")).filter(f -> f.toString().endsWith(".json")))
+                .hasSize(6);
+        assertThat(Files.readString(
+                        out.resolve("items").resolve(key.keySet().iterator().next() + ".json")))
+                .doesNotContain("vA")
+                .doesNotContain("vB");
     }
 
     @Test
@@ -266,5 +274,84 @@ class BlindJudgingTest {
         Path p = out.resolve(name);
         Csv.write(p, filled);
         return p;
+    }
+
+    @Test
+    void 부분_시트_수가_너무_크면_폴더를_만들지_않고_다시_실행할_수_있다() throws Exception {
+        Path out = tmp.resolve("big");
+
+        assertThatThrownBy(() -> BlindJudging.export(logs(), out, 140, EnumSet.allOf(Kind.class), 99))
+                .isInstanceOf(IllegalArgumentException.class);
+        assertThat(out).doesNotExist();
+        assertThat(BlindJudging.export(logs(), out, 140, EnumSet.allOf(Kind.class), 2))
+                .isEqualTo(6);
+    }
+
+    @Test
+    void 판정_화면_제목은_마크업이_아닌_텍스트로_들어간다() throws Exception {
+        Path page = tmp.resolve("t.html");
+
+        BlindJudging.writePage(
+                page, "<img src=x>", List.of(Map.of("id", "J001", "kind", "주간", "response", "r", "prompt", "p")));
+
+        String html = Files.readString(page, StandardCharsets.UTF_8);
+        // HTML 문맥(<title>, <h1>)에는 인코딩되어 들어간다. 데이터 JSON 안의 원문은 JSON.parse로만 읽고 HTML로 넣지 않는다
+        assertThat(html)
+                .contains("<title>AI 피드백 판정 — &lt;img src=x&gt;</title>")
+                .contains("<h1>AI 피드백 판정 · &lt;img src=x&gt;</h1>");
+        String outsideData = html.substring(0, html.indexOf("<script type=\"application/json\""));
+        assertThat(outsideData).doesNotContain("<img src=x>");
+    }
+
+    @Test
+    void 응답에_코드_펜스가_있어도_항목을_원본대로_읽는다() throws Exception {
+        Path dir = tmp.resolve("fence");
+        Files.createDirectories(dir.resolve("items"));
+        // JSON이 없는 이전 형식: Markdown만으로 나눠야 하는 경우
+        Files.writeString(
+                dir.resolve("items/J001.md"),
+                "# J001 (주간)\n\n## 응답\n\n앞\n```\n코드\n```\n뒤\n\n## 분석 재료 (이 응답을 만든 프롬프트)\n\n```\n재료\n```\n",
+                StandardCharsets.UTF_8);
+
+        Map<String, String> it = BlindJudging.readItems(dir, List.of("J001")).getFirst();
+
+        assertThat(it.get("response")).isEqualTo("앞\n```\n코드\n```\n뒤");
+        assertThat(it.get("prompt")).isEqualTo("재료");
+    }
+
+    @Test
+    void 다른_내보내기의_시트는_같은_id여도_집계하지_않는다() throws Exception {
+        Path a = exportTwoVersions(), b = tmp.resolve("other-seed");
+        BlindJudging.export(logs(), b, 7, EnumSet.allOf(Kind.class), 0);
+        Map<String, KeyRow> keyA = BlindJudging.readKey(a.resolve("_key/key.csv"));
+        Map<String, KeyRow> keyB = BlindJudging.readKey(b.resolve("_key/key.csv"));
+        String moved = keyA.keySet().stream()
+                .filter(id -> !keyA.get(id).responseSha().equals(keyB.get(id).responseSha()))
+                .findFirst()
+                .orElseThrow();
+        Path sheetA = fillSheet(a, keyA, "a.csv", k -> "O");
+
+        assertThatThrownBy(() -> BlindJudging.score(b.resolve("_key/key.csv"), List.of(sheetA), null))
+                .isInstanceOf(IllegalStateException.class)
+                .hasMessageContaining(moved);
+        Path sheetB = fillSheet(b, keyB, "b.csv", k -> "O");
+        assertThatThrownBy(() -> BlindJudging.agreement(
+                        BlindJudging.readSheet(sheetA, null), BlindJudging.readSheet(sheetB, null)))
+                .isInstanceOf(IllegalStateException.class);
+    }
+
+    @Test
+    void 버전_비교는_주차_단위_순열_검정으로_보고한다() throws Exception {
+        Path out = exportTwoVersions();
+        Map<String, KeyRow> key = BlindJudging.readKey(out.resolve("_key/key.csv"));
+        Path sheet = fillSheet(out, key, "s.csv", k -> k.version().equals("vA") ? "X" : "O");
+
+        String report = BlindJudging.score(out.resolve("_key/key.csv"), List.of(sheet), null);
+
+        assertThat(report)
+                .contains("순열 검정")
+                .contains("vA vs vB: p =")
+                .contains("(주차 2개)")
+                .doesNotContain("Fisher");
     }
 }

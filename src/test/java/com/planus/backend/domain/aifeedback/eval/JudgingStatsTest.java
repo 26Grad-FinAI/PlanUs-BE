@@ -91,4 +91,38 @@ class JudgingStatsTest {
             y.add(b);
         }
     }
+
+    @Test
+    void 짝지은_순열_검정은_반복_응답을_주차_단위로_센다() {
+        // 리뷰 예시: 6주 × 3회, A는 모두 O, B는 3주의 반복만 모두 X → 주차 차이 [0,0,0,-3,-3,-3]
+        // 부호 조합 2^3 = 8가지 중 |합| = 9인 경우 2가지 → p = 0.25 (응답 단위 Fisher는 약 0.001로 낙관적)
+        assertThat(JudgingStats.pairedSignFlip(List.of(0, 0, 0, -3, -3, -3))).isCloseTo(0.25, within(1e-12));
+        assertThat(JudgingStats.fisherTwoSided(0, 18, 9, 9)).isLessThan(0.01);
+    }
+
+    @Test
+    void 짝지은_순열_검정_기본값() {
+        assertThat(JudgingStats.pairedSignFlip(List.of(0, 0))).isEqualTo(1.0);
+        assertThat(JudgingStats.pairedSignFlip(List.of(1, 1, 1))).isCloseTo(0.25, within(1e-12));
+        assertThat(JudgingStats.pairedSignFlip(List.of(1, -1))).isCloseTo(1.0, within(1e-12));
+    }
+
+    @Test
+    void 부트스트랩은_컨텍스트_단위로_뽑는다() {
+        // 컨텍스트가 하나면 어떻게 뽑아도 같은 컨텍스트 → 구간이 그 비율 한 점으로 모인다
+        Interval i = JudgingStats.clusterBootstrap(List.<int[]>of(new int[] {1, 3}), 500, 1);
+        assertThat(i.lo()).isCloseTo(1.0 / 3, within(1e-12));
+        assertThat(i.hi()).isCloseTo(1.0 / 3, within(1e-12));
+    }
+
+    @Test
+    void 구간_표기는_로캘과_무관하다() {
+        java.util.Locale prev = java.util.Locale.getDefault();
+        try {
+            java.util.Locale.setDefault(java.util.Locale.GERMANY);
+            assertThat(JudgingStats.pct(new Interval(0.123, 0.456))).isEqualTo("12–46%");
+        } finally {
+            java.util.Locale.setDefault(prev);
+        }
+    }
 }
