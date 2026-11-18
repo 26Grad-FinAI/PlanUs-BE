@@ -62,7 +62,7 @@ v4.1은 #140 이후 고친 기준서로 다시 판정했다 (#140 보고서의 4
 LLM_REPEAT=3 ./gradlew testLlm --tests "*ProductionPathValidationTest.productionPath_render"
 
 # 블라인드 시트 → LLM 판정기 → 지표별 집계
-./gradlew judge -Pcmd=export -Pout=<폴더> -Pkinds=주간 -Plogs="v4.1=a.log;v4.2=b.log"
+./gradlew judge -Pcmd=export -Pout=<폴더> -Pkinds=주간 -Plogs="v4.1=a.log;v4.2=b.log;v4.3=c.log"
 ./gradlew judge -Pcmd=llm -Pdir=<폴더> -Pout=<결과>.csv
 ./gradlew judge -Pcmd=score -Pkey=<폴더>/_key/key.csv -Psheets="<결과>_사실오류.csv"
 ```

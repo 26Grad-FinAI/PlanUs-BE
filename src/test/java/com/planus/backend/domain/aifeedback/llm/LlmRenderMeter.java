@@ -37,6 +37,9 @@ public final class LlmRenderMeter {
     private int responses;
     private int fallbackVerify;
     private int fallbackError;
+    /** 첫 문장만 코드로 보정해 내보낸 LLM 응답 (#144). 템플릿 폴백과 구분한다. */
+    private int firstSentenceCorrected;
+
     private final Map<Integer, Integer> passedAtAttempt = new TreeMap<>();
     private final List<Long> callMillis = new ArrayList<>();
     private final List<String> rejected = new ArrayList<>();
@@ -114,8 +117,11 @@ public final class LlmRenderMeter {
         responses += (int) currentCalls.stream().filter(LlmRenderMeter::hasText).count();
 
         int acceptedIdx = currentCalls.lastIndexOf(finalText);
+        int correctedIdx = acceptedIdx >= 0 ? -1 : correctedFrom(finalText);
         if (acceptedIdx >= 0) {
             passedAtAttempt.merge(acceptedIdx + 1, 1, Integer::sum);
+        } else if (correctedIdx >= 0) {
+            firstSentenceCorrected++;
         } else if (currentErrors > 0 || (!currentCalls.isEmpty() && !hasText(currentCalls.getLast()))) {
             fallbackError++;
         } else {
@@ -129,13 +135,33 @@ public final class LlmRenderMeter {
             if (newRuleOnly) passedOnlyByNewRule++;
             accepted.add("[" + renderLabel + " / 시도 " + (acceptedIdx + 1) + (newRuleOnly ? " | 새 규칙으로 통과" : "") + "] "
                     + finalText);
+        } else if (correctedIdx >= 0) {
+            // 사용자에게 나간 문장이므로 판정 대상에 넣는다
+            accepted.add("[" + renderLabel + " / 시도 " + (correctedIdx + 1) + " | 첫 문장 보정] " + finalText);
         }
-        String outcome = acceptedIdx >= 0 ? (acceptedIdx + 1) + "차 통과" : "폴백";
+        String outcome = acceptedIdx >= 0 ? (acceptedIdx + 1) + "차 통과" : correctedIdx >= 0 ? "첫 문장 보정" : "폴백";
         int rejectedUntil = acceptedIdx >= 0 ? acceptedIdx : currentCalls.size();
         for (int i = 0; i < rejectedUntil; i++) {
             if (!hasText(currentCalls.get(i))) continue;
             rejected.add("[" + renderLabel + " / 시도 " + (i + 1) + " | 최종: " + outcome + "] " + currentCalls.get(i));
         }
+    }
+
+    /**
+     * 최종 텍스트가 어떤 응답의 첫 문장만 코드 문장으로 바꾼(또는 앞에 붙인) 결과인지. 첫 문장을 뺀 나머지가 그 응답의 끝과 같으면 보정으로 본다.
+     *
+     * @return 원 응답의 순번(0부터), 아니면 -1
+     */
+    private int correctedFrom(String finalText) {
+        int cut = finalText.indexOf(". ");
+        if (cut < 0) return -1;
+        String rest = finalText.substring(cut + 2).strip();
+        if (rest.isEmpty()) return -1;
+        for (int i = currentCalls.size() - 1; i >= 0; i--) {
+            String call = currentCalls.get(i);
+            if (hasText(call) && call.strip().endsWith(rest)) return i;
+        }
+        return -1;
     }
 
     /** 누적 집계를 표준 출력으로 내보낸다. */
@@ -158,6 +184,7 @@ public final class LlmRenderMeter {
         });
         System.out.printf("최종 LLM 문장 사용      : %d/%d = %.1f%%%n", passed, renders, pct(passed, renders));
         System.out.printf("  └ 새 규칙으로만 통과  : %d (만원 단위 표현 허용 #111이 없었다면 거절)%n", passedOnlyByNewRule);
+        System.out.printf("첫 문장 보정(코드 문장) : %d%n", firstSentenceCorrected);
         System.out.printf("템플릿 폴백(검증 실패)  : %d%n", fallbackVerify);
         System.out.printf("템플릿 폴백(오류/빈 응답): %d%n", fallbackError);
 
@@ -206,6 +233,10 @@ public final class LlmRenderMeter {
 
     public int fallbackError() {
         return fallbackError;
+    }
+
+    public int firstSentenceCorrected() {
+        return firstSentenceCorrected;
     }
 
     public int rejectedCount() {

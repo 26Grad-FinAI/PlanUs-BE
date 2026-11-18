@@ -408,7 +408,7 @@ public class AiFeedbackService {
                             a.magnitude(),
                             weeklyAmt,
                             a.rep().getEmotion(),
-                            a.basis(),
+                            withBaselineWeeks(a.basis()),
                             count(window, catThisWeek));
                 })
                 .toList();
@@ -476,7 +476,7 @@ public class AiFeedbackService {
                 feedbackType,
                 bandWidth,
                 overallConfidence,
-                top != null ? top.basis() : null,
+                top != null ? withBaselineWeeks(top.basis()) : null,
                 anomalyWeeklyCount,
                 dim - day,
                 recent4WeekAvgWon);
@@ -1164,6 +1164,13 @@ public class AiFeedbackService {
     }
 
     /** 카테고리 주간 합계(변동만), oldest→current, 길이 weeks. 현재 주 = 인덱스 weeks-1. */
+    /** 단발 이상치 기준(한 건 중앙값)에 실제 계산 기간을 붙인다 — 문구의 "최근 N주"가 설정값과 어긋나지 않게. */
+    private FeedbackRenderer.AnomalyBasis withBaselineWeeks(FeedbackRenderer.AnomalyBasis b) {
+        if (b == null || !b.singleTransaction()) return b;
+        return new FeedbackRenderer.AnomalyBasis(
+                true, b.subjectWon(), b.baselineWon(), b.subjectLabel(), p.getBaselineWeeks());
+    }
+
     /**
      * 이번 주 시작 전 {@code weeks}주의 주당 평균 변동지출. 지출이 있는 주가 {@code minActive}주 미만이면 0 (기록이 짧은 사용자에게 낮은 평균을
      * '평소'로 보여 주지 않기 위해). 지출이 없던 주도 0원으로 평균에 넣는다.

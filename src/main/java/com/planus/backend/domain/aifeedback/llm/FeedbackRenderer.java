@@ -200,8 +200,8 @@ public class FeedbackRenderer {
             }
         }
         if (onlyMissingTotal != null) {
-            log.warn("LLM 첫 문장 총지출 누락 — 코드로 만든 첫 문장을 앞에 붙임");
-            return weekTotalSentence(c) + " " + onlyMissingTotal.strip();
+            log.warn("LLM 첫 문장 총지출 누락 — 코드로 만든 첫 문장으로 보정");
+            return withWeekTotalFirst(c, onlyMissingTotal);
         }
         return template(c);
     }
@@ -320,7 +320,7 @@ public class FeedbackRenderer {
      */
     private static final Pattern RATE_QUALIFIER = Pattern.compile("월말|지금까지|누적");
 
-    private static final Pattern RATE_NUMBER = Pattern.compile("(?:예산(?:의|을|를)\\s*)(\\d+)%");
+    private static final Pattern RATE_NUMBER = Pattern.compile("(?:예산(?:의|을|를)\\s*)(\\d+(?:\\.\\d+)?)\\s*%");
 
     private static final Pattern THIS_WEEK = Pattern.compile("이번\\s*주");
 
@@ -346,13 +346,34 @@ public class FeedbackRenderer {
             if (!THIS_WEEK.matcher(sentence).find()) continue;
             Matcher m = RATE_NUMBER.matcher(sentence);
             while (m.find()) {
+                double n;
+                try {
+                    n = Double.parseDouble(m.group(1));
+                } catch (NumberFormatException e) {
+                    return false;
+                }
                 String before = sentence.substring(Math.max(0, m.start() - 12), m.start());
-                if (RATE_QUALIFIER.matcher(before).find()) continue;
-                long n = Long.parseLong(m.group(1));
-                if (share < 0 || Math.abs(n - share) > 1) return false;
+                Matcher q = RATE_QUALIFIER.matcher(before);
+                // 누적·월말임을 밝힌 비율도 그 값과 맞아야 한다 (밝히기만 하고 틀린 숫자를 쓰는 경우)
+                long expected = !q.find() ? share : q.group().equals("월말") ? monthEndPct(c) : cumulativePct(c);
+                if (expected < 0) {
+                    if (q.reset().find()) continue; // 비교할 값이 없는 누적·월말 표기는 통과
+                    return false;
+                }
+                if (Math.abs(n - expected) > 1) return false;
             }
         }
         return true;
+    }
+
+    /** 이번 달 누적 예산 사용 비율(%). 모르면 -1. */
+    static long cumulativePct(FeedbackContext c) {
+        return c.pacing() == null ? -1 : Math.round(c.pacing().currentRate() * 100);
+    }
+
+    /** 이대로면 월말 예산 사용 비율(%). 모르면 -1. */
+    static long monthEndPct(FeedbackContext c) {
+        return c.availableBudgetWon() <= 0 ? -1 : Math.round(100.0 * c.predictedMonthEndWon() / c.availableBudgetWon());
     }
 
     /** 직전 4주 평균 대비 이번 주 방향: 1 많음, -1 적음, 0 비슷하거나 기준 없음. */
@@ -382,13 +403,27 @@ public class FeedbackRenderer {
         int week = weekDirection(c);
         if (week == 0) return true;
         for (String sentence : sentences(text)) {
-            if (!THIS_WEEK.matcher(sentence).find()
-                    || MONTH_SCOPE.matcher(sentence).find()) continue;
-            if (week < 0 && FAST_WORD.matcher(sentence).find()) return false;
-            if (week > 0 && SLOW_WORD.matcher(sentence).find()) return false;
-            if (SAME_AS_USUAL.matcher(sentence).find()) return false;
+            if (!THIS_WEEK.matcher(sentence).find()) continue;
+            for (String clause : clauses(sentence)) {
+                // '이번 달 예산의 N%'의 '이번 달'은 예산의 기간이지 속도의 기간이 아니다
+                if (MONTH_SCOPE
+                        .matcher(MONTH_BUDGET.matcher(clause).replaceAll(""))
+                        .find()) continue;
+                if (week < 0 && FAST_WORD.matcher(clause).find()) return false;
+                if (week > 0 && SLOW_WORD.matcher(clause).find()) return false;
+                if (SAME_AS_USUAL.matcher(clause).find()) return false;
+            }
         }
         return true;
+    }
+
+    private static final Pattern MONTH_BUDGET = Pattern.compile("이번\\s*달\\s*예산");
+
+    /** 쉼표·'지만'·'는데'·'고,' 로 나눈 구절. */
+    private static List<String> clauses(String sentence) {
+        List<String> out = new ArrayList<>();
+        for (String s : sentence.split("[,]|지만|는데")) if (!s.isBlank()) out.add(s);
+        return out;
     }
 
     private static final Pattern MONTH_PACE_SCOPE = Pattern.compile("이번\\s*달|보통\\s*이맘때|지금까지");
@@ -403,7 +438,9 @@ public class FeedbackRenderer {
         if (c.pacing() == null || c.pacing().historicalAvgRate() <= 0) return true;
         int month = monthDirection(c);
         for (String clause : text.split("[,.!?]|지만|는데")) {
-            if (!MONTH_PACE_SCOPE.matcher(clause).find()) continue;
+            if (!MONTH_PACE_SCOPE
+                    .matcher(MONTH_BUDGET.matcher(clause).replaceAll(""))
+                    .find()) continue;
             boolean fast = FAST_STATE.matcher(clause).find(),
                     slow = SLOW_STATE.matcher(clause).find();
             if (fast && month <= 0) return false;
@@ -417,13 +454,24 @@ public class FeedbackRenderer {
      * 3개를 다 지켰을 때 효과를 붙임 ×5).
      */
     boolean verifyEffectScope(String text, FeedbackContext c) {
-        if (c.actions().size() < 2 || c.savingsImpactWon() >= 0) return true;
+        if (c.actions().isEmpty() || c.savingsImpactWon() >= 0) return true;
         long allLeft = Math.abs(c.savingsImpactWon()) - actionTotal(c);
-        if (allLeft <= 0) return true;
-        boolean usesAllEffect = extractMoneyMentions(text).stream().anyMatch(m -> matches(m, allLeft));
-        if (!usesAllEffect) return true;
-        return c.actions().stream().allMatch(a -> text.contains(a.categoryName()));
+        for (String sentence : sentences(text)) {
+            boolean claimsWithin = WITHIN_AFTER_ACTIONS.matcher(sentence).find();
+            boolean claimsAllEffect = allLeft > 0
+                    && EFFECT_VERB.matcher(sentence).find()
+                    && extractMoneyMentions(sentence).stream().anyMatch(m -> matches(m, allLeft));
+            if (!claimsWithin && !claimsAllEffect) continue;
+            // '예산 안에 들어온다'는 액션을 다 지켜도 초과가 남으면 틀리고, 남지 않아도 모든 액션을 말해야 맞다
+            if (claimsWithin && allLeft > 0) return false;
+            if (c.actions().size() >= 2 && !c.actions().stream().allMatch(a -> sentence.contains(a.categoryName())))
+                return false;
+        }
+        return true;
     }
+
+    private static final Pattern WITHIN_AFTER_ACTIONS = Pattern.compile("예산\\s*안(?:에|으로)\\s*들어");
+    private static final Pattern EFFECT_VERB = Pattern.compile("낮|줄|떨어");
 
     private static final Pattern USUAL = Pattern.compile("평소보다|평소의|평소\\s*대비");
 
@@ -432,9 +480,12 @@ public class FeedbackRenderer {
         if (c.prevWeekTotalWon() <= 0 || c.weekTotalWon() <= 0) return true;
         long prevDiff = Math.abs(c.weekTotalWon() - c.prevWeekTotalWon());
         long avgDiff = c.recent4WeekAvgWon() > 0 ? Math.abs(c.weekTotalWon() - c.recent4WeekAvgWon()) : -1;
-        for (String sentence : sentences(text)) {
-            if (!USUAL.matcher(sentence).find()) continue;
-            for (MoneyMention m : extractMoneyMentions(sentence)) {
+        Matcher u = USUAL.matcher(text);
+        while (u.find()) {
+            // '평소보다'가 수식하는 금액은 바로 뒤 구절 안에 있다 ("평소보다 40,000원 적게")
+            String after = text.substring(u.end(), Math.min(text.length(), u.end() + 20))
+                    .split("[,.!?]")[0];
+            for (MoneyMention m : extractMoneyMentions(after)) {
                 if (matches(m, prevDiff) && (avgDiff < 0 || !matches(m, avgDiff))) return false;
             }
         }
@@ -446,7 +497,17 @@ public class FeedbackRenderer {
         if (c.weekTotalWon() <= 0) return true;
         List<String> all = sentences(text);
         if (all.isEmpty()) return false;
-        return extractMoneyMentions(all.getFirst()).stream().anyMatch(m -> matches(m, c.weekTotalWon()));
+        String first = all.getFirst();
+        List<MoneyMention> mentions = extractMoneyMentions(first);
+        // 금액이 이번 주 총지출을 뜻하는지: 같은 문장에 '이번 주'가 있어야 한다 (월말 초과 등 다른 값과 우연히 같을 수 있음)
+        if (!THIS_WEEK.matcher(first).find() || mentions.stream().noneMatch(m -> matches(m, c.weekTotalWon())))
+            return false;
+        if (c.recent4WeekAvgWon() <= 0) return true;
+        // 직전 4주 평균이 있으면 평균 대비(차이 금액 또는 평균 금액, 비슷하면 '비슷')도 첫 문장에
+        long diff = Math.abs(c.weekTotalWon() - c.recent4WeekAvgWon());
+        boolean comparesAverage = first.contains("평균") || first.contains("평소");
+        boolean hasDiff = mentions.stream().anyMatch(m -> matches(m, diff) || matches(m, c.recent4WeekAvgWon()));
+        return comparesAverage && (hasDiff || (weekDirection(c) == 0 && first.contains("비슷")));
     }
 
     /** 숫자 검증과 같은 반올림 기준으로 금액 언급이 원본 값의 표현인지. */
@@ -462,6 +523,15 @@ public class FeedbackRenderer {
 
     boolean verifyFormat(String text) {
         return !MARKDOWN_HEADING.matcher(text).find() && !GARBLED.matcher(text).find();
+    }
+
+    /**
+     * 첫 문장을 코드로 만든 문장으로 보정한다. 원 응답이 3문장 이상이면 첫 문장(이번 주 핵심)을 바꾸고, 더 짧으면 앞에 붙인다 — 3문장 제한 유지.
+     */
+    static String withWeekTotalFirst(FeedbackContext c, String candidate) {
+        List<String> parts = sentences(candidate);
+        List<String> rest = parts.size() >= 3 ? parts.subList(1, parts.size()) : parts;
+        return weekTotalSentence(c) + " " + String.join(" ", rest);
     }
 
     /** 코드로 만든 첫 문장. 이번 주 총지출과 직전 4주 평균 대비 (LLM이 끝까지 빠뜨리거나 템플릿 폴백일 때). */
@@ -1365,7 +1435,10 @@ public class FeedbackRenderer {
                     .append(exactWon(basis.subjectWon()))
                     .append("이 평소 ")
                     .append(categoryName)
-                    .append(" 한 건 금액(최근 8주 한 건 중앙값 ")
+                    .append(
+                            basis.baselineWeeks() > 0
+                                    ? " 한 건 금액(최근 " + basis.baselineWeeks() + "주 한 건 중앙값 "
+                                    : " 한 건 금액(과거 한 건 중앙값 ")
                     .append(exactWon(basis.baselineWon()))
                     .append(")의 ")
                     .append(mag)
@@ -1559,11 +1632,21 @@ public class FeedbackRenderer {
                     .append(" 멀어질 것 같아요.");
             if (!c.actions().isEmpty()) {
                 ActionSummary top = c.actions().get(0);
-                sb.append(" ")
-                        .append(top.categoryName())
-                        .append("에서 ")
-                        .append(won(top.reductionWon()))
-                        .append("만 줄여도 목표에 한결 가까워져요.");
+                if (top.remainingExpectedWon() > 0) {
+                    sb.append(" 남은 기간 ")
+                            .append(top.categoryName())
+                            .append("는 예상 ")
+                            .append(won(top.remainingExpectedWon()))
+                            .append(" 중 ")
+                            .append(won(Math.max(0, top.remainingExpectedWon() - top.reductionWon())))
+                            .append("까지만 쓰면 목표에 한결 가까워져요.");
+                } else {
+                    sb.append(" ")
+                            .append(top.categoryName())
+                            .append("에서 ")
+                            .append(won(top.reductionWon()))
+                            .append("만 줄여도 목표에 한결 가까워져요.");
+                }
             }
         } else {
             sb.append("이번 달은 예산 안에서 잘 가고 있어요. 지금 페이스면 저축 목표도 무리 없어요.");
@@ -1700,8 +1783,16 @@ public class FeedbackRenderer {
      * @param subjectWon        배수의 분자 (한 건 금액 또는 최근 2주 주당 평균)
      * @param baselineWon       배수의 분모 (과거 한 건 중앙값 또는 그 앞 4주 주당 평균)
      * @param subjectLabel      단발 이상치 거래의 메모·내역 (추세면 null)
+     * @param baselineWeeks     단발 이상치 중앙값을 계산한 과거 기간(주). 0이면 모름
      */
-    public record AnomalyBasis(boolean singleTransaction, long subjectWon, long baselineWon, String subjectLabel) {}
+    public record AnomalyBasis(
+            boolean singleTransaction, long subjectWon, long baselineWon, String subjectLabel, int baselineWeeks) {
+
+        /** 기준 기간을 모르는 이전 형식 — 문구에 기간을 쓰지 않는다. */
+        public AnomalyBasis(boolean singleTransaction, long subjectWon, long baselineWon, String subjectLabel) {
+            this(singleTransaction, subjectWon, baselineWon, subjectLabel, 0);
+        }
+    }
 
     /**
      * PRIMARY를 제외한 추가 HIGH 이상치 정보.
