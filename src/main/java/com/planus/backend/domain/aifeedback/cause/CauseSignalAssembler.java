@@ -36,6 +36,10 @@ public class CauseSignalAssembler {
     private static final int MEMO_LIMIT = 10;
     private static final int MIN_ACTIVE_WEEKS = 3;
     private static final int BASELINE_WEEKS = 7;
+
+    /** 본인 과거 대비 배율(selfRatio)의 기준 기간. 피드백의 '평소'(직전 4주 주당 평균)와 맞춘다 (#144). 횟수·단가 판정은 {@value #BASELINE_WEEKS}주 유지. */
+    private static final int SELF_RATIO_WEEKS = 4;
+
     private static final long MIN_BASELINE_AVG = 10_000L;
     private static final double SELF_RATIO_THRESHOLD = 1.5;
     private static final double DOMINANT_CONTRIBUTION = 0.65;
@@ -93,9 +97,9 @@ public class CauseSignalAssembler {
     }
 
     /**
-     * 본인 과거 대비 배율. 이번 주 합계 / 과거 7주 주당 평균.
+     * 본인 과거 대비 배율. 이번 주 합계 / 직전 {@value #SELF_RATIO_WEEKS}주 주당 평균.
      *
-     * <p>분모는 항상 {@value BASELINE_WEEKS}(관측 기간). {@code activeWeeks}가 아님.
+     * <p>분모는 항상 {@value #SELF_RATIO_WEEKS}(관측 기간). {@code activeWeeks}가 아님.
      * 평소 3주에 한 번 쓰던 사람이 이번 주에 몰아 쓰면 빈도 증가 신호를 잡아야 하기 때문.
      *
      * <p>가드:
@@ -115,7 +119,7 @@ public class CauseSignalAssembler {
                 .mapToLong(Expense::getAmount)
                 .sum();
 
-        LocalDate priorStart = weekStart.minusWeeks(BASELINE_WEEKS);
+        LocalDate priorStart = weekStart.minusWeeks(SELF_RATIO_WEEKS);
         List<Expense> priorExpenses = variable.stream()
                 .filter(e -> !e.getDate().isBefore(priorStart) && e.getDate().isBefore(weekStart))
                 .toList();
@@ -129,7 +133,7 @@ public class CauseSignalAssembler {
         if (activeWeeks < MIN_ACTIVE_WEEKS) return null;
 
         double priorWeeklyAvg =
-                priorExpenses.stream().mapToLong(Expense::getAmount).sum() / (double) BASELINE_WEEKS;
+                priorExpenses.stream().mapToLong(Expense::getAmount).sum() / (double) SELF_RATIO_WEEKS;
 
         if (priorWeeklyAvg < MIN_BASELINE_AVG) return null;
 

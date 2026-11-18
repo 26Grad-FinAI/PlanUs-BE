@@ -6,7 +6,7 @@ import java.util.Map;
 /**
  * [5] 원인 신호 조립 결과. 수치·신호만 담고, 문장 생성은 [7] LLM 렌더러의 책임.
  *
- * @param selfRatio          본인 과거 7주 대비 이번 주 배율. null이면 산출 불가(과거 부족 등).
+ * @param selfRatio          본인 직전 4주 주당 평균 대비 이번 주 배율 (#144). null이면 산출 불가(과거 부족 등).
  * @param dominantFactor     "FREQUENCY" / "UNIT_PRICE" / "BOTH" / null
  * @param freqContribution   빈도 기여율 (0~1). 증가 방향만 반영.
  * @param priceContribution  단가 기여율 (0~1). 증가 방향만 반영.
