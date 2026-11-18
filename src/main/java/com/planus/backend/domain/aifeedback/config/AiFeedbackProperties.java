@@ -40,6 +40,12 @@ public class AiFeedbackProperties {
 
     // ── [6] 절약 액션 ──
     private double reductionRatio = 0.50;
+    /**
+     * 줄일 금액이 이 값 미만인 액션은 만들지 않는다 (#143 홀드아웃: "숙박여행에서 524원 줄이기" 같은 액션이 5개까지 생겨 문장에 다 담을 수 없음).
+     */
+    private long minActionWon = 5_000;
+    /** 줄일 금액이 저축 갭의 이 비율 미만인 액션은 만들지 않는다 (#143). */
+    private double minActionGapRatio = 0.05;
 
     // ── [3.5] 메모 질문 큐 ──
     private int weeklyQuestionCap = 3;
@@ -238,6 +244,24 @@ public class AiFeedbackProperties {
 
     public void setReductionRatio(double v) {
         reductionRatio = v;
+    }
+
+    public long getMinActionWon() {
+        return minActionWon;
+    }
+
+    public void setMinActionWon(long v) {
+        if (v < 0) throw new IllegalArgumentException("min-action-won은 0 이상이어야 합니다: " + v);
+        minActionWon = v;
+    }
+
+    public double getMinActionGapRatio() {
+        return minActionGapRatio;
+    }
+
+    public void setMinActionGapRatio(double v) {
+        if (v < 0 || v >= 1) throw new IllegalArgumentException("min-action-gap-ratio는 0 이상 1 미만이어야 합니다: " + v);
+        minActionGapRatio = v;
     }
 
     public int getWeeklyQuestionCap() {

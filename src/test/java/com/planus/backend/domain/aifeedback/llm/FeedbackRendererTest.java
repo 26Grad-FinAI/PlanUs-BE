@@ -638,6 +638,46 @@ class FeedbackRendererTest {
             return captor.getValue();
         }
 
+        @Test
+        @DisplayName("액션이 셋 이상이면 줄일 금액이 큰 두 개만 지킨 효과도 준다 — 두 개만 말하면서 '모두 지키면' 효과를 붙이지 않게 (#143)")
+        void actions_topPairEffectLine() {
+            FeedbackContext ctx = contextBuilder()
+                    .feedbackType(FeedbackType.ALERT)
+                    .savingsImpactWon(-300_000)
+                    .actions(List.of(
+                            new ActionSummary("교통", 30_000, null, 1.0),
+                            new ActionSummary("기타", 150_000, null, 1.0),
+                            new ActionSummary("식대", 80_000, null, 1.0)))
+                    .build();
+
+            assertThat(capturedUserPrompt(ctx))
+                    .contains("- 기타·식대만 지키면 전체 월말 초과 300,000원 → 70,000원")
+                    .contains("모두 지키면 전체 월말 초과 300,000원 → 40,000원");
+
+            // 두 개를 말하고 두 개 조합 효과 → 통과 / 한 개만 말하고 두 개 조합 효과 → 거절 / 두 개만 말하고 전부 효과 → 거절
+            assertThat(renderer.verifyEffectScope("기타와 식대를 지키면 월말 초과를 30만 원에서 7만 원으로 줄일 수 있어요.", ctx))
+                    .isTrue();
+            assertThat(renderer.verifyEffectScope("기타만 지키면 월말 초과를 7만 원으로 줄일 수 있어요.", ctx))
+                    .isFalse();
+            assertThat(renderer.verifyEffectScope("기타와 식대를 지키면 월말 초과를 4만 원으로 줄일 수 있어요.", ctx))
+                    .isFalse();
+            assertThat(renderer.verifyNumbers("기타와 식대를 지키면 월말 초과를 30만 원에서 7만 원으로 줄일 수 있어요.", ctx))
+                    .isTrue();
+        }
+
+        @Test
+        @DisplayName("액션이 둘 이하면 두 개 조합 줄은 없다 (모두 지키면과 같으므로)")
+        void actions_noPairLineForTwo() {
+            FeedbackContext ctx = contextBuilder()
+                    .feedbackType(FeedbackType.ALERT)
+                    .savingsImpactWon(-300_000)
+                    .actions(List.of(
+                            new ActionSummary("기타", 150_000, null, 1.0), new ActionSummary("식대", 80_000, null, 1.0)))
+                    .build();
+
+            assertThat(capturedUserPrompt(ctx)).doesNotContain("기타·식대만 지키면");
+        }
+
         private String capturedSystemPrompt(FeedbackContext ctx) {
             LlmClient client = mock(LlmClient.class);
             when(llmProvider.getIfAvailable()).thenReturn(client);

@@ -26,6 +26,36 @@ class SavingsActionCalculatorTest {
     class FilterTest {
 
         @Test
+        @DisplayName("줄일 금액이 5천 원 미만이거나 저축 갭의 5% 미만인 액션은 만들지 않고 갭을 다음 카테고리에 남긴다 (#143)")
+        void skips_trivial_actions() {
+            // 갭 200,000 → 하한 max(5,000, 10,000) = 10,000. 카테고리 4는 초과 4,000원뿐, 5는 8,000원, 7은 충분
+            Map<Integer, Long> overspend = Map.of(4, 4_000L, 5, 8_000L, 7, 300_000L);
+            List<ActionPlan> plans = calculator.calculate(
+                    overspend,
+                    200_000,
+                    15,
+                    15,
+                    Map.of(4, 100_000L, 5, 100_000L, 7, 600_000L),
+                    Map.of(),
+                    List.of(),
+                    List.of(),
+                    List.of());
+
+            assertThat(plans).extracting(ActionPlan::categoryId).containsExactly(7);
+            assertThat(plans.getFirst().reductionWon()).isEqualTo(200_000);
+        }
+
+        @Test
+        @DisplayName("하한 설정값 검증 — 음수·1 이상 비율은 시작 시 거부 (#143)")
+        void rejects_invalid_threshold() {
+            AiFeedbackProperties props = new AiFeedbackProperties();
+            org.assertj.core.api.Assertions.assertThatThrownBy(() -> props.setMinActionWon(-1))
+                    .isInstanceOf(IllegalArgumentException.class);
+            org.assertj.core.api.Assertions.assertThatThrownBy(() -> props.setMinActionGapRatio(1.0))
+                    .isInstanceOf(IllegalArgumentException.class);
+        }
+
+        @Test
         @DisplayName("essential 카테고리는 제외")
         void excludes_essential() {
             // categoryId 3 = essential (보건, 기본값)

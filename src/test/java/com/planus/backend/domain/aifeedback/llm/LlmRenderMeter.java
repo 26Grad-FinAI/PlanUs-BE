@@ -187,6 +187,10 @@ public final class LlmRenderMeter {
         System.out.printf("첫 문장 보정(코드 문장) : %d%n", firstSentenceCorrected);
         System.out.printf("템플릿 폴백(검증 실패)  : %d%n", fallbackVerify);
         System.out.printf("템플릿 폴백(오류/빈 응답): %d%n", fallbackError);
+        // 검사를 엄하게 하면 판정 오류율은 내려가도 폴백이 늘어난다 — 오류율과 함께 반드시 보고 (#143)
+        System.out.printf(
+                "템플릿 폴백률         : %d/%d = %.1f%%%n",
+                fallbackVerify + fallbackError, renders, pct(fallbackVerify + fallbackError, renders));
 
         List<Long> sorted = callMillis.stream().sorted().toList();
         if (!sorted.isEmpty()) {

@@ -33,6 +33,9 @@ import org.springframework.stereotype.Component;
  *
  * <p>절감액 = min(카테고리 초과분, 저축 갭 잔여분, 남은 기간 감축가능액)
  *
+ * <p>절감액이 {@code min-action-won} 또는 저축 갭 × {@code min-action-gap-ratio} 미만이면 그 액션은 만들지 않는다 — 사용자에게 의미가 없고
+ * 피드백 문장에 다 담을 수 없다 (#143).
+ *
  * <p>월초(경과 3일 미만)에는 일평균 추정이 극단적으로 부정확하므로 액션을 생성하지 않는다.
  */
 @Component
@@ -117,6 +120,7 @@ public class SavingsActionCalculator {
 
         List<ActionPlan> plans = new ArrayList<>();
         long remainingGap = savingsGap;
+        long minReduction = Math.max(p.getMinActionWon(), Math.round(savingsGap * p.getMinActionGapRatio()));
 
         for (ScoredCategory sc : sortedByScore) {
             if (remainingGap <= 0) break;
@@ -127,7 +131,8 @@ public class SavingsActionCalculator {
 
             long reductionWon = Math.min(sc.overspendWon, Math.min(remainingGap, maxReducible));
 
-            if (reductionWon <= 0) continue;
+            // 사소한 액션은 건너뛰고 갭을 다음 카테고리에 남긴다
+            if (reductionWon <= 0 || reductionWon < minReduction) continue;
 
             plans.add(new ActionPlan(sc.categoryId, reductionWon, sc.dominantFactor, sc.score));
             remainingGap -= reductionWon;
