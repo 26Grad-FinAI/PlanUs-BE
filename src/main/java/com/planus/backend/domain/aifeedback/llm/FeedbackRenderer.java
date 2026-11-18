@@ -83,6 +83,7 @@ public class FeedbackRenderer {
         - 예시 (문장 구조만 참고하고 숫자는 베끼지 않는다)
           나쁜 예: "이번 주는 평소보다 쓰는 속도가 빨랐어요. 기타에서 큰 결제 한 건이 가장 컸고, 이번 주 37만 원을 쓰면서 이번 달 예산의 30%를 썼어요. 기타에서 268,040원, 식료품에서 6,663원을 줄이면 83,335원으로 낮아져요." (이번 주 총지출과 평소 대비가 첫 문장에 없고, 이번 달 누적 비율을 이번 주에 붙였고, 숫자가 많다)
           좋은 예: "이번 주는 18만 5천 원을 써서 최근 4주 평균보다 13만 원 적게 썼지만, 이번 달 전체로는 보통 이맘때보다 빠르게 쓰고 있어요. 기타에서 큰 결제 한 건이 가장 컸고요. 남은 20일 동안 기타는 21만 원까지만 쓰면 월말 초과를 줄일 수 있어요."
+          (예시의 속도·카테고리·금액을 그대로 옮기지 않는다. 이번 달 속도가 빠른지 느린지는 [예산 사용 비율]에 적힌 그대로 쓴다.)
 
         [숫자·사실 규칙 — 아래 규칙은 위 말투를 지키면서도 어기지 않는다]
         - 1순위 메시지는 '예산 진척률과 저축 목표 영향'이다. 항상 이걸 중심에 둔다.
@@ -100,7 +101,8 @@ public class FeedbackRenderer {
         - 이번 달 속도(보통 이맘때보다 빠른/느린)는 이번 달 전체 이야기다. '이번 주는'에 붙이지 않는다. 이번 주 증감과 이번 달 속도가 반대면 "이번 주는 줄었지만 이번 달 전체로는 빨라요"처럼 둘을 구분한다.
         - '평소'는 직전 4주 주당 평균이다. 지난주와 비교할 때는 '평소보다'가 아니라 '지난주보다'라고 쓴다.
         - 예산 사용 비율(%)은 '이번 달 예산의 30%를 썼어요'처럼 무엇의 비율인지 밝혀 쓴다. '페이싱', '보통 이맘때 20%인데 지금은 30%'처럼 대상 없이 쓰지 않는다.
-        - [절약 액션]의 '모두 지키면' 효과(월말 초과 A → B)는 적힌 카테고리를 모두 지켰을 때의 결과다. 일부 카테고리만 말하면 'X만 지키면' 줄의 숫자를 쓰고, '모두 지키면' 숫자를 붙이지 않는다.
+        - [절약 액션]의 '모두 지키면' 효과(월말 초과 A → B)는 적힌 카테고리를 모두 지켰을 때의 결과다. 일부 카테고리만 말하면 'X만 지키면' 줄의 숫자를 쓰고, '모두 지키면' 숫자를 붙이지 않는다. 숫자 개수 제한 때문에 카테고리를 줄였다면 효과 숫자도 빼고 말한다.
+        - '가장 컸다', '가장 큰 원인'은 분석 재료에서 금액이 실제로 가장 큰 거래·카테고리에만 쓴다. 건수가 많거나 배수가 큰 것을 '가장 컸다'고 쓰지 않는다.
         - 절약 효과는 [절약 액션]의 '모두 지키면' 줄대로 '월말 초과가 A원에서 B원으로 줄어요'처럼 줄어드는 폭으로 쓴다. 초과가 남는데 '예산 안에 들어온다', '목표를 지킬 수 있다'고 쓰지 않고, '다 메우기 어렵다', '받아들이자', '받아들이고'처럼 체념하는 말은 쓰지 않는다. 남은 기간이 짧아 줄어드는 폭이 작으면 그 폭만 짧게 말하고 다음 달에 해볼 행동으로 넘어간다. 줄어드는 폭이 작으면 '크게 낮출 수 있다'처럼 과장하지 말고 초과의 주된 원인과 다음 행동을 짚는다.
         - 초과 카테고리의 '월말 예상 초과'는 지금 속도로 가면 월말에 그 카테고리 예산을 넘을 것으로 예상되는 금액이다. 이미 쓴 금액이 아니므로 '누적됐다', '이미 넘었다'처럼 쓰지 않고 '이대로면 월말에 N원 넘을 것 같아요'처럼 예상으로 쓴다. '이번 주 지출'과 합산하지 않는다.
         - 초과 카테고리의 '이번 주 지출'이 작으면 그 카테고리는 이번 주 원인이 아니라 이전 주들의 지출 때문임을 인식하고 이번 주 피드백에서 주요 원인으로 다루지 않는다.
@@ -221,7 +223,11 @@ public class FeedbackRenderer {
                     case "절약 금액" -> "줄이라고 권하는 금액은 [절약 액션]에 적힌 그 카테고리의 금액만 쓸 것. 절약 후 남는 초과액을 줄일 금액으로 쓰지 말 것.";
                     case "첫 문장 총지출" -> "첫 문장을 이번 주 총지출([예산·저축]의 '이번 주 총 변동지출')과 직전 4주 평균 대비로 시작할 것.";
                     case "비율 대상" -> "이번 달 누적 비율은 '지금까지 이번 달 예산의 N%'로 쓰고, 이번 주에 쓴 비율은 '이번 주 지출만은 이번 달 예산의 W%'의 W만 쓸 것.";
-                    case "속도 방향" -> "이번 달 속도를 '이번 주는'에 붙이지 말 것. 이번 주 증감(직전 4주 평균 대비)과 이번 달 전체 속도를 구분해서 쓸 것.";
+                    case "속도 방향" ->
+                        "이번 달 속도를 '이번 주는'에 붙이지 말 것. 이번 주 증감(직전 4주 평균 대비)과 이번 달 전체 속도를 구분하고,"
+                                + " 이번 달 속도는 [예산 사용 비율]에 적힌 빠름·느림 그대로 쓸 것.";
+                    case "절약 효과 범위" ->
+                        "'모두 지키면' 효과 금액은 [절약 액션]의 카테고리를 모두 말할 때만 쓸 것. 일부만 말하면 'X만 지키면' 숫자를 쓰거나 효과 숫자를 빼고 쓸 것.";
                     case "평소 기준" -> "'평소'는 직전 4주 평균이다. 지난주와 비교한 금액에는 '지난주보다'라고 쓸 것.";
                     case "출력 형식" -> "마크다운 제목(#) 없이 문장만 쓰고, 단어 안에 영문·그리스 문자가 섞이지 않게 쓸 것.";
                     default -> "분석 재료와 맞지 않는 부분을 고칠 것.";
@@ -242,11 +248,12 @@ public class FeedbackRenderer {
         if (!verifyFormat(candidate)) return "출력 형식";
         if (!verifyWording(candidate)) return "내부 용어·기간 표기";
         if (!verifyRate(candidate, c)) return "비율 대상";
-        if (!verifyPace(candidate, c)) return "속도 방향";
+        if (!verifyPace(candidate, c) || !verifyMonthPace(candidate, c)) return "속도 방향";
         if (!verifyUsual(candidate, c)) return "평소 기준";
         if (!verifyFacts(candidate, c)) return "사실과 반대 표현";
         if (!verifyEach(candidate, c)) return "'각각' 금액";
         if (!verifySavingsAmounts(candidate, c)) return "절약 금액";
+        if (!verifyEffectScope(candidate, c)) return "절약 효과 범위";
         if (checkFirstSentence && !verifyFirstSentence(candidate, c)) return "첫 문장 총지출";
         return null;
     }
@@ -382,6 +389,40 @@ public class FeedbackRenderer {
             if (SAME_AS_USUAL.matcher(sentence).find()) return false;
         }
         return true;
+    }
+
+    private static final Pattern MONTH_PACE_SCOPE = Pattern.compile("이번\\s*달|보통\\s*이맘때|지금까지");
+    private static final Pattern FAST_STATE = Pattern.compile("빠르게|빠른|빨라요|빨랐");
+    private static final Pattern SLOW_STATE = Pattern.compile("느리게|느린|느려요|느렸");
+
+    /**
+     * 이번 달 속도를 말한 구절("이번 달 전체로는 보통 이맘때보다 빠르게")은 실제 이번 달 속도와 같아야 한다 (#144 재측정: 좋은 예의 "빠르게"를 느린 주에도
+     * 옮겨 씀). 구절은 쉼표·'지만'·'는데'로 나눈다.
+     */
+    boolean verifyMonthPace(String text, FeedbackContext c) {
+        if (c.pacing() == null || c.pacing().historicalAvgRate() <= 0) return true;
+        int month = monthDirection(c);
+        for (String clause : text.split("[,.!?]|지만|는데")) {
+            if (!MONTH_PACE_SCOPE.matcher(clause).find()) continue;
+            boolean fast = FAST_STATE.matcher(clause).find(),
+                    slow = SLOW_STATE.matcher(clause).find();
+            if (fast && month <= 0) return false;
+            if (slow && month >= 0) return false;
+        }
+        return true;
+    }
+
+    /**
+     * '모두 지키면' 효과 금액(전체 월말 초과 − 액션 합)을 쓰면서 액션 카테고리 일부를 빠뜨리면 거절 (#144 재측정: 숫자 개수 제한으로 3개 중 2개만 말하고
+     * 3개를 다 지켰을 때 효과를 붙임 ×5).
+     */
+    boolean verifyEffectScope(String text, FeedbackContext c) {
+        if (c.actions().size() < 2 || c.savingsImpactWon() >= 0) return true;
+        long allLeft = Math.abs(c.savingsImpactWon()) - actionTotal(c);
+        if (allLeft <= 0) return true;
+        boolean usesAllEffect = extractMoneyMentions(text).stream().anyMatch(m -> matches(m, allLeft));
+        if (!usesAllEffect) return true;
+        return c.actions().stream().allMatch(a -> text.contains(a.categoryName()));
     }
 
     private static final Pattern USUAL = Pattern.compile("평소보다|평소의|평소\\s*대비");

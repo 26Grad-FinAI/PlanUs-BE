@@ -1605,6 +1605,52 @@ class FeedbackRendererTest {
         }
 
         @Test
+        @DisplayName("이번 달 속도를 말한 구절은 실제 속도와 같아야 한다 — 좋은 예의 '빠르게'를 느린 주에 옮겨 쓴 사례 (#144 재측정 J082)")
+        void monthPace_mustMatchData() {
+            // 이번 달 누적 41%, 보통 이맘때 84% → 느림
+            FeedbackContext slow = contextBuilder()
+                    .pacing(new com.planus.backend.domain.aifeedback.core.PacingComparator.PacingResult(
+                            0.41,
+                            0.84,
+                            0.49,
+                            null,
+                            3,
+                            com.planus.backend.domain.aifeedback.core.PacingComparator.PacingDisplay.MEDIAN,
+                            null,
+                            null))
+                    .build();
+
+            assertThat(renderer.verifyMonthPace("이번 주는 많이 썼지만, 이번 달 전체로는 보통 이맘때보다 빠르게 쓰고 있어요.", slow))
+                    .isFalse();
+            assertThat(renderer.verifyMonthPace("이번 주는 많이 썼지만, 이번 달 전체로는 보통 이맘때보다 느리게 쓰고 있어요.", slow))
+                    .isTrue();
+            assertThat(renderer.verifyMonthPace("이번 주는 빠르게 늘었어요.", slow)).isTrue(); // 이번 달 구절이 아님
+            assertThat(renderer.verifyMonthPace("이번 달 전체로는 빠르게 쓰고 있어요.", week36().build()))
+                    .isTrue();
+        }
+
+        @Test
+        @DisplayName("'모두 지키면' 효과 금액은 액션 카테고리를 모두 말할 때만 — 3개 중 2개만 말하고 전체 효과를 붙인 사례 (#144 재측정 J023·J032)")
+        void effectScope_requiresAllCategories() {
+            FeedbackContext ctx = contextBuilder()
+                    .feedbackType(FeedbackType.ALERT)
+                    .savingsImpactWon(-322_996)
+                    .actions(List.of(
+                            new ActionSummary("교통", 21_426, null, 1.0),
+                            new ActionSummary("의류신발", 52_734, null, 1.0),
+                            new ActionSummary("오락문화", 11_192, null, 1.0)))
+                    .build();
+
+            assertThat(renderer.verifyEffectScope(
+                            "의류신발은 5만 3천 원, 교통은 2만 1천 원까지만 쓰면 월말 초과를 32만 원에서 24만 원으로 낮출 수 있어요.", ctx))
+                    .isFalse();
+            assertThat(renderer.verifyEffectScope("의류신발·교통·오락문화를 지키면 월말 초과를 32만 원에서 24만 원으로 낮출 수 있어요.", ctx))
+                    .isTrue();
+            assertThat(renderer.verifyEffectScope("의류신발은 5만 3천 원까지만 써보세요.", ctx))
+                    .isTrue(); // 효과 금액 없음
+        }
+
+        @Test
         @DisplayName("마크다운 제목과 단어 안에 섞인 영문·그리스 문자는 거절 (#140 J153·J189)")
         void format_rejectsHeadingAndGarbled() {
             assertThat(renderer.verifyFormat("# 이번 주 소비 피드백\n이번 주는 18만 원을 썼어요."))
