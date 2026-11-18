@@ -1,0 +1,335 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>AI 피드백 판정 — __TITLE__</title>
+<style>
+  :root {
+    --bg: #f6f7f9; --panel: #fff; --line: #e3e6ea; --text: #1f2328; --muted: #6a737d;
+    --ok: #1a7f37; --ok-bg: #dafbe1; --bad: #cf222e; --bad-bg: #ffebe9; --hold: #9a6700; --hold-bg: #fff8c5;
+    --accent: #0969da; --mark: #ffe08a;
+  }
+  * { box-sizing: border-box; }
+  body { margin: 0; font-family: "Pretendard", "Malgun Gothic", system-ui, sans-serif; color: var(--text); background: var(--bg); }
+  header { position: sticky; top: 0; z-index: 5; display: flex; gap: 16px; align-items: center; padding: 10px 18px; background: var(--panel); border-bottom: 1px solid var(--line); }
+  header h1 { font-size: 16px; margin: 0; white-space: nowrap; }
+  .progress { flex: 1; display: flex; align-items: center; gap: 10px; font-size: 13px; color: var(--muted); }
+  .bar { flex: 1; max-width: 320px; height: 8px; background: var(--line); border-radius: 4px; overflow: hidden; }
+  .bar > div { height: 100%; background: var(--accent); width: 0; transition: width .2s; }
+  button { font: inherit; cursor: pointer; border: 1px solid var(--line); background: var(--panel); border-radius: 6px; padding: 6px 12px; }
+  button:hover { border-color: #b6bcc4; }
+  .primary { background: var(--accent); color: #fff; border-color: var(--accent); }
+  main { display: grid; grid-template-columns: 150px 1fr; height: calc(100vh - 53px); }
+  nav { overflow-y: auto; border-right: 1px solid var(--line); background: var(--panel); }
+  nav .filters { position: sticky; top: 0; background: var(--panel); padding: 8px; display: flex; flex-wrap: wrap; gap: 4px; border-bottom: 1px solid var(--line); }
+  nav .filters button { padding: 2px 8px; font-size: 12px; }
+  nav .filters button.on { background: var(--text); color: #fff; border-color: var(--text); }
+  nav ul { list-style: none; margin: 0; padding: 4px 0; }
+  nav li { display: flex; justify-content: space-between; padding: 5px 12px; font-size: 13px; cursor: pointer; font-variant-numeric: tabular-nums; }
+  nav li:hover { background: var(--bg); }
+  nav li.cur { background: #ddf4ff; font-weight: 600; }
+  .badge { font-size: 11px; font-weight: 700; padding: 0 6px; border-radius: 8px; }
+  .b-O { color: var(--ok); background: var(--ok-bg); } .b-X { color: var(--bad); background: var(--bad-bg); } .b-H { color: var(--hold); background: var(--hold-bg); }
+  section.work { overflow-y: auto; padding: 16px 20px 40px; }
+  .cols { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; align-items: start; }
+  .card { background: var(--panel); border: 1px solid var(--line); border-radius: 8px; padding: 14px 16px; }
+  .card h2 { font-size: 13px; color: var(--muted); margin: 0 0 10px; font-weight: 600; display: flex; justify-content: space-between; }
+  .response { font-size: 16px; line-height: 1.75; white-space: pre-wrap; }
+  .prompt { font-family: "D2Coding", Consolas, monospace; font-size: 12.5px; line-height: 1.6; white-space: pre-wrap; max-height: 62vh; overflow-y: auto; }
+  .num { background: #eef4ff; border-bottom: 1px dashed var(--accent); cursor: pointer; border-radius: 3px; padding: 0 1px; }
+  .num.sel { background: var(--mark); }
+  mark { background: var(--mark); border-radius: 3px; }
+  mark.first { outline: 2px solid #e3b341; }
+  .hint { font-size: 12px; color: var(--muted); font-weight: 400; }
+  .judge { margin-top: 16px; }
+  .verdict { display: flex; gap: 8px; margin-bottom: 14px; }
+  .verdict button { flex: 1; padding: 12px; font-size: 15px; font-weight: 700; }
+  .verdict .o.on { background: var(--ok); color: #fff; border-color: var(--ok); }
+  .verdict .x.on { background: var(--bad); color: #fff; border-color: var(--bad); }
+  .verdict .h.on { background: var(--hold); color: #fff; border-color: var(--hold); }
+  .types { display: grid; grid-template-columns: repeat(auto-fill, minmax(190px, 1fr)); gap: 6px; margin-bottom: 12px; }
+  .types label { display: flex; gap: 6px; align-items: flex-start; font-size: 13px; padding: 6px 8px; border: 1px solid var(--line); border-radius: 6px; cursor: pointer; }
+  .types label.on { border-color: var(--bad); background: var(--bad-bg); }
+  .types small { display: block; color: var(--muted); font-size: 11px; }
+  .types.disabled { opacity: .45; pointer-events: none; }
+  textarea { width: 100%; min-height: 54px; font: inherit; font-size: 13px; padding: 8px; border: 1px solid var(--line); border-radius: 6px; }
+  .warn { color: var(--bad); font-size: 12px; min-height: 18px; margin-top: 6px; }
+  .navrow { display: flex; justify-content: space-between; align-items: center; margin-top: 12px; }
+  .keys { font-size: 12px; color: var(--muted); }
+  kbd { font-family: inherit; font-size: 11px; border: 1px solid var(--line); border-bottom-width: 2px; border-radius: 4px; padding: 0 4px; background: #fafbfc; }
+  details.rubric { margin-top: 16px; font-size: 13px; }
+  details.rubric table { border-collapse: collapse; width: 100%; margin-top: 8px; }
+  details.rubric td { border-top: 1px solid var(--line); padding: 6px 8px; vertical-align: top; }
+  details.rubric td:first-child { white-space: nowrap; font-weight: 600; }
+  .saved { font-size: 12px; color: var(--muted); }
+</style>
+</head>
+<body>
+<header>
+  <h1>AI 피드백 판정 · __TITLE__</h1>
+  <div class="progress"><div class="bar"><div id="bar"></div></div><span id="progressText"></span></div>
+  <span class="saved" id="saved"></span>
+  <button id="importBtn" title="이전에 저장한 CSV에서 이어서 하기">CSV 불러오기</button>
+  <button id="exportBtn" class="primary">결과 CSV 저장</button>
+  <input type="file" id="importFile" accept=".csv" hidden>
+</header>
+<main>
+  <nav>
+    <div class="filters">
+      <button data-f="all" class="on">전체</button><button data-f="todo">미판정</button>
+      <button data-f="X">X</button><button data-f="H">애매</button>
+    </div>
+    <ul id="list"></ul>
+  </nav>
+  <section class="work">
+    <div class="cols">
+      <div class="card">
+        <h2><span id="itemTitle"></span><span class="hint">숫자를 누르면 오른쪽에서 같은 숫자를 찾아요</span></h2>
+        <div class="response" id="response"></div>
+      </div>
+      <div class="card">
+        <h2><span>분석 재료 (이 응답을 만든 프롬프트)</span><span class="hint" id="findInfo"></span></h2>
+        <div class="prompt" id="prompt"></div>
+      </div>
+    </div>
+    <div class="card judge">
+      <div class="verdict">
+        <button class="o" id="btnO">O 맞음 <kbd>1</kbd></button>
+        <button class="x" id="btnX">X 틀림 <kbd>2</kbd></button>
+        <button class="h" id="btnH">애매 (보류) <kbd>3</kbd></button>
+      </div>
+      <div class="types" id="types"></div>
+      <textarea id="memo" placeholder="메모 (선택) — 틀린 근거를 적어 두면 판정자끼리 의견이 다를 때 도움이 돼요"></textarea>
+      <div class="warn" id="warn"></div>
+      <div class="navrow">
+        <button id="prevBtn">← 이전</button>
+        <span class="keys"><kbd>1</kbd> O · <kbd>2</kbd> X · <kbd>3</kbd> 애매 · <kbd>←</kbd><kbd>→</kbd> 이동 · <kbd>Enter</kbd> 다음 미판정</span>
+        <button id="nextBtn" class="primary">다음 미판정 →</button>
+      </div>
+    </div>
+    <details class="rubric">
+      <summary>판정 기준 요약 (자세한 내용은 판정기준.md)</summary>
+      <p>분석 재료와 비교해 아래 오류가 <b>하나라도 있으면 X</b>. 문장이 어색하거나 길기만 한 것은 O.<br>
+      반올림 허용: 만원·천원 단위로 원래 값과 10% 이내(117,266원 → "11만 원 넘게"), "N만 원대" 구간 안, 배수 반올림("5.9배" → "6배쯤").</p>
+      <table id="rubricTable"></table>
+    </details>
+  </section>
+</main>
+
+<script type="application/json" id="data">__DATA__</script>
+<script>
+(() => {
+  const DATA = JSON.parse(document.getElementById('data').textContent);
+  const TYPES = [
+    ['숫자출처', '재료에 없거나 다른 값', '식대 이번 주 지출 124,200원을 "12만 원 넘게 초과"로'],
+    ['대상기준', '비율·배수의 대상/기준이 틀림', '이번 달 비율을 "이번 주는 예산의 41%"로, 한 건 배수를 "평소의 N배"로'],
+    ['기간', '기간 표현이 틀림', '월말 예상 초과를 "이번 달 누적됐어요"로, 남은 기간 절약액을 "매달"로'],
+    ['절약효과', '절약 금액·효과를 잘못 말함', '다 지켜도 초과가 남는데 "예산 안에 들어와요", 액션에 없는 카테고리·금액'],
+    ['사실반대', '사실과 반대로 말함', '초과 예상인데 "잘 쓰고 계세요", 올랐는데 "내려왔어요"'],
+    ['건수', '거래처·결제 수단 건수 틀림', '"카카오페이·토스페이 7건" (실제 3+3=6)'],
+    ['내부용어', '분석용 표기 노출', '"절약 액션", "MTD", 영문 감정 태그, 대괄호, # 제목'],
+    ['톤', '체념·부적절한 말투', '"이번 달은 받아들이고", "다 메우긴 어려워요"'],
+    ['원인', '원인을 재료와 다르게 연결', '재료는 "횟수 증가"인데 "건당 금액이 커져서"'],
+    ['기타', '위에 없는 오류 (메모에 설명)', ''],
+  ];
+  const KEY = 'planus-judging:' + DATA.title + ':' + DATA.items.length + ':' + DATA.items[0].id;
+  const state = JSON.parse(localStorage.getItem(KEY) || '{}'); // id -> {v:'O'|'X'|'H', t:[], m:''}
+  let idx = 0, filter = 'all';
+  const $ = id => document.getElementById(id);
+  const esc = s => s.replace(/[&<>"]/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
+
+  // ── 렌더링 ──
+  $('rubricTable').innerHTML = TYPES.map(t => `<tr><td>${t[0]}</td><td>${t[1]}</td><td class="hint">${esc(t[2])}</td></tr>`).join('');
+  $('types').innerHTML = TYPES.map(t => `<label data-t="${t[0]}"><input type="checkbox" value="${t[0]}"><span>${t[0]}<small>${t[1]}</small></span></label>`).join('');
+
+  const NUM = /\d[\d,]*(?:\.\d+)?/g;
+  function highlightNumbers(text) {
+    return esc(text).replace(NUM, m => `<span class="num" data-n="${m.replace(/,/g, '')}">${m}</span>`);
+  }
+
+  function visible() {
+    return DATA.items.map((it, i) => i).filter(i => {
+      const s = state[DATA.items[i].id];
+      if (filter === 'todo') return !s || !s.v || s.v === 'H';
+      if (filter === 'X') return s && s.v === 'X';
+      if (filter === 'H') return s && s.v === 'H';
+      return true;
+    });
+  }
+
+  function renderList() {
+    $('list').innerHTML = visible().map(i => {
+      const it = DATA.items[i], s = state[it.id];
+      const b = s && s.v ? `<span class="badge b-${s.v}">${s.v === 'H' ? '애매' : s.v}</span>` : '';
+      return `<li data-i="${i}" class="${i === idx ? 'cur' : ''}">${it.id}${b}</li>`;
+    }).join('');
+    const done = DATA.items.filter(it => state[it.id] && (state[it.id].v === 'O' || state[it.id].v === 'X')).length;
+    $('bar').style.width = (100 * done / DATA.items.length) + '%';
+    $('progressText').textContent = `${done} / ${DATA.items.length} 판정 완료`;
+    const cur = $('list').querySelector('li.cur');
+    if (cur) cur.scrollIntoView({block: 'nearest'});
+  }
+
+  function renderItem() {
+    const it = DATA.items[idx], s = state[it.id] || {};
+    $('itemTitle').textContent = `${it.id} · ${it.kind}`;
+    $('response').innerHTML = highlightNumbers(it.response);
+    $('prompt').innerHTML = esc(it.prompt);
+    $('findInfo').textContent = '';
+    ['O', 'X', 'H'].forEach(v => $('btn' + v).classList.toggle('on', s.v === v));
+    const types = s.t || [];
+    $('types').classList.toggle('disabled', s.v !== 'X');
+    $('types').querySelectorAll('label').forEach(l => {
+      const on = types.includes(l.dataset.t);
+      l.classList.toggle('on', on);
+      l.querySelector('input').checked = on;
+    });
+    $('memo').value = s.m || '';
+    $('warn').textContent = s.v === 'X' && types.length === 0 ? 'X로 표시했다면 오류 유형을 하나 이상 골라 주세요.' : '';
+    renderList();
+    document.querySelector('section.work').scrollTop = 0;
+  }
+
+  // ── 숫자 찾기 ──
+  $('response').addEventListener('click', e => {
+    const span = e.target.closest('.num');
+    if (!span) return;
+    document.querySelectorAll('.num.sel').forEach(x => x.classList.remove('sel'));
+    span.classList.add('sel');
+    const digits = span.dataset.n;
+    const prompt = DATA.items[idx].prompt;
+    let html = '', count = 0;
+    let last = 0;
+    const re = /\d[\d,]*(?:\.\d+)?/g;
+    let m;
+    while ((m = re.exec(prompt))) {
+      html += esc(prompt.slice(last, m.index));
+      if (m[0].replace(/,/g, '') === digits) {
+        html += `<mark class="${count === 0 ? 'first' : ''}">${m[0]}</mark>`;
+        count++;
+      } else html += m[0];
+      last = m.index + m[0].length;
+    }
+    html += esc(prompt.slice(last));
+    $('prompt').innerHTML = html;
+    $('findInfo').textContent = count ? `"${span.textContent}" ${count}곳` : `"${span.textContent}"는 재료에 그대로는 없어요 (반올림 표현인지 확인)`;
+    const first = $('prompt').querySelector('mark.first');
+    if (first) first.scrollIntoView({block: 'center'});
+  });
+
+  // ── 판정 입력 ──
+  function save() {
+    localStorage.setItem(KEY, JSON.stringify(state));
+    $('saved').textContent = '자동 저장됨 ' + new Date().toLocaleTimeString();
+  }
+  function setVerdict(v) {
+    const id = DATA.items[idx].id;
+    const s = state[id] || (state[id] = {t: [], m: ''});
+    s.v = s.v === v ? undefined : v;
+    if (s.v !== 'X') s.t = [];
+    save();
+    renderItem();
+  }
+  $('btnO').onclick = () => setVerdict('O');
+  $('btnX').onclick = () => setVerdict('X');
+  $('btnH').onclick = () => setVerdict('H');
+  $('types').addEventListener('change', e => {
+    const s = state[DATA.items[idx].id];
+    if (!s) return;
+    s.t = [...$('types').querySelectorAll('input:checked')].map(x => x.value);
+    save();
+    renderItem();
+  });
+  $('memo').addEventListener('input', () => {
+    const id = DATA.items[idx].id;
+    (state[id] || (state[id] = {t: [], m: ''})).m = $('memo').value;
+    save();
+  });
+
+  // ── 이동 ──
+  function go(i) { idx = Math.max(0, Math.min(DATA.items.length - 1, i)); renderItem(); }
+  function nextTodo() {
+    for (let k = 1; k <= DATA.items.length; k++) {
+      const i = (idx + k) % DATA.items.length, s = state[DATA.items[i].id];
+      if (!s || !s.v) return go(i);
+    }
+    alert('모든 항목에 판정을 입력했어요. "결과 CSV 저장"을 눌러 주세요.');
+  }
+  $('prevBtn').onclick = () => go(idx - 1);
+  $('nextBtn').onclick = nextTodo;
+  $('list').addEventListener('click', e => { const li = e.target.closest('li'); if (li) go(+li.dataset.i); });
+  document.querySelectorAll('.filters button').forEach(b => b.onclick = () => {
+    filter = b.dataset.f;
+    document.querySelectorAll('.filters button').forEach(x => x.classList.toggle('on', x === b));
+    renderList();
+  });
+  document.addEventListener('keydown', e => {
+    if (e.target.tagName === 'TEXTAREA') return;
+    if (e.key === '1') setVerdict('O');
+    else if (e.key === '2') setVerdict('X');
+    else if (e.key === '3') setVerdict('H');
+    else if (e.key === 'ArrowRight') go(idx + 1);
+    else if (e.key === 'ArrowLeft') go(idx - 1);
+    else if (e.key === 'Enter') nextTodo();
+    else return;
+    e.preventDefault();
+  });
+
+  // ── CSV 저장·불러오기 (집계 도구와 같은 형식) ──
+  const HEADER = ['id', '구분', '응답', '판정(O=맞음, X=틀림)', '오류 유형', '메모'];
+  const cell = v => /[",\r\n]/.test(v) ? '"' + v.replace(/"/g, '""') + '"' : v;
+  $('exportBtn').onclick = () => {
+    const rows = [HEADER].concat(DATA.items.map(it => {
+      const s = state[it.id] || {};
+      const v = s.v === 'O' || s.v === 'X' ? s.v : '';
+      const memo = (s.v === 'H' ? '[애매] ' : '') + (s.m || '');
+      return [it.id, it.kind, it.response, v, (s.t || []).join(', '), memo.trim()];
+    }));
+    const csv = '﻿' + rows.map(r => r.map(cell).join(',')).join('\r\n') + '\r\n';
+    const a = document.createElement('a');
+    a.href = URL.createObjectURL(new Blob([csv], {type: 'text/csv;charset=utf-8'}));
+    a.download = DATA.title + '_결과.csv';
+    a.click();
+  };
+  function parseCsv(text) {
+    if (text.charCodeAt(0) === 0xFEFF) text = text.slice(1);
+    const rows = []; let row = [], c = '', q = false;
+    for (let i = 0; i < text.length; i++) {
+      const ch = text[i];
+      if (q) { if (ch === '"' && text[i + 1] === '"') { c += '"'; i++; } else if (ch === '"') q = false; else c += ch; }
+      else if (ch === '"') q = true;
+      else if (ch === ',') { row.push(c); c = ''; }
+      else if (ch === '\n' || ch === '\r') { if (ch === '\r' && text[i + 1] === '\n') i++; row.push(c); c = ''; rows.push(row); row = []; }
+      else c += ch;
+    }
+    if (c || row.length) { row.push(c); rows.push(row); }
+    return rows;
+  }
+  $('importBtn').onclick = () => $('importFile').click();
+  $('importFile').onchange = async e => {
+    const f = e.target.files[0];
+    if (!f) return;
+    const rows = parseCsv(await f.text());
+    const h = rows[0], iId = h.indexOf('id'), iV = h.indexOf(HEADER[3]), iT = h.indexOf('오류 유형'), iM = h.indexOf('메모');
+    if (iId < 0 || iV < 0) return alert('판정 시트 형식이 아니에요.');
+    const ids = new Set(DATA.items.map(it => it.id));
+    let n = 0;
+    rows.slice(1).forEach(r => {
+      if (!ids.has(r[iId])) return;
+      let m = iM >= 0 ? r[iM] || '' : '', v = (r[iV] || '').trim().toUpperCase();
+      if (m.startsWith('[애매]')) { v = 'H'; m = m.slice(4).trim(); }
+      const t = iT >= 0 && r[iT] ? r[iT].split(/[,;/]/).map(x => x.trim()).filter(Boolean) : [];
+      if (v || m || t.length) { state[r[iId]] = {v: v || undefined, t, m}; n++; }
+    });
+    save();
+    renderItem();
+    alert(`${n}개 항목을 불러왔어요.`);
+  };
+
+  window.addEventListener('beforeunload', save);
+  renderItem();
+})();
+</script>
+</body>
+</html>

@@ -32,6 +32,7 @@ dependencies {
 	testImplementation 'org.springframework.security:spring-security-test'
 	testImplementation 'org.testcontainers:postgresql'
 	testImplementation 'org.testcontainers:junit-jupiter'
+	testImplementation 'com.anthropic:anthropic-java:3.3.0' // LLM 판정기 (#140, 테스트 전용)
 	testCompileOnly 'org.projectlombok:lombok'
 	testRuntimeOnly 'org.junit.platform:junit-platform-launcher'
 	testAnnotationProcessor 'org.projectlombok:lombok'
@@ -89,6 +90,18 @@ tasks.register('testLlm', Test) {
 	testLogging {
 		showStandardStreams = true
 	}
+}
+
+// 블라인드 판정 도구 (#140) — 측정 로그를 섞어 판정 시트로 내보내고(export), 판정 결과를 버전별로 집계(score)
+// 예: ./gradlew judge -Pcmd=export -Pout=판정폴더 -Plogs="v3.0=a.log;v4.1=b.log"
+tasks.register('judge', JavaExec) {
+	classpath = sourceSets.test.runtimeClasspath
+	mainClass = 'com.planus.backend.domain.aifeedback.eval.BlindJudging'
+	workingDir = projectDir // LLM 판정기가 docs/ai-feedback/judging-rubric.md를 읽음
+	javaLauncher = javaToolchains.launcherFor(java.toolchain) // 기본 JVM이 아닌 컴파일과 같은 21로 실행
+	args = ['cmd', 'out', 'logs', 'kinds', 'subset', 'seed', 'dir', 'ids', 'title', 'judgeModel', 'effort', 'key', 'sheets', 'final', 'report']
+			.findAll { project.hasProperty(it) }
+			.collect { "${it}=${project.property(it)}".toString() }
 }
 
 spotless {
