@@ -19,13 +19,17 @@ import org.springframework.stereotype.Component;
  * <ul>
  *   <li>essential 카테고리 → 제외
  *   <li>sensitiveAreas 카테고리 (DONT_WANT_REDUCE 2회+) → 제외
- *   <li>SATISFIED 비중 70% 이상 → 제외 (대안이 없으면 유지)
  * </ul>
  *
- * <p>점수 기반 우선순위 (feasibilityScore):
+ * <p>감정 태그로는 제외하지 않는다 (#141). 만족한 지출이라도 예산을 넘겼으면 절약 대상이고, 줄이고 싶지 않다는 판단은 사용자의
+ * 거절 반응({@code sensitiveAreas})으로만 받는다. 건수 기준 70% 일괄 제외는 가장 큰 초과 카테고리를 빼 원인과 처방이 엇갈리게 했다
+ * (#140 J035; 측정: 초과가 있는 주 중 최대 초과 카테고리가 이 규칙으로 빠진 주 3/28).
+ *
+ * <p>점수 기반 우선순위 (feasibilityScore) — 감정 비중은 건수가 아니라 금액 기준이다:
  * <ul>
- *   <li>REGRET 비중 → 가산 (사용자가 줄이고 싶어하는 카테고리)
- *   <li>SATISFIED 비중 → 감산
+ *   <li>REGRET 금액 비중 → 가산 (사용자가 줄이고 싶어하는 카테고리)
+ *   <li>SATISFIED 금액 비중 → 감산
+ *   <li>태그가 붙은 금액이 그 카테고리 변동 지출의 {@value #MIN_TAG_COVERAGE_PCT}% 미만이면 감정 점수를 쓰지 않는다 (태그는 선택 입력)
  *   <li>ALREADY_KNOWN 거부 → 감산
  *   <li>TOO_REPETITIVE 거부 → 대폭 감산
  *   <li>semi-essential → 감산
@@ -47,7 +51,8 @@ public class SavingsActionCalculator {
     private static final double ALREADY_KNOWN_PENALTY = -0.2;
     private static final double TOO_REPETITIVE_PENALTY = -0.4;
     private static final double SEMI_ESSENTIAL_PENALTY = -0.15;
-    private static final double SATISFIED_EXCLUDE_RATIO = 0.70;
+    /** 감정 점수를 쓰려면 태그가 붙은 금액이 카테고리 변동 지출의 이 비율(%) 이상이어야 한다. */
+    private static final int MIN_TAG_COVERAGE_PCT = 50;
     /** 월초 가드: 경과일이 이 값 미만이면 액션을 생성하지 않는다. */
     private static final int MIN_ELAPSED_DAYS = 3;
 
@@ -90,7 +95,7 @@ public class SavingsActionCalculator {
         Set<Long> semiEssentialSet = new HashSet<>(p.getCategory().getSemiEssential());
         Set<Long> sensitiveSet = new HashSet<>(sensitiveAreas);
 
-        Map<Integer, Map<String, Long>> emotionByCategory = buildEmotionMap(thisMonthExpenses);
+        Map<Integer, EmotionAmounts> emotionByCategory = buildEmotionMap(thisMonthExpenses);
         Map<Integer, Map<RejectionReason, Long>> rejectionByCategory = buildRejectionMap(rejections);
 
         // 1단계: 필터 + 점수 계산
@@ -106,15 +111,8 @@ public class SavingsActionCalculator {
                         causeSignalsByCategory))
                 .toList();
 
-        // SATISFIED 비중 70%+ 제외 (대안이 없으면 유지)
-        List<ScoredCategory> filtered =
-                scored.stream().filter(sc -> !sc.satisfiedExcluded).toList();
-        if (filtered.isEmpty()) {
-            filtered = scored;
-        }
-
         // 2단계: feasibilityScore 내림차순으로 갭 배분
-        List<ScoredCategory> sortedByScore = filtered.stream()
+        List<ScoredCategory> sortedByScore = scored.stream()
                 .sorted(Comparator.comparingDouble(ScoredCategory::score).reversed())
                 .toList();
 
@@ -145,29 +143,21 @@ public class SavingsActionCalculator {
             int categoryId,
             long overspendWon,
             Set<Long> semiEssentialSet,
-            Map<Integer, Map<String, Long>> emotionByCategory,
+            Map<Integer, EmotionAmounts> emotionByCategory,
             Map<Integer, Map<RejectionReason, Long>> rejectionByCategory,
             Map<Integer, CauseSignals> causeSignalsByCategory) {
 
         double score = BASE_SCORE;
-        boolean satisfiedExcluded = false;
 
         if (semiEssentialSet.contains((long) categoryId)) {
             score += SEMI_ESSENTIAL_PENALTY;
         }
 
-        // 감정 기반 가감
-        Map<String, Long> emotions = emotionByCategory.getOrDefault(categoryId, Map.of());
-        long totalEmotionCount =
-                emotions.values().stream().mapToLong(Long::longValue).sum();
-        if (totalEmotionCount > 0) {
-            double regretRatio = emotions.getOrDefault("REGRET", 0L) / (double) totalEmotionCount;
-            double satisfiedRatio = emotions.getOrDefault("SATISFIED", 0L) / (double) totalEmotionCount;
-            score += regretRatio * REGRET_BONUS;
-            score += satisfiedRatio * SATISFIED_PENALTY;
-            if (satisfiedRatio >= SATISFIED_EXCLUDE_RATIO) {
-                satisfiedExcluded = true;
-            }
+        // 감정 기반 가감 — 금액 비중. 태그가 충분히 붙은 카테고리에만 쓴다
+        EmotionAmounts emotions = emotionByCategory.get(categoryId);
+        if (emotions != null && emotions.hasEnoughTags()) {
+            score += emotions.ratio("REGRET") * REGRET_BONUS;
+            score += emotions.ratio("SATISFIED") * SATISFIED_PENALTY;
         }
 
         // 거부 이력 기반 가감
@@ -183,16 +173,41 @@ public class SavingsActionCalculator {
         CauseSignals signals = causeSignalsByCategory.get(categoryId);
         String dominantFactor = (signals != null) ? signals.dominantFactor() : null;
 
-        return new ScoredCategory(categoryId, overspendWon, score, satisfiedExcluded, dominantFactor);
+        return new ScoredCategory(categoryId, overspendWon, score, dominantFactor);
     }
 
-    /** 이번 달 변동 지출의 카테고리별 감정태그 집계. */
-    private Map<Integer, Map<String, Long>> buildEmotionMap(List<Expense> expenses) {
-        return expenses.stream()
-                .filter(Expense::isVariable)
-                .filter(e -> e.getEmotion() != null && !e.getEmotion().isBlank())
-                .collect(Collectors.groupingBy(
-                        Expense::getCategoryId, Collectors.groupingBy(Expense::getEmotion, Collectors.counting())));
+    /** 이번 달 변동 지출의 카테고리별 감정태그 금액 집계. */
+    private Map<Integer, EmotionAmounts> buildEmotionMap(List<Expense> expenses) {
+        Map<Integer, EmotionAmounts> out = new HashMap<>();
+        for (Expense e : expenses) {
+            if (!e.isVariable()) continue;
+            out.computeIfAbsent(e.getCategoryId(), k -> new EmotionAmounts()).add(e.getEmotion(), e.getAmount());
+        }
+        return out;
+    }
+
+    /** 카테고리의 변동 지출 금액과 감정 태그별 금액. */
+    private static final class EmotionAmounts {
+        private long variableTotal;
+        private long taggedTotal;
+        private final Map<String, Long> byEmotion = new HashMap<>();
+
+        void add(String emotion, long amount) {
+            variableTotal += amount;
+            if (emotion == null || emotion.isBlank()) return;
+            taggedTotal += amount;
+            byEmotion.merge(emotion, amount, Long::sum);
+        }
+
+        /** 태그가 붙은 금액이 변동 지출의 {@value #MIN_TAG_COVERAGE_PCT}% 이상인지. */
+        boolean hasEnoughTags() {
+            return taggedTotal > 0 && taggedTotal * 100 >= variableTotal * MIN_TAG_COVERAGE_PCT;
+        }
+
+        /** 태그가 붙은 금액 중 해당 감정의 비중. */
+        double ratio(String emotion) {
+            return taggedTotal == 0 ? 0 : byEmotion.getOrDefault(emotion, 0L) / (double) taggedTotal;
+        }
     }
 
     /** 거부 이력의 카테고리별 사유 집계. */
@@ -204,6 +219,5 @@ public class SavingsActionCalculator {
                         Collectors.groupingBy(UserReaction::getRejectionReason, Collectors.counting())));
     }
 
-    private record ScoredCategory(
-            int categoryId, long overspendWon, double score, boolean satisfiedExcluded, String dominantFactor) {}
+    private record ScoredCategory(int categoryId, long overspendWon, double score, String dominantFactor) {}
 }
