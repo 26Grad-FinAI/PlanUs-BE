@@ -39,6 +39,13 @@ public class UserReaction {
     @Column(name = "created_at")
     private LocalDateTime createdAt;
 
+    /**
+     * 반응이 아직 효력이 있는지. 남긴 지 {@code expiryMonths}개월이 지나면 만료된다. 시각을 모르는 이전 데이터는 효력이 있는 것으로 본다.
+     */
+    public boolean isActiveAt(LocalDateTime now, int expiryMonths) {
+        return createdAt == null || !createdAt.plusMonths(expiryMonths).isBefore(now);
+    }
+
     /** 같은 피드백·카테고리에 다시 반응하면 덮어쓴다. */
     public void change(Reaction reaction, RejectionReason rejectionReason, LocalDateTime at) {
         this.reaction = reaction;

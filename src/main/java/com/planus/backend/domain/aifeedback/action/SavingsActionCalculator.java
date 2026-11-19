@@ -18,7 +18,7 @@ import org.springframework.stereotype.Component;
  * <p>필터링:
  * <ul>
  *   <li>essential 카테고리 → 제외
- *   <li>sensitiveAreas 카테고리 (DONT_WANT_REDUCE 2회+) → 제외
+ *   <li>sensitiveAreas 카테고리 (효력 있는 DONT_WANT_REDUCE 거절) → 제외
  * </ul>
  *
  * <p>감정 태그로는 제외하지 않는다 (#141). 만족한 지출이라도 예산을 넘겼으면 절약 대상이고, 줄이고 싶지 않다는 판단은 사용자의

@@ -206,8 +206,11 @@ public class AiFeedbackService {
         LocalDateTime to = queryEnd.atTime(LocalTime.MAX);
         List<Expense> window = expenseRepo.findByUserIdAndExpenseDateBetween(userId, from, to);
 
-        // 거부 이력: 한 번만 조회 (프로필 갱신·절약 액션 양쪽에서 사용)
-        List<UserReaction> reactions = reactionRepo.findByUserId(userId);
+        // 거부 이력: 한 번만 조회 (프로필 갱신·절약 액션 양쪽에서 사용). 만료된 거절은 뺀다 (#141)
+        LocalDateTime reactionNow = LocalDateTime.now(clock);
+        List<UserReaction> reactions = reactionRepo.findByUserId(userId).stream()
+                .filter(r -> r.isActiveAt(reactionNow, p.getRejectionExpiryMonths()))
+                .toList();
 
         // 프로필 로드 (원인 신호·절약 액션에서 사용)
         UserProfile profile = userProfileRepo.findByUserId(userId).orElse(null);
@@ -300,7 +303,8 @@ public class AiFeedbackService {
             if (feedbackType == FeedbackType.ALERT && savingsGap > 0) {
                 categoryRemainingExpected =
                         buildCategoryRemainingExpected(window, monthStart, weekEnd, day, dim, dowWeights);
-                List<Long> sensitiveAreas = parseSensitiveAreas(profile);
+                // 프로필 값이 아니라 지금 효력 있는 반응에서 바로 계산한다 — 프로필은 이 실행 뒤에 갱신되므로, 새 거절이 한 주기 늦게 반영되는 걸 막는다
+                List<Long> sensitiveAreas = new ArrayList<>(ProfileUpdater.sensitiveCategories(reactions));
                 actions = savingsCalculator.calculate(
                         overspend,
                         savingsGap,
@@ -1122,11 +1126,6 @@ public class AiFeedbackService {
             return Confidence.lower(base, anomalyConfidence);
         }
         return base;
-    }
-
-    /** UserProfile의 sensitiveAreas JSON을 파싱한다. ProfileUpdater의 공용 헬퍼 재사용. */
-    private List<Long> parseSensitiveAreas(UserProfile profile) {
-        return ProfileUpdater.parseSensitiveAreaIds(objectMapper, profile);
     }
 
     /** 페이로드 JSON 조립 (버전 포함). */

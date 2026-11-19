@@ -16,7 +16,7 @@ import org.hibernate.type.SqlTypes;
  *
  * <ul>
  *   <li>{@code repeatPatterns} — 같은 카테고리 연속 3주+ 초과 시 기록 (JSONB)
- *   <li>{@code sensitiveAreas} — {@code DONT_WANT_REDUCE} 2회+ 거부된 카테고리 ID 목록 (JSONB)
+ *   <li>{@code sensitiveAreas} — 효력 있는(3개월 이내) {@code DONT_WANT_REDUCE} 거절 카테고리 ID 목록 (JSONB, 매번 다시 계산)
  *   <li>{@code complianceRate} — 최근 12주 중 예산 내 주 비율
  * </ul>
  */

@@ -370,6 +370,60 @@ class AiFeedbackServiceTest {
     }
 
     @Test
+    @DisplayName("만료된 거절은 절약 액션에 넘기지 않고, 효력 있는 거절 카테고리는 바로 제외 대상으로 넘긴다 (#141)")
+    void generateWeekly_expiredRejectionsDropped() {
+        stubCommon();
+        stubNormalActivity();
+        stubProjection(1_800_000, -300_000);
+        when(feedbackTypeResolver.resolve(eq(false), eq(-300_000L), eq(false), anyBoolean()))
+                .thenReturn(FeedbackType.ALERT);
+        when(causeAssembler.assemble(anyInt(), any(), any(), any(), any()))
+                .thenReturn(new CauseSignals(null, null, 0, 0, Map.of(), Map.of(), null, List.of(), false));
+        when(savingsCalculator.calculate(any(), anyLong(), anyInt(), anyInt(), any(), any(), any(), any(), any()))
+                .thenReturn(List.of());
+        when(renderer.render(any())).thenReturn(new Rendered("절약이 필요해요.", Confidence.HIGH));
+        LocalDateTime now = LocalDateTime.now(FIXED_CLOCK);
+        when(reactionRepo.findByUserId(USER_ID))
+                .thenReturn(List.of(
+                        com.planus.backend.domain.aifeedback.entity.UserReaction.builder()
+                                .userId(USER_ID)
+                                .reaction(com.planus.backend.domain.aifeedback.entity.Reaction.NOT_HELPFUL)
+                                .rejectionReason(
+                                        com.planus.backend.domain.aifeedback.entity.RejectionReason.DONT_WANT_REDUCE)
+                                .categoryId(1)
+                                .createdAt(now.minusMonths(4)) // 만료
+                                .build(),
+                        com.planus.backend.domain.aifeedback.entity.UserReaction.builder()
+                                .userId(USER_ID)
+                                .reaction(com.planus.backend.domain.aifeedback.entity.Reaction.NOT_HELPFUL)
+                                .rejectionReason(
+                                        com.planus.backend.domain.aifeedback.entity.RejectionReason.DONT_WANT_REDUCE)
+                                .categoryId(6)
+                                .createdAt(now.minusDays(10)) // 효력 있음
+                                .build()));
+
+        service.generateWeekly(USER_ID, WEEK_END);
+
+        @SuppressWarnings("unchecked")
+        var rejections = org.mockito.ArgumentCaptor.forClass(List.class);
+        @SuppressWarnings("unchecked")
+        var sensitive = org.mockito.ArgumentCaptor.forClass(List.class);
+        verify(savingsCalculator)
+                .calculate(
+                        any(),
+                        anyLong(),
+                        anyInt(),
+                        anyInt(),
+                        any(),
+                        any(),
+                        any(),
+                        rejections.capture(),
+                        sensitive.capture());
+        assertThat(rejections.getValue()).hasSize(1);
+        assertThat(sensitive.getValue()).containsExactly(6L);
+    }
+
+    @Test
     @DisplayName("같은 주 피드백이 이미 있으면 기존 피드백을 반환하고 분석·LLM·저장을 하지 않는다 (#130)")
     void generateWeekly_existingFeedback_skipsGeneration() {
         stubCommon();

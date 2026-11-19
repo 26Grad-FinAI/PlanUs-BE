@@ -40,6 +40,8 @@ public class AiFeedbackProperties {
 
     // ── [6] 절약 액션 ──
     private double reductionRatio = 0.50;
+    /** 사용자의 거절 반응(줄이고 싶지 않아요 등)이 효력을 갖는 기간(개월). 지나면 다시 제안 대상이 된다 (#141). */
+    private int rejectionExpiryMonths = 3;
     /**
      * 줄일 금액이 이 값 미만인 액션은 만들지 않는다 (#143 홀드아웃: "숙박여행에서 524원 줄이기" 같은 액션이 5개까지 생겨 문장에 다 담을 수 없음).
      */
@@ -244,6 +246,15 @@ public class AiFeedbackProperties {
 
     public void setReductionRatio(double v) {
         reductionRatio = v;
+    }
+
+    public int getRejectionExpiryMonths() {
+        return rejectionExpiryMonths;
+    }
+
+    public void setRejectionExpiryMonths(int v) {
+        if (v < 1) throw new IllegalArgumentException("rejection-expiry-months는 1 이상이어야 합니다: " + v);
+        rejectionExpiryMonths = v;
     }
 
     public long getMinActionWon() {

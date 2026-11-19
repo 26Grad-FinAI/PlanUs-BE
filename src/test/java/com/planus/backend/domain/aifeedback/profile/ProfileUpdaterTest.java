@@ -96,41 +96,52 @@ class ProfileUpdaterTest {
     class SensitiveAreasTest {
 
         @Test
-        @DisplayName("DONT_WANT_REDUCE 2회+ 거부된 카테고리가 등재된다")
-        void adds_category_on_threshold() throws Exception {
-            List<UserReaction> reactions = List.of(
-                    rejection(2, RejectionReason.DONT_WANT_REDUCE), rejection(2, RejectionReason.DONT_WANT_REDUCE));
-            UserProfile profile = profileWithSensitive("[]");
-
-            updater.update(profile, Set.of(), reactions, List.of(), false);
-
-            List<Long> result = parseSensitive(profile);
-            assertThat(result).contains(2L);
-        }
-
-        @Test
-        @DisplayName("DONT_WANT_REDUCE 1회는 등재하지 않는다")
-        void does_not_add_below_threshold() throws Exception {
+        @DisplayName("한 번 거절해도 등재된다 — 사용자가 줄이고 싶지 않다고 한 카테고리는 바로 제외")
+        void adds_category_on_single_rejection() throws Exception {
             List<UserReaction> reactions = List.of(rejection(2, RejectionReason.DONT_WANT_REDUCE));
             UserProfile profile = profileWithSensitive("[]");
 
             updater.update(profile, Set.of(), reactions, List.of(), false);
 
-            List<Long> result = parseSensitive(profile);
-            assertThat(result).doesNotContain(2L);
+            assertThat(parseSensitive(profile)).containsExactly(2L);
         }
 
         @Test
-        @DisplayName("기존 sensitiveAreas에 새 카테고리가 추가된다 (중복 없음)")
-        void adds_without_duplicates() throws Exception {
+        @DisplayName("같은 카테고리를 여러 번 거절해도 중복 없이 한 번")
+        void no_duplicates() throws Exception {
             List<UserReaction> reactions = List.of(
                     rejection(2, RejectionReason.DONT_WANT_REDUCE), rejection(2, RejectionReason.DONT_WANT_REDUCE));
-            UserProfile profile = profileWithSensitive("[2]"); // 이미 있음
+            UserProfile profile = profileWithSensitive("[2]");
 
             updater.update(profile, Set.of(), reactions, List.of(), false);
 
-            List<Long> result = parseSensitive(profile);
-            assertThat(result.stream().filter(v -> v == 2L).count()).isEqualTo(1);
+            assertThat(parseSensitive(profile)).containsExactly(2L);
+        }
+
+        @Test
+        @DisplayName("효력 있는 거절이 없으면 목록에서 빠진다 — 누적이 아니라 매번 다시 계산 (만료 반영)")
+        void removed_when_no_active_rejection() throws Exception {
+            UserProfile profile = profileWithSensitive("[2, 5]");
+
+            updater.update(
+                    profile, Set.of(), List.of(rejection(5, RejectionReason.DONT_WANT_REDUCE)), List.of(), false);
+
+            assertThat(parseSensitive(profile)).containsExactly(5L);
+        }
+
+        @Test
+        @DisplayName("다른 사유(이미 알아요 등)의 거절은 제외 대상이 아니다")
+        void other_reasons_not_sensitive() throws Exception {
+            UserProfile profile = profileWithSensitive("[]");
+
+            updater.update(
+                    profile,
+                    Set.of(),
+                    List.of(rejection(2, RejectionReason.ALREADY_KNOWN), rejection(3, RejectionReason.TOO_REPETITIVE)),
+                    List.of(),
+                    false);
+
+            assertThat(parseSensitive(profile)).isEmpty();
         }
     }
 
