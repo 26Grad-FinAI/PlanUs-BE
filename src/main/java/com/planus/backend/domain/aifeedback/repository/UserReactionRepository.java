@@ -9,4 +9,7 @@ public interface UserReactionRepository extends JpaRepository<UserReaction, Long
 
     /** 특정 사용자의 전체 반응 목록을 조회한다. */
     List<UserReaction> findByUserId(Long userId);
+
+    /** 한 피드백에 사용자가 남긴 반응 목록 (카테고리별로 하나씩). */
+    List<UserReaction> findByUserIdAndFeedbackId(Long userId, Long feedbackId);
 }

@@ -1,6 +1,7 @@
 package com.planus.backend.domain.aifeedback.entity;
 
 import jakarta.persistence.*;
+import java.time.LocalDateTime;
 import lombok.AllArgsConstructor;
 import lombok.Builder;
 import lombok.Getter;
@@ -33,4 +34,15 @@ public class UserReaction {
 
     @Column(name = "category_id")
     private Integer categoryId; // 권고됐던 카테고리(조회 편의)
+
+    /** 반응을 남긴(마지막으로 바꾼) 시각. 거절 반응의 만료 판단에 쓴다. */
+    @Column(name = "created_at")
+    private LocalDateTime createdAt;
+
+    /** 같은 피드백·카테고리에 다시 반응하면 덮어쓴다. */
+    public void change(Reaction reaction, RejectionReason rejectionReason, LocalDateTime at) {
+        this.reaction = reaction;
+        this.rejectionReason = rejectionReason;
+        this.createdAt = at;
+    }
 }
