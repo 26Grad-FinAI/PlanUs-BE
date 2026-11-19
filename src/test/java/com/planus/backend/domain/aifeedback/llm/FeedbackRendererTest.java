@@ -658,6 +658,45 @@ class FeedbackRendererTest {
                     .doesNotContain("까지만 쓰기");
         }
 
+        @Test
+        @DisplayName("예산이 배분되지 않은 카테고리는 '평소 대비'로 표기하고, 평소 금액은 숫자 검증 허용값 (#141)")
+        void overspend_vsUsualWording() {
+            FeedbackContext ctx = contextBuilder()
+                    .feedbackType(FeedbackType.ALERT)
+                    .overspendCategories(List.of(
+                            new FeedbackRenderer.CategoryOverspend(
+                                    "기타", 180_000, 90_000, null, 5, java.util.Map.of(), 500_000),
+                            new FeedbackRenderer.CategoryOverspend("식대", 70_000, 50_000, null, 3)))
+                    .build();
+
+            assertThat(capturedUserPrompt(ctx))
+                    .contains("- 기타: 평소(직전 3개월 월평균 500,000원)보다 월말 예상 +180,000원")
+                    .contains("- 식대: 월말 예상 초과 +70,000원");
+            assertThat(renderer.verifyNumbers("기타는 평소 월 50만 원보다 18만 원 많아요.", ctx))
+                    .isTrue();
+        }
+
+        @Test
+        @DisplayName("월말 결산도 예산 없는 카테고리는 평소 대비로 표기 (#141)")
+        void monthEnd_vsUsualWording() {
+            LlmClient client = mock(LlmClient.class);
+            when(llmProvider.getIfAvailable()).thenReturn(client);
+            when(client.complete(anyString(), anyString())).thenReturn("이번 달 결산이에요.");
+            renderer.renderMonthEnd(new FeedbackRenderer.MonthEndContext(
+                    java.time.YearMonth.of(2026, 8),
+                    2_000_000,
+                    1_800_000,
+                    -200_000,
+                    List.of(new FeedbackRenderer.CategoryResult("기타", 150_000, true)),
+                    List.of(new FeedbackRenderer.CategoryResult("식대", 40_000))));
+            var captor = org.mockito.ArgumentCaptor.forClass(String.class);
+            verify(client).complete(anyString(), captor.capture());
+
+            assertThat(captor.getValue())
+                    .contains("- 기타: 평소(직전 3개월 월평균)보다 +150,000원")
+                    .contains("- 식대: -40,000원");
+        }
+
         private String capturedSystemPrompt(FeedbackContext ctx) {
             LlmClient client = mock(LlmClient.class);
             when(llmProvider.getIfAvailable()).thenReturn(client);

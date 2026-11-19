@@ -100,6 +100,7 @@ public class FeedbackRenderer {
         - [예산 사용 비율]의 N%는 이번 달 누적 비율이다. 쓸 때는 '지금까지 이번 달 예산의 N%'처럼 '지금까지'를 붙이고, 이번 주 금액과 한 문장에 붙여 이번 주에 쓴 비율처럼 쓰지 않는다. 이번 주에 쓴 비율은 [예산·저축]의 '이번 주 지출만은 이번 달 예산의 W%'만 쓴다.
         - 이번 달 속도(보통 이맘때보다 빠른/느린)는 이번 달 전체 이야기다. '이번 주는'에 붙이지 않는다. 이번 주 증감과 이번 달 속도가 반대면 "이번 주는 줄었지만 이번 달 전체로는 빨라요"처럼 둘을 구분한다.
         - '평소'는 직전 4주 주당 평균이다. 지난주와 비교할 때는 '평소보다'가 아니라 '지난주보다'라고 쓴다.
+        - [초과 예상 카테고리]에 '평소(직전 3개월 월평균 N원)보다'로 적힌 카테고리(예: 기타)는 예산이 따로 없다. '예산을 넘겼다·초과했다'고 쓰지 말고 '평소 기타 지출보다 많다'처럼 평소와 비교해 쓴다.
         - 예산 사용 비율(%)은 '이번 달 예산의 30%를 썼어요'처럼 무엇의 비율인지 밝혀 쓴다. '페이싱', '보통 이맘때 20%인데 지금은 30%'처럼 대상 없이 쓰지 않는다.
         - [절약 액션]의 '모두 지키면' 효과(월말 초과 A → B)는 적힌 카테고리를 모두 지켰을 때의 결과다. 일부 카테고리만 말하면 'X만 지키면'·'X·Y만 지키면' 줄 중 말한 카테고리와 같은 줄의 숫자를 쓰고, '모두 지키면' 숫자를 붙이지 않는다. 액션이 셋 이상이면 'X·Y만 지키면' 줄(줄일 금액이 큰 두 카테고리)을 쓴다. 숫자 개수 제한 때문에 카테고리를 줄였다면 효과 숫자도 빼고 말한다.
         - '가장 컸다', '가장 큰 원인'은 분석 재료에서 금액이 실제로 가장 큰 거래·카테고리에만 쓴다. 건수가 많거나 배수가 큰 것을 '가장 컸다'고 쓰지 않는다.
@@ -140,6 +141,7 @@ public class FeedbackRenderer {
 
         [숫자·사실 규칙]
         - 이번 달 확정 지출과 가용예산을 비교해서 결산한다.
+        - [초과 카테고리]에 '평소(직전 3개월 월평균)보다'로 적힌 카테고리는 예산이 따로 없다. '예산을 넘겼다'고 쓰지 말고 '평소보다 많이(적게) 썼다'고 쓴다.
         - 다음 달 개선할 것을 1가지만 구체적으로 제안한다. 제안에는 금액(원)이나 절약 효과를 붙이지 않는다 — 결산 데이터에 없는 절약 금액을 만들지 않는다.
         - 숫자는 주어진 값만 쓴다. 없는 사실을 만들지 않는다.
         - 금액은 제공된 숫자를 그대로 사용할 것. 임의로 반올림하거나 바꾸지 않는다.
@@ -1020,6 +1022,9 @@ public class FeedbackRenderer {
             }
         }
 
+        c.overspendCategories().forEach(ov -> {
+            if (ov.usualMonthlyWon() > 0) values.add(ov.usualMonthlyWon());
+        });
         values.add(c.weekTotalWon());
         values.add(c.prevWeekTotalWon());
         if (c.weekTotalWon() > 0 && c.prevWeekTotalWon() > 0) {
@@ -1280,10 +1285,16 @@ public class FeedbackRenderer {
             Set<String> actionCategories = new HashSet<>();
             c.actions().forEach(a -> actionCategories.add(a.categoryName()));
             for (CategoryOverspend ov : c.overspendCategories()) {
-                sb.append("- ")
-                        .append(ov.categoryName())
-                        .append(": 월말 예상 초과 +")
-                        .append(exactWon(ov.overAmountWon()))
+                sb.append("- ").append(ov.categoryName());
+                if (ov.usualMonthlyWon() > 0) {
+                    // 예산이 배분되지 않은 카테고리 — 예산 초과가 아니라 평소보다 많은 것 (#141)
+                    sb.append(": 평소(직전 3개월 월평균 ")
+                            .append(exactWon(ov.usualMonthlyWon()))
+                            .append(")보다 월말 예상 +");
+                } else {
+                    sb.append(": 월말 예상 초과 +");
+                }
+                sb.append(exactWon(ov.overAmountWon()))
                         .append(" (이번 주 지출 ")
                         .append(exactWon(ov.thisWeekWon()))
                         .append(", ")
@@ -1608,7 +1619,7 @@ public class FeedbackRenderer {
             for (CategoryResult r : c.overspendCategories()) {
                 sb.append("- ")
                         .append(r.categoryName())
-                        .append(": +")
+                        .append(r.vsUsual() ? ": 평소(직전 3개월 월평균)보다 +" : ": +")
                         .append(exactWon(r.amountWon()))
                         .append("\n");
             }
@@ -1619,7 +1630,7 @@ public class FeedbackRenderer {
             for (CategoryResult r : c.savingCategories()) {
                 sb.append("- ")
                         .append(r.categoryName())
-                        .append(": -")
+                        .append(r.vsUsual() ? ": 평소(직전 3개월 월평균)보다 -" : ": -")
                         .append(exactWon(r.amountWon()))
                         .append("\n");
             }
@@ -1914,7 +1925,18 @@ public class FeedbackRenderer {
             long thisWeekWon,
             CauseSignals causeSignals,
             int thisWeekCount,
-            Map<String, Integer> merchantCounts) {
+            Map<String, Integer> merchantCounts,
+            long usualMonthlyWon) {
+
+        public CategoryOverspend(
+                String categoryName,
+                long overAmountWon,
+                long thisWeekWon,
+                CauseSignals causeSignals,
+                int thisWeekCount,
+                Map<String, Integer> merchantCounts) {
+            this(categoryName, overAmountWon, thisWeekWon, causeSignals, thisWeekCount, merchantCounts, 0);
+        }
 
         public CategoryOverspend(
                 String categoryName,
@@ -1961,7 +1983,13 @@ public class FeedbackRenderer {
             List<CategoryResult> savingCategories) {}
 
     /** 카테고리별 결산 결과. {@code amountWon}은 항상 양수(초과/절약 절댓값). */
-    public record CategoryResult(String categoryName, long amountWon) {}
+    public record CategoryResult(String categoryName, long amountWon, boolean vsUsual) {
+
+        /** 예산과 비교한 결과. */
+        public CategoryResult(String categoryName, long amountWon) {
+            this(categoryName, amountWon, false);
+        }
+    }
 
     /**
      * 이번 주 주목 거래. 이상치 감지됐거나 REGRET·IMPULSE 감정 태그가 있거나 메모가 있는 거래.

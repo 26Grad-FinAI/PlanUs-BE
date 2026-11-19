@@ -199,8 +199,8 @@ public class AiFeedbackService {
         if (catBudget.isEmpty()) return Optional.empty();
 
         // ── [1] 지출 데이터 윈도우 조회 ──
-        LocalDate queryStart =
-                Collections.min(List.of(weekStart.minusWeeks(p.getBaselineWeeks()), monthStart.minusMonths(1)));
+        LocalDate queryStart = Collections.min(
+                List.of(weekStart.minusWeeks(p.getBaselineWeeks()), monthStart.minusMonths(USUAL_MONTHS)));
         LocalDate queryEnd = weekEnd.withDayOfMonth(dim);
         LocalDateTime from = queryStart.atStartOfDay();
         LocalDateTime to = queryEnd.atTime(LocalTime.MAX);
@@ -238,6 +238,8 @@ public class AiFeedbackService {
         Anomaly top = null;
         Confidence anomalyConfidence = Confidence.LOW;
         Map<Integer, Long> overspend = Map.of();
+        // 예산이 배분되지 않은 카테고리(기타)의 평소 월 지출 — 초과를 예산 대신 평소와 비교한다 (#141)
+        Map<Integer, Long> usualMonthly = new HashMap<>();
         Map<Integer, CauseSignals> causeSignalsByCategory = Map.of();
         List<ActionPlan> actions = List.of();
         Map<Integer, Long> categoryRemainingExpected = Map.of();
@@ -278,7 +280,7 @@ public class AiFeedbackService {
             burnRate = available > 0 ? (double) predictedMonthEnd / available : 0;
 
             // ── [5] 카테고리별 초과 + 원인 신호 조립 ──
-            overspend = computeOverspend(window, catBudget, monthStart, weekEnd, day, dim, dowWeights);
+            overspend = computeOverspend(window, catBudget, monthStart, weekEnd, day, dim, dowWeights, usualMonthly);
             causeSignalsByCategory = new HashMap<>();
             for (int cat : overspend.keySet()) {
                 CauseSignals signals = causeAssembler.assemble(cat, window, weekStart, weekEnd, profile);
@@ -359,7 +361,8 @@ public class AiFeedbackService {
                             sum(window, thisWeekVar),
                             finalCauseSignals.get(cat),
                             count(window, thisWeekVar),
-                            MerchantNames.countByMerchant(memos));
+                            MerchantNames.countByMerchant(memos),
+                            usualMonthly.getOrDefault(cat, 0L));
                 })
                 .toList();
 
@@ -554,6 +557,13 @@ public class AiFeedbackService {
         LocalDateTime from = monthStart.atStartOfDay();
         LocalDateTime to = monthEnd.atTime(LocalTime.MAX);
         List<Expense> expenses = expenseRepo.findByUserIdAndExpenseDateBetween(userId, from, to);
+        // 예산이 배분되지 않은 카테고리(기타)는 직전 3개월 월평균과 비교한다 (#141)
+        List<Expense> history = catBudget.containsValue(0L)
+                ? expenseRepo.findByUserIdAndExpenseDateBetween(
+                        userId,
+                        monthStart.minusMonths(USUAL_MONTHS).atStartOfDay(),
+                        monthStart.minusDays(1).atTime(LocalTime.MAX))
+                : List.of();
 
         // 실제 총지출 (변동+고정 포함)
         long actualTotal = expenses.stream()
@@ -576,12 +586,17 @@ public class AiFeedbackService {
         for (var entry : catBudget.entrySet()) {
             int cat = entry.getKey();
             long budget = entry.getValue();
+            boolean vsUsual = budget <= 0;
+            if (vsUsual) {
+                budget = usualMonthlyTotal(history, monthStart, cat);
+                if (budget <= 0) continue; // 평소를 알 수 없으면 판정하지 않는다
+            }
             long actual = catActual.getOrDefault(cat, 0L);
             long diff = actual - budget;
             if (diff > 0) {
-                overspend.add(new CategoryResult(Categories.name(cat), diff));
+                overspend.add(new CategoryResult(Categories.name(cat), diff, vsUsual));
             } else if (diff < 0 && actual > 0) {
-                savings.add(new CategoryResult(Categories.name(cat), -diff));
+                savings.add(new CategoryResult(Categories.name(cat), -diff, vsUsual));
             }
         }
         overspend.sort(Comparator.comparingLong(CategoryResult::amountWon).reversed());
@@ -1037,10 +1052,18 @@ public class AiFeedbackService {
             LocalDate weekEnd,
             int day,
             int dim,
-            double[] dowWeights) {
+            double[] dowWeights,
+            Map<Integer, Long> usualMonthlyOut) {
         Map<Integer, Long> overspend = new HashMap<>();
         for (var entry : catBudget.entrySet()) {
             int cat = entry.getKey();
+            // 예산이 배분되지 않은 카테고리(기타 등)는 예산 0원과 비교하면 지출 전액이 초과가 된다 (#141) — 평소(직전 3개월 월평균)와 비교한다
+            long budget = entry.getValue();
+            if (budget <= 0) {
+                budget = usualMonthlyTotal(window, monthStart, cat);
+                if (budget <= 0) continue; // 평소를 알 수 없으면 초과를 판정하지 않는다
+                usualMonthlyOut.put(cat, budget);
+            }
             long varMtd =
                     sum(window, e -> e.getCategoryId() == cat && inMonth(e, monthStart, weekEnd) && e.isVariable());
             long fixMtd = sum(
@@ -1053,7 +1076,7 @@ public class AiFeedbackService {
             long blended =
                     BudgetProjector.predictCategory(varMtd, fixMtd, day, dim, priorCatRate, dowWeights, monthStart);
             long currentPaceOnly = Math.round((double) varMtd / Math.max(day, 1) * dim) + fixMtd;
-            long over = Math.min(blended, currentPaceOnly) - entry.getValue();
+            long over = Math.min(blended, currentPaceOnly) - budget;
             if (over > 0) overspend.put(cat, over);
         }
         return overspend;
@@ -1241,6 +1264,36 @@ public class AiFeedbackService {
      * @param monthStart 이번 달 1일
      * @return 전월 변동 지출 일평균(원), 거래 없으면 0.0
      */
+    /** 평소 월 지출을 보는 기간 (개월). */
+    private static final int USUAL_MONTHS = 3;
+    /** 평소를 판단하려면 지출이 있는 달이 이만큼은 있어야 한다. */
+    private static final int USUAL_MIN_MONTHS = 2;
+
+    /**
+     * 카테고리의 평소 월 지출 — 직전 3개월 중 지출이 있는 달의 월평균(고정 포함). 지출이 있는 달이 {@value #USUAL_MIN_MONTHS}개 미만이면 0.
+     * 예산이 배분되지 않는 기타의 초과 기준이다 (#141).
+     */
+    static long usualMonthlyTotal(List<Expense> window, LocalDate monthStart, int categoryId) {
+        long total = 0;
+        int months = 0;
+        for (int k = 1; k <= USUAL_MONTHS; k++) {
+            LocalDate from = monthStart.minusMonths(k);
+            LocalDate to = from.plusMonths(1);
+            long sum = window.stream()
+                    .filter(e -> e.isExpense()
+                            && e.getCategoryId() == categoryId
+                            && !e.getDate().isBefore(from)
+                            && e.getDate().isBefore(to))
+                    .mapToLong(Expense::getAmount)
+                    .sum();
+            if (sum > 0) {
+                total += sum;
+                months++;
+            }
+        }
+        return months >= USUAL_MIN_MONTHS ? total / months : 0;
+    }
+
     private double priorVariableDailyRate(List<Expense> window, LocalDate monthStart) {
         return priorVariableDailyRate(window, monthStart, null);
     }
