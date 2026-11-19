@@ -51,6 +51,7 @@ import java.time.temporal.TemporalAdjusters;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Comparator;
+import java.util.HashSet;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
@@ -211,6 +212,99 @@ class ProductionPathValidationTest {
             printed++;
         }
         assertThat(printed).isGreaterThan(0);
+    }
+
+    /**
+     * 기준선 측정 (#141, LLM 없음): 월말 예상 초과가 가장 큰 카테고리가 절약 액션에 없는 주, 그중 만족 태그 70% 규칙 때문인 주를 센다.
+     *
+     * <p>실행: {@code SATISFIED_BASELINE=1 ./gradlew test --tests "*satisfiedExclusionBaseline" -i}
+     * 5~16주차(조정에 쓰지 않은 구간)와 17주차~(기존 측정 구간)를 나눠 출력한다.
+     */
+    @Test
+    @DisplayName("[기준선] 가장 큰 초과 카테고리가 만족 70% 규칙으로 절약 액션에서 빠진 주")
+    void satisfiedExclusionBaseline() throws Exception {
+        Assumptions.assumeTrue(System.getenv("SATISFIED_BASELINE") != null, "SATISFIED_BASELINE 미설정 → 스킵");
+
+        List<Expense> expenses = loadTransactions();
+        LocalDate dataEnd = expenses.stream()
+                .map(Expense::getDate)
+                .max(Comparator.naturalOrder())
+                .orElseThrow();
+        Map<YearMonth, Map<Integer, Long>> budgets = withDefaultBudgets(loadBudgets(), dataEnd);
+        LocalDate firstMonday = expenses.stream()
+                .map(Expense::getDate)
+                .min(Comparator.naturalOrder())
+                .orElseThrow()
+                .with(TemporalAdjusters.nextOrSame(DayOfWeek.MONDAY));
+        Store store = new Store(expenses, budgets);
+        AiFeedbackService service = store.service((system, user) -> "이번 주 피드백이에요.");
+        ObjectMapper mapper = new ObjectMapper();
+        Set<Long> essential =
+                new HashSet<>(new AiFeedbackProperties().getCategory().getEssential());
+
+        // [구간][지표] 0: 초과 있는 ALERT 주, 1: 액션 있는 주, 2: 최대 초과 카테고리가 액션에 없음, 3: 그중 만족 70% 규칙 해당
+        int[][] counts = new int[2][4];
+        List<String> examples = new ArrayList<>();
+        for (int week = 5; ; week++) {
+            LocalDate weekEnd = firstMonday.plusWeeks(week).minusDays(1);
+            if (weekEnd.isAfter(dataEnd)) break;
+            Optional<AiFeedback> fb = service.generateWeekly(USER_ID, weekEnd);
+            if (fb.isEmpty() || fb.get().getPayload() == null) continue;
+            com.fasterxml.jackson.databind.JsonNode payload =
+                    mapper.readTree(fb.get().getPayload());
+            if (!"ALERT".equals(payload.path("feedbackType").asText())) continue;
+            // 필수 카테고리는 원래 제외이므로 비교에서 뺀다
+            Map<Integer, Long> over = new java.util.TreeMap<>();
+            payload.path("overspend").fields().forEachRemaining(e -> {
+                int cat = Integer.parseInt(e.getKey());
+                if (!essential.contains((long) cat)) over.put(cat, e.getValue().asLong());
+            });
+            if (over.isEmpty()) continue;
+            int bucket = week < FIRST_WEEK ? 0 : 1;
+            counts[bucket][0]++;
+            Set<Integer> actionCats = new HashSet<>();
+            payload.path("actions")
+                    .forEach(a -> actionCats.add(a.path("categoryId").asInt()));
+            if (!actionCats.isEmpty()) counts[bucket][1]++;
+            else continue; // 전체 초과가 없어 액션 자체가 없는 주는 비교하지 않는다
+            int top = over.entrySet().stream()
+                    .max(Map.Entry.comparingByValue())
+                    .orElseThrow()
+                    .getKey();
+            if (actionCats.contains(top)) continue;
+            counts[bucket][2]++;
+            YearMonth ym = YearMonth.from(weekEnd);
+            Map<String, Long> emotion = expenses.stream()
+                    .filter(e -> e.isVariable()
+                            && e.getCategoryId() == top
+                            && YearMonth.from(e.getDate()).equals(ym)
+                            && !e.getDate().isAfter(weekEnd)
+                            && e.getEmotion() != null
+                            && !e.getEmotion().isBlank())
+                    .collect(Collectors.groupingBy(Expense::getEmotion, Collectors.counting()));
+            long tagged = emotion.values().stream().mapToLong(Long::longValue).sum();
+            double satisfied = tagged == 0 ? 0 : emotion.getOrDefault("SATISFIED", 0L) / (double) tagged;
+            if (satisfied >= 0.70) {
+                counts[bucket][3]++;
+                examples.add(String.format(
+                        "제%d주차 최대 초과 카테고리 %d (+%,d원) 만족 %.0f%% (태그 %d건), 제안된 카테고리 %s",
+                        week, top, over.get(top), satisfied * 100, tagged, actionCats));
+            }
+        }
+        String[] names = {"5~16주차 (조정에 쓰지 않은 구간)", "17주차~ (기존 측정 구간)"};
+        for (int b = 0; b < 2; b++) {
+            System.out.printf(
+                    "%n[%s] 초과 있는 ALERT 주 %d, 그중 절약 액션 있는 주 %d%n"
+                            + "  최대 초과 카테고리가 액션에 없는 주: %d (%.1f%%)%n"
+                            + "  그중 만족 70%% 규칙 해당: %d%n",
+                    names[b],
+                    counts[b][0],
+                    counts[b][1],
+                    counts[b][2],
+                    counts[b][1] == 0 ? 0.0 : 100.0 * counts[b][2] / counts[b][1],
+                    counts[b][3]);
+        }
+        examples.forEach(System.out::println);
     }
 
     @Test
