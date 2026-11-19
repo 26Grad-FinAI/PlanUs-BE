@@ -663,6 +663,18 @@ class FeedbackRendererTest {
                     .isFalse();
             assertThat(renderer.verifyNumbers("기타와 식대를 지키면 월말 초과를 30만 원에서 7만 원으로 줄일 수 있어요.", ctx))
                     .isTrue();
+            // 감소 동사 없이도 한 카테고리만 말하고 두 개 조합의 월말 초과 금액을 쓰면 거절
+            assertThat(renderer.verifyEffectScope("기타만 지키면 월말 초과는 7만 원이에요.", ctx))
+                    .isFalse();
+            // 이번 주 지출·평균 비교 금액이 조합 잔액과 같아도 월말 초과 문장이 아니면 거절하지 않음
+            FeedbackContext weekSame = contextBuilder()
+                    .weekTotalWon(70_000)
+                    .recent4WeekAvgWon(100_000)
+                    .savingsImpactWon(-300_000)
+                    .actions(ctx.actions())
+                    .build();
+            assertThat(renderer.verifyEffectScope("이번 주는 7만 원을 써서 최근 4주 평균보다 3만 원 줄었어요.", weekSame))
+                    .isTrue();
         }
 
         @Test

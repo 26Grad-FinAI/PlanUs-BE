@@ -471,7 +471,9 @@ public class FeedbackRenderer {
         Optional<Long> pairLeft = topPairLeft(c);
         if (pairLeft.isPresent() && pairLeft.get() != allLeft) {
             for (String sentence : sentences(text)) {
-                boolean claimsPair = EFFECT_VERB.matcher(sentence).find()
+                // 월말 초과의 결과 금액에만 적용한다 — 이번 주 지출·평균 비교 금액이 우연히 같아도 거절하지 않고, 감소 동사 없이
+                // "기타만 지키면 월말 초과는 7만 원"이라고 써도 잡는다 (리뷰 지적)
+                boolean claimsPair = sentence.contains("초과")
                         && extractMoneyMentions(sentence).stream().anyMatch(m -> matches(m, pairLeft.get()));
                 if (claimsPair && !topPair(c).stream().allMatch(a -> sentence.contains(a.categoryName()))) return false;
             }
