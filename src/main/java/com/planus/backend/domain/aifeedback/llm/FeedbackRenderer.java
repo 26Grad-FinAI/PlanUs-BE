@@ -101,7 +101,7 @@ public class FeedbackRenderer {
         - 이번 달 속도(보통 이맘때보다 빠른/느린)는 이번 달 전체 이야기다. '이번 주는'에 붙이지 않는다. 이번 주 증감과 이번 달 속도가 반대면 "이번 주는 줄었지만 이번 달 전체로는 빨라요"처럼 둘을 구분한다.
         - '평소'는 직전 4주 주당 평균이다. 지난주와 비교할 때는 '평소보다'가 아니라 '지난주보다'라고 쓴다.
         - 예산 사용 비율(%)은 '이번 달 예산의 30%를 썼어요'처럼 무엇의 비율인지 밝혀 쓴다. '페이싱', '보통 이맘때 20%인데 지금은 30%'처럼 대상 없이 쓰지 않는다.
-        - [절약 액션]의 '모두 지키면' 효과(월말 초과 A → B)는 적힌 카테고리를 모두 지켰을 때의 결과다. 일부 카테고리만 말하면 'X만 지키면' 줄의 숫자를 쓰고, '모두 지키면' 숫자를 붙이지 않는다. 숫자 개수 제한 때문에 카테고리를 줄였다면 효과 숫자도 빼고 말한다.
+        - [절약 액션]의 '모두 지키면' 효과(월말 초과 A → B)는 적힌 카테고리를 모두 지켰을 때의 결과다. 일부 카테고리만 말하면 'X만 지키면'·'X·Y만 지키면' 줄 중 말한 카테고리와 같은 줄의 숫자를 쓰고, '모두 지키면' 숫자를 붙이지 않는다. 액션이 셋 이상이면 'X·Y만 지키면' 줄(줄일 금액이 큰 두 카테고리)을 쓴다. 숫자 개수 제한 때문에 카테고리를 줄였다면 효과 숫자도 빼고 말한다.
         - '가장 컸다', '가장 큰 원인'은 분석 재료에서 금액이 실제로 가장 큰 거래·카테고리에만 쓴다. 건수가 많거나 배수가 큰 것을 '가장 컸다'고 쓰지 않는다.
         - 절약 효과는 [절약 액션]의 '모두 지키면' 줄대로 '월말 초과가 A원에서 B원으로 줄어요'처럼 줄어드는 폭으로 쓴다. 초과가 남는데 '예산 안에 들어온다', '목표를 지킬 수 있다'고 쓰지 않고, '다 메우기 어렵다', '받아들이자', '받아들이고'처럼 체념하는 말은 쓰지 않는다. 남은 기간이 짧아 줄어드는 폭이 작으면 그 폭만 짧게 말하고 다음 달에 해볼 행동으로 넘어간다. 줄어드는 폭이 작으면 '크게 낮출 수 있다'처럼 과장하지 말고 초과의 주된 원인과 다음 행동을 짚는다.
         - 초과 카테고리의 '월말 예상 초과'는 지금 속도로 가면 월말에 그 카테고리 예산을 넘을 것으로 예상되는 금액이다. 이미 쓴 금액이 아니므로 '누적됐다', '이미 넘었다'처럼 쓰지 않고 '이대로면 월말에 N원 넘을 것 같아요'처럼 예상으로 쓴다. '이번 주 지출'과 합산하지 않는다.
@@ -466,6 +466,17 @@ public class FeedbackRenderer {
             if (claimsWithin && allLeft > 0) return false;
             if (c.actions().size() >= 2 && !c.actions().stream().allMatch(a -> sentence.contains(a.categoryName())))
                 return false;
+        }
+        // 큰 두 개 조합 효과는 그 두 카테고리를 말한 문장에만 (#143)
+        Optional<Long> pairLeft = topPairLeft(c);
+        if (pairLeft.isPresent() && pairLeft.get() != allLeft) {
+            for (String sentence : sentences(text)) {
+                // 월말 초과의 결과 금액에만 적용한다 — 이번 주 지출·평균 비교 금액이 우연히 같아도 거절하지 않고, 감소 동사 없이
+                // "기타만 지키면 월말 초과는 7만 원"이라고 써도 잡는다 (리뷰 지적)
+                boolean claimsPair = sentence.contains("초과")
+                        && extractMoneyMentions(sentence).stream().anyMatch(m -> matches(m, pairLeft.get()));
+                if (claimsPair && !topPair(c).stream().allMatch(a -> sentence.contains(a.categoryName()))) return false;
+            }
         }
         return true;
     }
@@ -915,6 +926,7 @@ public class FeedbackRenderer {
             if (c.actions().size() >= 2) {
                 c.actions().forEach(a -> values.add(Math.abs(Math.abs(c.savingsImpactWon()) - a.reductionWon())));
             }
+            topPairLeft(c).ifPresent(values::add);
         }
 
         values.add(c.weekTotalWon());
@@ -1485,6 +1497,18 @@ public class FeedbackRenderer {
             }
         }
 
+        // 셋 이상이면 큰 두 개 조합도 준다 — 숫자 개수 제한으로 두 카테고리만 말하면서 '모두 지키면' 효과를 붙이는 오류 (#143 홀드아웃,
+        // 6주차: 액션 5개 중 식대·기타만 말하고 5개 모두의 효과를 씀). 다 지켜도 초과가 남으면 그 값, 아니면 '예산 안'.
+        topPairLeft(c).ifPresent(pairLeft -> sb.append("- ")
+                .append(topPair(c).get(0).categoryName())
+                .append("·")
+                .append(topPair(c).get(1).categoryName())
+                .append("만 지키면 전체 월말 초과 ")
+                .append(exactWon(gap))
+                .append(" → ")
+                .append(exactWon(pairLeft))
+                .append('\n'));
+
         long left = Math.abs(c.savingsImpactWon()) - actionTotal(c);
         if (left > 0) {
             sb.append("- ")
@@ -1498,6 +1522,25 @@ public class FeedbackRenderer {
             sb.append("- ").append(actionCategories(c)).append(" 모두 지키면 이번 달 예산 안에 들어올 수 있음");
         }
         sb.append("\n");
+    }
+
+    /** 줄일 금액이 큰 두 액션 (액션이 셋 이상일 때만). */
+    static List<ActionSummary> topPair(FeedbackContext c) {
+        if (c.actions().size() < 3) return List.of();
+        return c.actions().stream()
+                .sorted(Comparator.comparingLong(ActionSummary::reductionWon).reversed())
+                .limit(2)
+                .toList();
+    }
+
+    /** 큰 두 액션만 지켰을 때 남는 전체 월말 초과. 액션이 셋 미만이거나 초과가 없어지면 비어 있다. */
+    static Optional<Long> topPairLeft(FeedbackContext c) {
+        List<ActionSummary> pair = topPair(c);
+        if (pair.isEmpty() || c.savingsImpactWon() >= 0) return Optional.empty();
+        long left = Math.abs(c.savingsImpactWon())
+                - pair.get(0).reductionWon()
+                - pair.get(1).reductionWon();
+        return left > 0 ? Optional.of(left) : Optional.empty();
     }
 
     /** 줄일 금액이 그 카테고리의 월말 예상 초과액 이상이면, 다 지켰을 때 그 카테고리는 예산 안이다. */

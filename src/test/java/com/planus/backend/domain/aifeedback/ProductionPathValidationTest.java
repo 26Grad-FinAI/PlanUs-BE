@@ -92,6 +92,16 @@ class ProductionPathValidationTest {
 
     private static final int LLM_REPEAT = Math.max(
             1, Integer.parseInt(Optional.ofNullable(System.getenv("LLM_REPEAT")).orElse("1")));
+    /**
+     * 생성을 시작할 주차. 기본은 {@value #FIRST_WEEK}주차(#111~#144 측정 구간), {@code LLM_WEEKS}에 더 이른 주차가 있으면 거기서 시작한다 —
+     * 측정·조정에 쓰지 않은 5~16주차를 평가용으로 쓰기 위해 (#143). 앞 주차를 건너뛰어도 저장소는 같은 거래 내역을 쓴다.
+     */
+    private static int firstWeek() {
+        return LLM_WEEKS.isEmpty()
+                ? FIRST_WEEK
+                : Math.min(FIRST_WEEK, LLM_WEEKS.stream().min(Integer::compare).orElse(FIRST_WEEK));
+    }
+
     private static final Set<Integer> LLM_WEEKS = Optional.ofNullable(System.getenv("LLM_WEEKS"))
             .filter(v -> !v.isBlank())
             .map(v -> Arrays.stream(v.split(","))
@@ -136,7 +146,7 @@ class ProductionPathValidationTest {
             LlmClient routed = (system, user) -> current[0].wrap(raw).complete(system, user);
             AiFeedbackService service = store.service(routed);
 
-            for (int week = FIRST_WEEK; ; week++) {
+            for (int week = firstWeek(); ; week++) {
                 LocalDate weekEnd = firstMonday.plusWeeks(week).minusDays(1);
                 if (weekEnd.isAfter(dataEnd)) break;
                 if (!LLM_WEEKS.isEmpty() && !LLM_WEEKS.contains(week)) continue;
@@ -191,7 +201,7 @@ class ProductionPathValidationTest {
         AiFeedbackService service = new Store(expenses, budgets).service(fake);
 
         int printed = 0;
-        for (int week = FIRST_WEEK; ; week++) {
+        for (int week = firstWeek(); ; week++) {
             LocalDate weekEnd = firstMonday.plusWeeks(week).minusDays(1);
             if (weekEnd.isAfter(dataEnd)) break;
             last[0] = null;
