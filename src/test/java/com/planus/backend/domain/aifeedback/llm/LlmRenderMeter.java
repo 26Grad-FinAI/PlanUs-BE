@@ -117,6 +117,7 @@ public final class LlmRenderMeter {
         responses += (int) currentCalls.stream().filter(LlmRenderMeter::hasText).count();
 
         int acceptedIdx = currentCalls.lastIndexOf(finalText);
+        if (acceptedIdx < 0) acceptedIdx = acceptedWithActionSentence(finalText);
         int correctedIdx = acceptedIdx >= 0 ? -1 : correctedFrom(finalText);
         if (acceptedIdx >= 0) {
             passedAtAttempt.merge(acceptedIdx + 1, 1, Integer::sum);
@@ -152,6 +153,22 @@ public final class LlmRenderMeter {
      *
      * @return 원 응답의 순번(0부터), 아니면 -1
      */
+    /**
+     * 절약 액션이 있는 주는 마지막 문장을 코드가 붙인다 (#146). 마지막 문장을 뺀 나머지가 어떤 응답의 앞 두 문장과 같으면 그 응답이 통과한 것이다.
+     *
+     * @return 통과한 응답의 순번(0부터), 아니면 -1
+     */
+    private int acceptedWithActionSentence(String finalText) {
+        int cut = finalText.lastIndexOf(". ");
+        if (cut < 0) return -1;
+        String lead = finalText.substring(0, cut + 1).strip();
+        for (int i = currentCalls.size() - 1; i >= 0; i--) {
+            String call = currentCalls.get(i);
+            if (hasText(call) && FeedbackRenderer.leadSentences(call).equals(lead)) return i;
+        }
+        return -1;
+    }
+
     private int correctedFrom(String finalText) {
         int cut = finalText.indexOf(". ");
         if (cut < 0) return -1;
