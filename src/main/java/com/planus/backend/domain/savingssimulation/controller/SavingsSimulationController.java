@@ -21,7 +21,7 @@ public class SavingsSimulationController {
 
     private final SavingsSimulationService service;
 
-    @Operation(summary = "절약 제안 조회", description = "해당 월의 피드백에서 행동 기반 절약 제안 목록을 조회한다.")
+    @Operation(summary = "절약 제안 조회", description = "해당 월의 최신 주간 피드백에서 절약 제안과 예산 반영 여부를 조회한다.")
     @GetMapping("/suggest")
     public ApiResponse<SuggestResponse> suggest(
             @AuthenticationPrincipal Long userId,
@@ -40,7 +40,7 @@ public class SavingsSimulationController {
         return ApiResponse.onSuccess(GeneralSuccessCode.OK, response);
     }
 
-    @Operation(summary = "시뮬레이션 결과 예산 반영", description = "시뮬레이션 결과를 이번 달 카테고리별 예산에 반영한다.")
+    @Operation(summary = "시뮬레이션 결과 예산 반영", description = "지정한 주간 피드백의 절약 제안을 카테고리별 예산에 반영한다. 동일 피드백은 한 번만 적용할 수 있다.")
     @PostMapping("/apply")
     public ApiResponse<ApplyResponse> apply(
             @AuthenticationPrincipal Long userId, @Valid @RequestBody ApplyRequest request) {

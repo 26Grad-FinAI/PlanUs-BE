@@ -7,6 +7,9 @@ import org.springframework.data.jpa.repository.JpaRepository;
 /** 절약 시뮬레이션 리포지토리. */
 public interface SavingSimulationRepository extends JpaRepository<SavingSimulation, Long> {
 
+    /** 해당 사용자·피드백의 예산 반영 여부를 확인한다. */
+    boolean existsByUserIdAndFeedbackIdAndIsAppliedTrue(Long userId, Long feedbackId);
+
     /** 해당 사용자·피드백에 대해 적용 완료된 시뮬레이션을 조회한다. */
     Optional<SavingSimulation> findByUserIdAndFeedbackIdAndIsAppliedTrue(Long userId, Long feedbackId);
 }
