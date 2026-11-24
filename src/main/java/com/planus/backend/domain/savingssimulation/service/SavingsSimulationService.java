@@ -98,7 +98,8 @@ public class SavingsSimulationService {
         UserAccount user =
                 userRepo.findById(userId).orElseThrow(() -> new GeneralException(GeneralErrorCode.NOT_FOUND));
 
-        List<EnrichedAction> enriched = loadEnrichedActions(userId, request.yearMonth());
+        AiFeedback feedback = loadRequestedFeedback(userId, request.feedbackId(), request.yearMonth());
+        List<EnrichedAction> enriched = parseEnrichedActions(feedback, request.yearMonth());
         Map<Integer, EnrichedAction> actionMap =
                 enriched.stream().collect(Collectors.toMap(EnrichedAction::categoryId, a -> a, (a, b) -> a));
 
@@ -361,11 +362,6 @@ public class SavingsSimulationService {
         // 카테고리 하나와 전체 변동지출에 같은 식을 쓴다
         return BudgetProjector.predictCategory(
                 mtd, 0, today.getDayOfMonth(), ym.lengthOfMonth(), priorDailyRate, null, null);
-    }
-
-    private List<EnrichedAction> loadEnrichedActions(Long userId, String yearMonth) {
-        AiFeedback feedback = loadFeedback(userId, yearMonth);
-        return parseEnrichedActions(feedback, yearMonth);
     }
 
     private AiFeedback loadFeedback(Long userId, String yearMonth) {

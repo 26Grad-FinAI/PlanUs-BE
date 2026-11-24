@@ -31,7 +31,7 @@ public class SavingsSimulationController {
         return ApiResponse.onSuccess(GeneralSuccessCode.OK, response);
     }
 
-    @Operation(summary = "절약 효과 시뮬레이션", description = "선택한 절약 제안의 효과를 시뮬레이션한다.")
+    @Operation(summary = "절약 효과 시뮬레이션", description = "지정한 주간 피드백에서 선택한 절약 제안의 효과를 시뮬레이션한다.")
     @PostMapping("/simulate")
     public ApiResponse<SimulateResponse> simulate(
             @AuthenticationPrincipal Long userId, @Valid @RequestBody SimulateRequest request) {
