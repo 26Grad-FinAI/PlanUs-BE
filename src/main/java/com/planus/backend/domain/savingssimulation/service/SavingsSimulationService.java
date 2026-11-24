@@ -66,7 +66,8 @@ public class SavingsSimulationService {
      * @return 절약 제안 응답
      */
     public SuggestResponse suggest(Long userId, String yearMonth) {
-        List<EnrichedAction> enriched = loadEnrichedActions(userId, yearMonth);
+        AiFeedback feedback = loadFeedback(userId, yearMonth);
+        List<EnrichedAction> enriched = parseEnrichedActions(feedback, yearMonth);
         LocalDate monthStart = parseYearMonth(yearMonth);
 
         List<SuggestResponse.ActionCard> cards = enriched.stream()
@@ -82,7 +83,8 @@ public class SavingsSimulationService {
         long totalMonthly = cards.stream()
                 .mapToLong(SuggestResponse.ActionCard::monthlySavingWon)
                 .sum();
-        return new SuggestResponse(cards, totalReduction, totalMonthly, totalMonthly * 12);
+        boolean applied = simulationRepo.existsByUserIdAndFeedbackIdAndIsAppliedTrue(userId, feedback.getId());
+        return new SuggestResponse(feedback.getId(), applied, cards, totalReduction, totalMonthly, totalMonthly * 12);
     }
 
     /**
@@ -96,7 +98,8 @@ public class SavingsSimulationService {
         UserAccount user =
                 userRepo.findById(userId).orElseThrow(() -> new GeneralException(GeneralErrorCode.NOT_FOUND));
 
-        List<EnrichedAction> enriched = loadEnrichedActions(userId, request.yearMonth());
+        AiFeedback feedback = loadRequestedFeedback(userId, request.feedbackId(), request.yearMonth());
+        List<EnrichedAction> enriched = parseEnrichedActions(feedback, request.yearMonth());
         Map<Integer, EnrichedAction> actionMap =
                 enriched.stream().collect(Collectors.toMap(EnrichedAction::categoryId, a -> a, (a, b) -> a));
 
@@ -194,7 +197,7 @@ public class SavingsSimulationService {
         UserAccount user =
                 userRepo.findById(userId).orElseThrow(() -> new GeneralException(GeneralErrorCode.NOT_FOUND));
 
-        AiFeedback feedback = loadFeedback(userId, request.yearMonth());
+        AiFeedback feedback = loadRequestedFeedback(userId, request.feedbackId(), request.yearMonth());
         List<EnrichedAction> enriched = parseEnrichedActions(feedback, request.yearMonth());
         Map<Integer, EnrichedAction> actionMap =
                 enriched.stream().collect(Collectors.toMap(EnrichedAction::categoryId, a -> a, (a, b) -> a));
@@ -361,11 +364,6 @@ public class SavingsSimulationService {
                 mtd, 0, today.getDayOfMonth(), ym.lengthOfMonth(), priorDailyRate, null, null);
     }
 
-    private List<EnrichedAction> loadEnrichedActions(Long userId, String yearMonth) {
-        AiFeedback feedback = loadFeedback(userId, yearMonth);
-        return parseEnrichedActions(feedback, yearMonth);
-    }
-
     private AiFeedback loadFeedback(Long userId, String yearMonth) {
         LocalDate monthStart = parseYearMonth(yearMonth);
 
@@ -374,6 +372,16 @@ public class SavingsSimulationService {
         return feedbacks.stream()
                 .filter(f -> f.getYearMonth().equals(monthStart))
                 .findFirst()
+                .orElseThrow(() -> new GeneralException(GeneralErrorCode.FEEDBACK_NOT_FOUND));
+    }
+
+    private AiFeedback loadRequestedFeedback(Long userId, Long feedbackId, String yearMonth) {
+        LocalDate monthStart = parseYearMonth(yearMonth);
+        return feedbackRepo
+                .findById(feedbackId)
+                .filter(feedback -> userId.equals(feedback.getUserId())
+                        && monthStart.equals(feedback.getYearMonth())
+                        && "WEEKLY".equals(feedback.getPeriodType()))
                 .orElseThrow(() -> new GeneralException(GeneralErrorCode.FEEDBACK_NOT_FOUND));
     }
 

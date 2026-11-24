@@ -18,6 +18,9 @@ import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Nested;
 import org.junit.jupiter.api.Test;
+import org.junit.jupiter.params.ParameterizedTest;
+import org.junit.jupiter.params.provider.NullSource;
+import org.junit.jupiter.params.provider.ValueSource;
 import org.springframework.http.MediaType;
 import org.springframework.security.authentication.UsernamePasswordAuthenticationToken;
 import org.springframework.security.core.context.SecurityContextHolder;
@@ -55,12 +58,15 @@ class SavingsSimulationControllerTest {
     @DisplayName("GET /api/savings-simulation/suggest")
     class SuggestEndpoint {
 
-        @Test
+        @ParameterizedTest
+        @ValueSource(booleans = {false, true})
         @DisplayName("정상 조회 시 200과 제안 목록 반환")
-        void success() throws Exception {
+        void success(boolean applied) throws Exception {
             setAuth(1L);
 
             SuggestResponse response = new SuggestResponse(
+                    123L,
+                    applied,
                     List.of(new SuggestResponse.ActionCard(
                             7,
                             "식대",
@@ -81,6 +87,8 @@ class SavingsSimulationControllerTest {
             mockMvc.perform(get("/api/savings-simulation/suggest").param("yearMonth", "2026-11"))
                     .andExpect(status().isOk())
                     .andExpect(jsonPath("$.isSuccess").value(true))
+                    .andExpect(jsonPath("$.result.feedbackId").value(123))
+                    .andExpect(jsonPath("$.result.applied").value(applied))
                     .andExpect(jsonPath("$.result.totalPossibleReduction").value(40000))
                     .andExpect(jsonPath("$.result.actions").isArray())
                     .andExpect(jsonPath("$.result.actions[0].categoryId").value(7))
@@ -142,7 +150,7 @@ class SavingsSimulationControllerTest {
 
             when(service.simulate(eq(1L), any(SimulateRequest.class))).thenReturn(response);
 
-            SimulateRequest request = new SimulateRequest("2026-11", List.of(7, 5));
+            SimulateRequest request = new SimulateRequest("2026-11", 1L, List.of(7, 5));
 
             mockMvc.perform(post("/api/savings-simulation/simulate")
                             .contentType(MediaType.APPLICATION_JSON)
@@ -155,7 +163,56 @@ class SavingsSimulationControllerTest {
                     .andExpect(jsonPath("$.result.reductionTotal").value(60000))
                     .andExpect(jsonPath("$.result.selectedActions").isArray());
 
-            verify(service).simulate(eq(1L), any(SimulateRequest.class));
+            verify(service)
+                    .simulate(
+                            eq(1L),
+                            argThat(body -> body.feedbackId().equals(1L)
+                                    && body.yearMonth().equals("2026-11")
+                                    && body.selectedCategoryIds().equals(List.of(7, 5))));
+        }
+
+        @Test
+        @DisplayName("시뮬레이션 요청에 feedbackId가 없으면 400을 반환한다")
+        void missingFeedbackId() throws Exception {
+            setAuth(1L);
+            mockMvc.perform(
+                            post("/api/savings-simulation/simulate")
+                                    .contentType(MediaType.APPLICATION_JSON)
+                                    .content(
+                                            """
+                                    {"yearMonth":"2026-11","selectedCategoryIds":[7]}
+                                    """))
+                    .andExpect(status().isBadRequest())
+                    .andExpect(jsonPath("$.isSuccess").value(false));
+            verifyNoInteractions(service);
+        }
+
+        @ParameterizedTest
+        @NullSource
+        @ValueSource(longs = {0, -1})
+        @DisplayName("시뮬레이션 요청의 feedbackId는 null이 아닌 양수여야 한다")
+        void invalidFeedbackId(Long feedbackId) throws Exception {
+            setAuth(1L);
+            SimulateRequest request = new SimulateRequest("2026-11", feedbackId, List.of(7));
+            mockMvc.perform(post("/api/savings-simulation/simulate")
+                            .contentType(MediaType.APPLICATION_JSON)
+                            .content(objectMapper.writeValueAsString(request)))
+                    .andExpect(status().isBadRequest())
+                    .andExpect(jsonPath("$.isSuccess").value(false));
+            verifyNoInteractions(service);
+        }
+
+        @Test
+        @DisplayName("시뮬레이션 대상 피드백이 없거나 사용자·월·유형이 다르면 404를 반환한다")
+        void feedbackNotFound() throws Exception {
+            setAuth(1L);
+            when(service.simulate(eq(1L), any(SimulateRequest.class)))
+                    .thenThrow(new GeneralException(GeneralErrorCode.FEEDBACK_NOT_FOUND));
+            mockMvc.perform(post("/api/savings-simulation/simulate")
+                            .contentType(MediaType.APPLICATION_JSON)
+                            .content(objectMapper.writeValueAsString(new SimulateRequest("2026-11", 1L, List.of(7)))))
+                    .andExpect(status().isNotFound())
+                    .andExpect(jsonPath("$.code").value("SIMULATION_404_001"));
         }
 
         @Test
@@ -166,7 +223,7 @@ class SavingsSimulationControllerTest {
             when(service.simulate(eq(1L), any(SimulateRequest.class)))
                     .thenThrow(new GeneralException(GeneralErrorCode.INVALID_CATEGORY_SELECTION));
 
-            SimulateRequest request = new SimulateRequest("2026-11", List.of(99));
+            SimulateRequest request = new SimulateRequest("2026-11", 1L, List.of(99));
 
             mockMvc.perform(post("/api/savings-simulation/simulate")
                             .contentType(MediaType.APPLICATION_JSON)
@@ -192,7 +249,7 @@ class SavingsSimulationControllerTest {
 
             when(service.apply(eq(1L), any(ApplyRequest.class))).thenReturn(response);
 
-            ApplyRequest request = new ApplyRequest("2026-11", List.of(7));
+            ApplyRequest request = new ApplyRequest("2026-11", 1L, List.of(7));
 
             mockMvc.perform(post("/api/savings-simulation/apply")
                             .contentType(MediaType.APPLICATION_JSON)
@@ -207,7 +264,69 @@ class SavingsSimulationControllerTest {
                     .andExpect(jsonPath("$.result.newTotalBudget").value(1540000))
                     .andExpect(jsonPath("$.result.monthlySavings").value(500000));
 
-            verify(service).apply(eq(1L), any(ApplyRequest.class));
+            verify(service)
+                    .apply(
+                            eq(1L),
+                            argThat(body -> body.feedbackId().equals(1L)
+                                    && body.yearMonth().equals("2026-11")
+                                    && body.selectedCategoryIds().equals(List.of(7))));
+        }
+
+        @Test
+        @DisplayName("feedbackId가 빠진 기존 형식의 요청은 400을 반환한다")
+        void missingFeedbackId() throws Exception {
+            setAuth(1L);
+            mockMvc.perform(
+                            post("/api/savings-simulation/apply")
+                                    .contentType(MediaType.APPLICATION_JSON)
+                                    .content(
+                                            """
+                                    {"yearMonth":"2026-11","selectedCategoryIds":[7]}
+                                    """))
+                    .andExpect(status().isBadRequest())
+                    .andExpect(jsonPath("$.isSuccess").value(false));
+            verifyNoInteractions(service);
+        }
+
+        @ParameterizedTest
+        @NullSource
+        @ValueSource(longs = {0, -1})
+        @DisplayName("feedbackId는 양수이며 null일 수 없다")
+        void invalidFeedbackId(Long feedbackId) throws Exception {
+            setAuth(1L);
+            ApplyRequest request = new ApplyRequest("2026-11", feedbackId, List.of(7));
+            mockMvc.perform(post("/api/savings-simulation/apply")
+                            .contentType(MediaType.APPLICATION_JSON)
+                            .content(objectMapper.writeValueAsString(request)))
+                    .andExpect(status().isBadRequest())
+                    .andExpect(jsonPath("$.isSuccess").value(false));
+            verifyNoInteractions(service);
+        }
+
+        @Test
+        @DisplayName("지정한 피드백이 없거나 사용자·월·유형이 다르면 404를 반환한다")
+        void feedbackNotFound() throws Exception {
+            setAuth(1L);
+            when(service.apply(eq(1L), any(ApplyRequest.class)))
+                    .thenThrow(new GeneralException(GeneralErrorCode.FEEDBACK_NOT_FOUND));
+            mockMvc.perform(post("/api/savings-simulation/apply")
+                            .contentType(MediaType.APPLICATION_JSON)
+                            .content(objectMapper.writeValueAsString(new ApplyRequest("2026-11", 1L, List.of(7)))))
+                    .andExpect(status().isNotFound())
+                    .andExpect(jsonPath("$.code").value("SIMULATION_404_001"));
+        }
+
+        @Test
+        @DisplayName("이미 반영한 피드백은 409를 반환한다")
+        void alreadyApplied() throws Exception {
+            setAuth(1L);
+            when(service.apply(eq(1L), any(ApplyRequest.class)))
+                    .thenThrow(new GeneralException(GeneralErrorCode.ALREADY_APPLIED));
+            mockMvc.perform(post("/api/savings-simulation/apply")
+                            .contentType(MediaType.APPLICATION_JSON)
+                            .content(objectMapper.writeValueAsString(new ApplyRequest("2026-11", 1L, List.of(5)))))
+                    .andExpect(status().isConflict())
+                    .andExpect(jsonPath("$.code").value("SIMULATION_409_002"));
         }
 
         @Test
@@ -218,7 +337,7 @@ class SavingsSimulationControllerTest {
             when(service.apply(eq(1L), any(ApplyRequest.class)))
                     .thenThrow(new GeneralException(GeneralErrorCode.BUDGET_EXCEEDED));
 
-            ApplyRequest request = new ApplyRequest("2026-11", List.of(7));
+            ApplyRequest request = new ApplyRequest("2026-11", 1L, List.of(7));
 
             mockMvc.perform(post("/api/savings-simulation/apply")
                             .contentType(MediaType.APPLICATION_JSON)
@@ -235,7 +354,7 @@ class SavingsSimulationControllerTest {
             when(service.apply(eq(1L), any(ApplyRequest.class)))
                     .thenThrow(new GeneralException(GeneralErrorCode.BUDGET_NOT_FOUND));
 
-            ApplyRequest request = new ApplyRequest("2026-11", List.of(7));
+            ApplyRequest request = new ApplyRequest("2026-11", 1L, List.of(7));
 
             mockMvc.perform(post("/api/savings-simulation/apply")
                             .contentType(MediaType.APPLICATION_JSON)

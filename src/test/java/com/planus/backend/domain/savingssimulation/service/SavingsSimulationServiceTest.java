@@ -29,6 +29,8 @@ import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Nested;
 import org.junit.jupiter.api.Test;
+import org.junit.jupiter.params.ParameterizedTest;
+import org.junit.jupiter.params.provider.CsvSource;
 
 class SavingsSimulationServiceTest {
 
@@ -180,6 +182,8 @@ class SavingsSimulationServiceTest {
                 SuggestResponse result = service.suggest(1L, "2026-11");
 
                 assertThat(result.actions()).hasSize(2);
+                assertThat(result.feedbackId()).isEqualTo(1L);
+                assertThat(result.applied()).isFalse();
                 assertThat(result.totalPossibleReduction()).isEqualTo(60000);
 
                 SuggestResponse.ActionCard first = result.actions().get(0);
@@ -189,6 +193,48 @@ class SavingsSimulationServiceTest {
                 assertThat(first.currentBehavior()).isEqualTo("주 4.2회 외식");
                 assertThat(first.targetBehavior()).isEqualTo("주 2회로 감소");
                 assertThat(first.contextInsight()).isEqualTo("금요일 저녁 외식이 전체의 60%");
+            }
+
+            @Test
+            @DisplayName("이미 반영한 피드백도 제안 목록과 적용 여부를 함께 반환한다")
+            void returnsAppliedStateWithoutHidingActions() throws Exception {
+                when(feedbackRepo.findByUserIdAndPeriodTypeOrderByPeriodStartDesc(1L, "WEEKLY"))
+                        .thenReturn(List.of(feedbackWith(buildPayloadWithEnrichedActions())));
+                when(simulationRepo.existsByUserIdAndFeedbackIdAndIsAppliedTrue(1L, 1L))
+                        .thenReturn(true);
+
+                SuggestResponse result = service.suggest(1L, "2026-11");
+
+                assertThat(result.feedbackId()).isEqualTo(1L);
+                assertThat(result.applied()).isTrue();
+                assertThat(result.actions()).hasSize(2);
+            }
+
+            @Test
+            @DisplayName("같은 제안의 새 주간 피드백은 이전 주의 적용 여부와 구분한다")
+            void newFeedbackHasIndependentAppliedState() throws Exception {
+                String payload = buildPayloadWithEnrichedActions();
+                AiFeedback previous = feedbackWith(payload);
+                AiFeedback next = AiFeedback.builder()
+                        .id(2L)
+                        .userId(1L)
+                        .yearMonth(LocalDate.of(2026, 11, 1))
+                        .periodType("WEEKLY")
+                        .periodStart(LocalDate.of(2026, 11, 10))
+                        .payload(payload)
+                        .build();
+                when(feedbackRepo.findByUserIdAndPeriodTypeOrderByPeriodStartDesc(1L, "WEEKLY"))
+                        .thenReturn(List.of(previous))
+                        .thenReturn(List.of(next, previous));
+                when(simulationRepo.existsByUserIdAndFeedbackIdAndIsAppliedTrue(1L, 1L))
+                        .thenReturn(true);
+
+                assertThat(service.suggest(1L, "2026-11").applied()).isTrue();
+                SuggestResponse result = service.suggest(1L, "2026-11");
+
+                assertThat(result.feedbackId()).isEqualTo(2L);
+                assertThat(result.applied()).isFalse();
+                verify(simulationRepo).existsByUserIdAndFeedbackIdAndIsAppliedTrue(1L, 2L);
             }
 
             @Test
@@ -285,14 +331,13 @@ class SavingsSimulationServiceTest {
                 when(userRepo.findById(1L)).thenReturn(Optional.of(user));
 
                 String payload = buildPayloadWithEnrichedActions();
-                when(feedbackRepo.findByUserIdAndPeriodTypeOrderByPeriodStartDesc(1L, "WEEKLY"))
-                        .thenReturn(List.of(feedbackWith(payload)));
+                when(feedbackRepo.findById(1L)).thenReturn(Optional.of(feedbackWith(payload)));
 
                 // 변동지출 > 수입 − 고정지출 → 적자
                 when(expenseRepo.sumVariableExpensesByPeriod(eq(1L), any(), any()))
                         .thenReturn(3_050_000L);
 
-                SimulateRequest request = new SimulateRequest("2026-11", List.of(7, 5));
+                SimulateRequest request = new SimulateRequest("2026-11", 1L, List.of(7, 5));
                 SimulateResponse result = service.simulate(1L, request);
 
                 assertThat(result.displayType()).isEqualTo(DisplayType.DEFICIT);
@@ -309,14 +354,13 @@ class SavingsSimulationServiceTest {
                 when(userRepo.findById(1L)).thenReturn(Optional.of(user));
 
                 String payload = buildPayloadWithEnrichedActions();
-                when(feedbackRepo.findByUserIdAndPeriodTypeOrderByPeriodStartDesc(1L, "WEEKLY"))
-                        .thenReturn(List.of(feedbackWith(payload)));
+                when(feedbackRepo.findById(1L)).thenReturn(Optional.of(feedbackWith(payload)));
 
                 // 저축 = 3,000,000 - 소비 2,560,000 = 440,000 < 목표 500,000
                 when(expenseRepo.sumVariableExpensesByPeriod(eq(1L), any(), any()))
                         .thenReturn(2_560_000L);
 
-                SimulateRequest request = new SimulateRequest("2026-11", List.of(7, 5));
+                SimulateRequest request = new SimulateRequest("2026-11", 1L, List.of(7, 5));
                 SimulateResponse result = service.simulate(1L, request);
 
                 assertThat(result.displayType()).isEqualTo(DisplayType.RECOVER);
@@ -331,14 +375,13 @@ class SavingsSimulationServiceTest {
                 when(userRepo.findById(1L)).thenReturn(Optional.of(user));
 
                 String payload = buildPayloadWithEnrichedActions();
-                when(feedbackRepo.findByUserIdAndPeriodTypeOrderByPeriodStartDesc(1L, "WEEKLY"))
-                        .thenReturn(List.of(feedbackWith(payload)));
+                when(feedbackRepo.findById(1L)).thenReturn(Optional.of(feedbackWith(payload)));
 
                 // 저축 = 3,000,000 - 소비 2,400,000 = 600,000 > 목표 500,000
                 when(expenseRepo.sumVariableExpensesByPeriod(eq(1L), any(), any()))
                         .thenReturn(2_400_000L);
 
-                SimulateRequest request = new SimulateRequest("2026-11", List.of(7, 5));
+                SimulateRequest request = new SimulateRequest("2026-11", 1L, List.of(7, 5));
                 SimulateResponse result = service.simulate(1L, request);
 
                 assertThat(result.displayType()).isEqualTo(DisplayType.GOAL);
@@ -352,13 +395,12 @@ class SavingsSimulationServiceTest {
                 when(userRepo.findById(1L)).thenReturn(Optional.of(user));
 
                 String payload = buildPayloadWithEnrichedActions();
-                when(feedbackRepo.findByUserIdAndPeriodTypeOrderByPeriodStartDesc(1L, "WEEKLY"))
-                        .thenReturn(List.of(feedbackWith(payload)));
+                when(feedbackRepo.findById(1L)).thenReturn(Optional.of(feedbackWith(payload)));
 
                 when(expenseRepo.sumVariableExpensesByPeriod(eq(1L), any(), any()))
                         .thenReturn(2_000_000L);
 
-                SimulateRequest request = new SimulateRequest("2026-11", List.of(7));
+                SimulateRequest request = new SimulateRequest("2026-11", 1L, List.of(7));
                 SimulateResponse result = service.simulate(1L, request);
 
                 assertThat(result.displayType()).isEqualTo(DisplayType.SURPLUS);
@@ -381,8 +423,8 @@ class SavingsSimulationServiceTest {
                         fixedClock(LocalDate.of(2026, 11, 16)));
                 UserAccount user = userWithGoal(3_000_000, 0, 0);
                 when(userRepo.findById(1L)).thenReturn(Optional.of(user));
-                when(feedbackRepo.findByUserIdAndPeriodTypeOrderByPeriodStartDesc(1L, "WEEKLY"))
-                        .thenReturn(List.of(feedbackWith(buildPayloadWithEnrichedActions())));
+                when(feedbackRepo.findById(1L))
+                        .thenReturn(Optional.of(feedbackWith(buildPayloadWithEnrichedActions())));
                 when(expenseRepo.sumVariableExpensesByPeriod(eq(1L), any(), any()))
                         .thenReturn(1_000_000L);
                 // 식대(7): 8·9·10월 각 300,000원, 11월 1~16일 160,000원 (일평균 10,000)
@@ -393,7 +435,7 @@ class SavingsSimulationServiceTest {
                                 variable(7, 300_000, LocalDate.of(2026, 10, 10)),
                                 variable(7, 160_000, LocalDate.of(2026, 11, 5))));
 
-                SimulateResponse result = service.simulate(1L, new SimulateRequest("2026-11", List.of(7)));
+                SimulateResponse result = service.simulate(1L, new SimulateRequest("2026-11", 1L, List.of(7)));
 
                 // 남은 14일 예상 = min(혼합, 이번 달 속도만 10,000 × 14 = 140,000). 혼합 일평균 = (16/30)·10,000 + (14/30)·9,677 ≈ 9,849
                 // → 남은 기간 ≈ 137,892원. 감축 40,000 ÷ 137,892 ≈ 29% → 월 ≈ 0.29 × 300,000 ≈ 87,000원
@@ -414,12 +456,12 @@ class SavingsSimulationServiceTest {
                 // 이전: 가용예산 − 소비 = 200,000 < 목표 → "저축 목표 미달"(RECOVER)로 잘못 분류
                 UserAccount user = userWithGoal(2_000_000, 0, 1_000_000);
                 when(userRepo.findById(1L)).thenReturn(Optional.of(user));
-                when(feedbackRepo.findByUserIdAndPeriodTypeOrderByPeriodStartDesc(1L, "WEEKLY"))
-                        .thenReturn(List.of(feedbackWith(buildPayloadWithEnrichedActions())));
+                when(feedbackRepo.findById(1L))
+                        .thenReturn(Optional.of(feedbackWith(buildPayloadWithEnrichedActions())));
                 when(expenseRepo.sumVariableExpensesByPeriod(eq(1L), any(), any()))
                         .thenReturn(800_000L);
 
-                SimulateResponse result = service.simulate(1L, new SimulateRequest("2026-11", List.of(7)));
+                SimulateResponse result = service.simulate(1L, new SimulateRequest("2026-11", 1L, List.of(7)));
 
                 assertThat(result.displayType()).isEqualTo(DisplayType.GOAL);
                 assertThat(result.currentMonthlySavings()).isEqualTo(1_200_000);
@@ -439,8 +481,8 @@ class SavingsSimulationServiceTest {
                         fixedClock(LocalDate.of(2026, 11, 4)));
                 UserAccount user = userWithGoal(3_000_000, 0, 500_000);
                 when(userRepo.findById(1L)).thenReturn(Optional.of(user));
-                when(feedbackRepo.findByUserIdAndPeriodTypeOrderByPeriodStartDesc(1L, "WEEKLY"))
-                        .thenReturn(List.of(feedbackWith(buildPayloadWithEnrichedActions())));
+                when(feedbackRepo.findById(1L))
+                        .thenReturn(Optional.of(feedbackWith(buildPayloadWithEnrichedActions())));
                 // 11/1~11/4 변동 400,000 (일평균 100,000), 10월 변동 900,000 (일평균 29,032)
                 when(expenseRepo.sumVariableExpensesByPeriod(
                                 eq(1L), eq(LocalDate.of(2026, 11, 1).atStartOfDay()), any()))
@@ -449,7 +491,7 @@ class SavingsSimulationServiceTest {
                                 eq(1L), eq(LocalDate.of(2026, 10, 1).atStartOfDay()), any()))
                         .thenReturn(900_000L);
 
-                SimulateResponse result = service.simulate(1L, new SimulateRequest("2026-11", List.of(7)));
+                SimulateResponse result = service.simulate(1L, new SimulateRequest("2026-11", 1L, List.of(7)));
 
                 // 혼합 일평균 = (4/30)·100,000 + (26/30)·29,032 ≈ 38,495 → 월말 예측 ≈ 400,000 + 38,495 × 26 ≈ 1,400,860
                 // 저축 ≈ 3,000,000 − 1,400,860 ≈ 1,599,140 (지금까지 쓴 돈만 쓰면 2,600,000으로 과대)
@@ -469,10 +511,9 @@ class SavingsSimulationServiceTest {
                 when(userRepo.findById(1L)).thenReturn(Optional.of(user));
 
                 String payload = buildPayloadWithEnrichedActions();
-                when(feedbackRepo.findByUserIdAndPeriodTypeOrderByPeriodStartDesc(1L, "WEEKLY"))
-                        .thenReturn(List.of(feedbackWith(payload)));
+                when(feedbackRepo.findById(1L)).thenReturn(Optional.of(feedbackWith(payload)));
 
-                SimulateRequest request = new SimulateRequest("2026-11", List.of(99));
+                SimulateRequest request = new SimulateRequest("2026-11", 1L, List.of(99));
 
                 assertThatThrownBy(() -> service.simulate(1L, request))
                         .isInstanceOf(GeneralException.class)
@@ -485,7 +526,7 @@ class SavingsSimulationServiceTest {
             void userNotFound() {
                 when(userRepo.findById(1L)).thenReturn(Optional.empty());
 
-                SimulateRequest request = new SimulateRequest("2026-11", List.of(7));
+                SimulateRequest request = new SimulateRequest("2026-11", 1L, List.of(7));
 
                 assertThatThrownBy(() -> service.simulate(1L, request)).isInstanceOf(GeneralException.class);
             }
@@ -503,14 +544,13 @@ class SavingsSimulationServiceTest {
         class Success {
 
             @Test
-            @DisplayName("정상적으로 카테고리 예산을 감축하고 총 예산을 갱신한다")
+            @DisplayName("새 피드백이 생성돼도 조회한 피드백으로 시뮬레이션하고 예산을 반영한다")
             void appliesReduction() throws Exception {
                 UserAccount user = userWithGoal(3_000_000, 0, 500_000);
                 when(userRepo.findById(1L)).thenReturn(Optional.of(user));
 
                 String payload = buildPayloadWithEnrichedActions();
-                when(feedbackRepo.findByUserIdAndPeriodTypeOrderByPeriodStartDesc(1L, "WEEKLY"))
-                        .thenReturn(List.of(feedbackWith(payload)));
+                when(feedbackRepo.findById(1L)).thenReturn(Optional.of(feedbackWith(payload)));
 
                 when(simulationRepo.findByUserIdAndFeedbackIdAndIsAppliedTrue(1L, 1L))
                         .thenReturn(Optional.empty());
@@ -538,11 +578,36 @@ class SavingsSimulationServiceTest {
 
                 when(simulationRepo.save(any(SavingSimulation.class))).thenAnswer(inv -> inv.getArgument(0));
 
-                ApplyRequest request = new ApplyRequest("2026-11", List.of(7, 5));
+                // 조회 후 새 피드백이 생겨도 적용 요청의 피드백을 사용한다.
+                AiFeedback newer = AiFeedback.builder()
+                        .id(2L)
+                        .userId(1L)
+                        .yearMonth(LocalDate.of(2026, 11, 1))
+                        .periodType("WEEKLY")
+                        .periodStart(LocalDate.of(2026, 11, 10))
+                        .payload(payload.replace("40000", "10000"))
+                        .build();
+                when(feedbackRepo.findByUserIdAndPeriodTypeOrderByPeriodStartDesc(1L, "WEEKLY"))
+                        .thenReturn(List.of(feedbackWith(payload)))
+                        .thenReturn(List.of(newer));
+                SuggestResponse viewed = service.suggest(1L, "2026-11");
+                assertThat(service.suggest(1L, "2026-11").feedbackId()).isEqualTo(2L);
+
+                SimulateResponse simulated =
+                        service.simulate(1L, new SimulateRequest("2026-11", viewed.feedbackId(), List.of(7, 5)));
+                assertThat(simulated.reductionTotal()).isEqualTo(60000);
+                verifyNoInteractions(budgetRepo, budgetCatRepo);
+                verify(simulationRepo, never()).save(any());
+
+                ApplyRequest request = new ApplyRequest("2026-11", viewed.feedbackId(), List.of(7, 5));
                 ApplyResponse result = service.apply(1L, request);
 
                 assertThat(result.applied()).isTrue();
                 assertThat(result.updatedCategories()).hasSize(2);
+                assertThat(result.updatedCategories().stream()
+                                .mapToLong(change -> change.before() - change.after())
+                                .sum())
+                        .isEqualTo(simulated.reductionTotal());
 
                 // cat7: 200,000 - 40,000 = 160,000
                 ApplyResponse.CategoryChange change7 = result.updatedCategories().stream()
@@ -569,7 +634,9 @@ class SavingsSimulationServiceTest {
                 assertThat(budget.getTotalBudget()).isEqualTo(1_540_000);
 
                 // 시뮬레이션 이력 저장 확인
-                verify(simulationRepo).save(any(SavingSimulation.class));
+                verify(simulationRepo)
+                        .save(argThat(simulation -> simulation.getFeedbackId().equals(viewed.feedbackId())));
+                verify(feedbackRepo, times(2)).findById(viewed.feedbackId());
             }
 
             @Test
@@ -579,8 +646,7 @@ class SavingsSimulationServiceTest {
                 when(userRepo.findById(1L)).thenReturn(Optional.of(user));
 
                 String payload = buildPayloadWithEnrichedActions();
-                when(feedbackRepo.findByUserIdAndPeriodTypeOrderByPeriodStartDesc(1L, "WEEKLY"))
-                        .thenReturn(List.of(feedbackWith(payload)));
+                when(feedbackRepo.findById(1L)).thenReturn(Optional.of(feedbackWith(payload)));
 
                 when(simulationRepo.findByUserIdAndFeedbackIdAndIsAppliedTrue(1L, 1L))
                         .thenReturn(Optional.empty());
@@ -604,7 +670,7 @@ class SavingsSimulationServiceTest {
 
                 when(simulationRepo.save(any(SavingSimulation.class))).thenAnswer(inv -> inv.getArgument(0));
 
-                ApplyRequest request = new ApplyRequest("2026-11", List.of(7));
+                ApplyRequest request = new ApplyRequest("2026-11", 1L, List.of(7));
                 ApplyResponse result = service.apply(1L, request);
 
                 // 30,000 - 40,000 = -10,000 → 하한 10,000 적용
@@ -625,8 +691,7 @@ class SavingsSimulationServiceTest {
                 when(userRepo.findById(1L)).thenReturn(Optional.of(user));
 
                 String payload = buildPayloadWithEnrichedActions();
-                when(feedbackRepo.findByUserIdAndPeriodTypeOrderByPeriodStartDesc(1L, "WEEKLY"))
-                        .thenReturn(List.of(feedbackWith(payload)));
+                when(feedbackRepo.findById(1L)).thenReturn(Optional.of(feedbackWith(payload)));
                 when(simulationRepo.findByUserIdAndFeedbackIdAndIsAppliedTrue(1L, 1L))
                         .thenReturn(Optional.empty());
 
@@ -647,7 +712,7 @@ class SavingsSimulationServiceTest {
                 when(budgetCatRepo.findByBudgetId(10L)).thenReturn(List.of(cat7));
                 when(simulationRepo.save(any(SavingSimulation.class))).thenAnswer(inv -> inv.getArgument(0));
 
-                ApplyResponse result = service.apply(1L, new ApplyRequest("2026-11", List.of(7)));
+                ApplyResponse result = service.apply(1L, new ApplyRequest("2026-11", 1L, List.of(7)));
 
                 assertThat(result.applied()).isTrue();
                 assertThat(result.newTotalBudget()).isEqualTo(3_960_000);
@@ -667,8 +732,7 @@ class SavingsSimulationServiceTest {
                 when(userRepo.findById(1L)).thenReturn(Optional.of(user));
 
                 String payload = buildPayloadWithEnrichedActions();
-                when(feedbackRepo.findByUserIdAndPeriodTypeOrderByPeriodStartDesc(1L, "WEEKLY"))
-                        .thenReturn(List.of(feedbackWith(payload)));
+                when(feedbackRepo.findById(1L)).thenReturn(Optional.of(feedbackWith(payload)));
 
                 when(simulationRepo.findByUserIdAndFeedbackIdAndIsAppliedTrue(1L, 1L))
                         .thenReturn(Optional.empty());
@@ -676,7 +740,7 @@ class SavingsSimulationServiceTest {
                 when(budgetRepo.findByUserIdAndYearMonth(1L, LocalDate.of(2026, 11, 1)))
                         .thenReturn(Optional.empty());
 
-                ApplyRequest request = new ApplyRequest("2026-11", List.of(7));
+                ApplyRequest request = new ApplyRequest("2026-11", 1L, List.of(7));
 
                 assertThatThrownBy(() -> service.apply(1L, request))
                         .isInstanceOf(GeneralException.class)
@@ -691,8 +755,7 @@ class SavingsSimulationServiceTest {
                 when(userRepo.findById(1L)).thenReturn(Optional.of(user));
 
                 String payload = buildPayloadWithEnrichedActions();
-                when(feedbackRepo.findByUserIdAndPeriodTypeOrderByPeriodStartDesc(1L, "WEEKLY"))
-                        .thenReturn(List.of(feedbackWith(payload)));
+                when(feedbackRepo.findById(1L)).thenReturn(Optional.of(feedbackWith(payload)));
 
                 when(simulationRepo.findByUserIdAndFeedbackIdAndIsAppliedTrue(1L, 1L))
                         .thenReturn(Optional.empty());
@@ -709,7 +772,7 @@ class SavingsSimulationServiceTest {
                 // 빈 카테고리 목록
                 when(budgetCatRepo.findByBudgetId(10L)).thenReturn(List.of());
 
-                ApplyRequest request = new ApplyRequest("2026-11", List.of(7));
+                ApplyRequest request = new ApplyRequest("2026-11", 1L, List.of(7));
 
                 assertThatThrownBy(() -> service.apply(1L, request))
                         .isInstanceOf(GeneralException.class)
@@ -724,8 +787,7 @@ class SavingsSimulationServiceTest {
                 when(userRepo.findById(1L)).thenReturn(Optional.of(user));
 
                 String payload = buildPayloadWithEnrichedActions();
-                when(feedbackRepo.findByUserIdAndPeriodTypeOrderByPeriodStartDesc(1L, "WEEKLY"))
-                        .thenReturn(List.of(feedbackWith(payload)));
+                when(feedbackRepo.findById(1L)).thenReturn(Optional.of(feedbackWith(payload)));
 
                 when(simulationRepo.findByUserIdAndFeedbackIdAndIsAppliedTrue(1L, 1L))
                         .thenReturn(Optional.empty());
@@ -741,7 +803,7 @@ class SavingsSimulationServiceTest {
 
                 when(budgetCatRepo.findByBudgetId(10L)).thenReturn(List.of());
 
-                ApplyRequest request = new ApplyRequest("2026-11", List.of(99));
+                ApplyRequest request = new ApplyRequest("2026-11", 1L, List.of(99));
 
                 assertThatThrownBy(() -> service.apply(1L, request))
                         .isInstanceOf(GeneralException.class)
@@ -750,14 +812,55 @@ class SavingsSimulationServiceTest {
             }
 
             @Test
-            @DisplayName("동일 피드백에 대해 이미 적용된 시뮬레이션이 있으면 ALREADY_APPLIED 예외")
+            @DisplayName("지정한 피드백이 없으면 시뮬레이션과 예산 반영을 거절한다")
+            void requestedFeedbackNotFound() {
+                when(userRepo.findById(1L)).thenReturn(Optional.of(userWithGoal(3_000_000, 0, 500_000)));
+                when(feedbackRepo.findById(99L)).thenReturn(Optional.empty());
+
+                assertThatThrownBy(() -> service.simulate(1L, new SimulateRequest("2026-11", 99L, List.of(7))))
+                        .isInstanceOf(GeneralException.class)
+                        .satisfies(ex -> assertThat(((GeneralException) ex).getErrorCode())
+                                .isEqualTo(GeneralErrorCode.FEEDBACK_NOT_FOUND));
+                assertThatThrownBy(() -> service.apply(1L, new ApplyRequest("2026-11", 99L, List.of(7))))
+                        .isInstanceOf(GeneralException.class)
+                        .satisfies(ex -> assertThat(((GeneralException) ex).getErrorCode())
+                                .isEqualTo(GeneralErrorCode.FEEDBACK_NOT_FOUND));
+                verifyNoInteractions(budgetRepo, budgetCatRepo, simulationRepo);
+            }
+
+            @ParameterizedTest
+            @CsvSource({"2, 2026-11-01, WEEKLY", "1, 2026-10-01, WEEKLY", "1, 2026-11-01, MONTHLY"})
+            @DisplayName("다른 사용자·월·유형의 피드백은 시뮬레이션과 예산 반영을 거절한다")
+            void rejectsMismatchedFeedback(long ownerId, LocalDate yearMonth, String periodType) throws Exception {
+                when(userRepo.findById(1L)).thenReturn(Optional.of(userWithGoal(3_000_000, 0, 500_000)));
+                AiFeedback feedback = AiFeedback.builder()
+                        .id(1L)
+                        .userId(ownerId)
+                        .yearMonth(yearMonth)
+                        .periodType(periodType)
+                        .payload(buildPayloadWithEnrichedActions())
+                        .build();
+                when(feedbackRepo.findById(1L)).thenReturn(Optional.of(feedback));
+
+                assertThatThrownBy(() -> service.simulate(1L, new SimulateRequest("2026-11", 1L, List.of(7))))
+                        .isInstanceOf(GeneralException.class)
+                        .satisfies(ex -> assertThat(((GeneralException) ex).getErrorCode())
+                                .isEqualTo(GeneralErrorCode.FEEDBACK_NOT_FOUND));
+                assertThatThrownBy(() -> service.apply(1L, new ApplyRequest("2026-11", 1L, List.of(7))))
+                        .isInstanceOf(GeneralException.class)
+                        .satisfies(ex -> assertThat(((GeneralException) ex).getErrorCode())
+                                .isEqualTo(GeneralErrorCode.FEEDBACK_NOT_FOUND));
+                verifyNoInteractions(budgetRepo, budgetCatRepo, simulationRepo);
+            }
+
+            @Test
+            @DisplayName("일부 카테고리만 반영했어도 같은 피드백의 나머지 적용을 거절한다")
             void alreadyApplied() throws Exception {
                 UserAccount user = userWithGoal(3_000_000, 0, 500_000);
                 when(userRepo.findById(1L)).thenReturn(Optional.of(user));
 
                 String payload = buildPayloadWithEnrichedActions();
-                when(feedbackRepo.findByUserIdAndPeriodTypeOrderByPeriodStartDesc(1L, "WEEKLY"))
-                        .thenReturn(List.of(feedbackWith(payload)));
+                when(feedbackRepo.findById(1L)).thenReturn(Optional.of(feedbackWith(payload)));
 
                 SavingSimulation existing = SavingSimulation.builder()
                         .id(100L)
@@ -765,15 +868,22 @@ class SavingsSimulationServiceTest {
                         .feedbackId(1L)
                         .isApplied(true)
                         .build();
+                existing.addItem(com.planus.backend.domain.savingssimulation.entity.SavingSimulationItem.builder()
+                        .categoryId(7L)
+                        .savingAmount(40000L)
+                        .annualSaving(480000L)
+                        .build());
                 when(simulationRepo.findByUserIdAndFeedbackIdAndIsAppliedTrue(1L, 1L))
                         .thenReturn(Optional.of(existing));
 
-                ApplyRequest request = new ApplyRequest("2026-11", List.of(7, 5));
+                ApplyRequest request = new ApplyRequest("2026-11", 1L, List.of(5));
 
                 assertThatThrownBy(() -> service.apply(1L, request))
                         .isInstanceOf(GeneralException.class)
                         .satisfies(ex -> assertThat(((GeneralException) ex).getErrorCode())
                                 .isEqualTo(GeneralErrorCode.ALREADY_APPLIED));
+                verifyNoInteractions(budgetRepo, budgetCatRepo);
+                verify(simulationRepo, never()).save(any());
             }
         }
     }
