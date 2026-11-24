@@ -22,6 +22,8 @@ spring:
       transactional-lock: false
 
 planus:
+  cors:
+    allowed-origins: ${CORS_ALLOWED_ORIGINS:}
   ai:
     llm:
       api-key: ${ANTHROPIC_API_KEY:}

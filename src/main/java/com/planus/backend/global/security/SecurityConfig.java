@@ -4,6 +4,9 @@ import com.fasterxml.jackson.databind.ObjectMapper;
 import com.planus.backend.domain.user.repository.UserAccountRepository;
 import com.planus.backend.global.apiPayload.ApiResponse;
 import com.planus.backend.global.apiPayload.code.GeneralErrorCode;
+import java.util.Arrays;
+import java.util.List;
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 import org.springframework.http.HttpMethod;
@@ -15,6 +18,8 @@ import org.springframework.security.crypto.bcrypt.BCryptPasswordEncoder;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.security.web.SecurityFilterChain;
 import org.springframework.security.web.authentication.UsernamePasswordAuthenticationFilter;
+import org.springframework.web.cors.CorsConfiguration;
+import org.springframework.web.cors.UrlBasedCorsConfigurationSource;
 
 /** JWT 기반 무상태(Stateless) 보안 설정. {@code /api/auth/**}는 인증 없이 허용하고 나머지는 인증을 요구한다. */
 @Configuration
@@ -40,9 +45,13 @@ public class SecurityConfig {
      */
     @Bean
     public SecurityFilterChain filterChain(
-            HttpSecurity http, JwtAuthenticationFilter jwtAuthenticationFilter, ObjectMapper objectMapper)
+            HttpSecurity http,
+            JwtAuthenticationFilter jwtAuthenticationFilter,
+            ObjectMapper objectMapper,
+            UrlBasedCorsConfigurationSource corsConfigurationSource)
             throws Exception {
         http.csrf(AbstractHttpConfigurer::disable)
+                .cors(cors -> cors.configurationSource(corsConfigurationSource))
                 .sessionManagement(session -> session.sessionCreationPolicy(SessionCreationPolicy.STATELESS))
                 .exceptionHandling(handling -> handling.authenticationEntryPoint((request, response, authException) -> {
                     response.setStatus(
@@ -64,6 +73,21 @@ public class SecurityConfig {
                         .authenticated())
                 .addFilterBefore(jwtAuthenticationFilter, UsernamePasswordAuthenticationFilter.class);
         return http.build();
+    }
+
+    @Bean
+    public UrlBasedCorsConfigurationSource corsConfigurationSource(
+            @Value("${planus.cors.allowed-origins:}") String allowedOrigins) {
+        CorsConfiguration configuration = new CorsConfiguration();
+        configuration.setAllowedOrigins(Arrays.stream(allowedOrigins.split(","))
+                .map(String::trim)
+                .filter(origin -> !origin.isEmpty())
+                .toList());
+        configuration.setAllowedMethods(List.of("GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"));
+        configuration.setAllowedHeaders(List.of("Authorization", "Content-Type", "Accept"));
+        UrlBasedCorsConfigurationSource source = new UrlBasedCorsConfigurationSource();
+        source.registerCorsConfiguration("/api/**", configuration);
+        return source;
     }
 
     @Bean
