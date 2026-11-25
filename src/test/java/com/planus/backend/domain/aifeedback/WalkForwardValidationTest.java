@@ -472,7 +472,13 @@ class WalkForwardValidationTest {
                 if (e.getDate().isBefore(weekStart) || e.getDate().isAfter(weekEnd)) continue;
                 int cat = e.getCategoryId();
                 if (anomalyDetector.isSpikeProne(cat)) continue;
-                long budget = budgets.getOrDefault(cat, 0L);
+                long budget = com.planus.backend.domain.aifeedback.service.AiFeedbackService.anomalyBudget(
+                        budgets,
+                        ALL_EXPENSES.stream()
+                                .filter(x -> !x.getDate().isAfter(weekEnd))
+                                .toList(),
+                        weekEnd,
+                        cat);
                 double[] hist = ALL_EXPENSES.stream()
                         .filter(x -> x.isExpense()
                                 && x.isVariable()
@@ -534,7 +540,13 @@ class WalkForwardValidationTest {
                             .mapToLong(Expense::getAmount)
                             .sum();
                 }
-                long budget = budgets.getOrDefault(cat, 0L);
+                long budget = com.planus.backend.domain.aifeedback.service.AiFeedbackService.anomalyBudget(
+                        budgets,
+                        ALL_EXPENSES.stream()
+                                .filter(x -> !x.getDate().isAfter(weekEnd))
+                                .toList(),
+                        weekEnd,
+                        cat);
                 boolean confirmed = anomalyDetector.trendConfirmed(weekly, len - 1, budget);
                 AnomalyDetector.TrendStats t = anomalyDetector.trendStats(weekly, len - 1);
                 if (t == null) continue;

@@ -64,4 +64,19 @@ class UsualMonthlyTotalTest {
         assertThat(AiFeedbackService.usualMonthlyTotal(window, MONTH_START, ETC))
                 .isEqualTo(200_000);
     }
+
+    @Test
+    @DisplayName("이상치 기준 예산 — 배정된 예산이 있으면 그대로, 0원(기타)이면 평소 월 지출, 평소도 모르면 0")
+    void anomalyBudgetFallsBackToUsual() {
+        List<Expense> window = List.of(
+                expense(ETC, LocalDate.of(2026, 8, 10), 400_000), expense(ETC, LocalDate.of(2026, 7, 10), 600_000));
+        LocalDate weekEnd = LocalDate.of(2026, 9, 13);
+
+        assertThat(AiFeedbackService.anomalyBudget(java.util.Map.of(ETC, 0L, 1, 300_000L), window, weekEnd, 1))
+                .isEqualTo(300_000);
+        assertThat(AiFeedbackService.anomalyBudget(java.util.Map.of(ETC, 0L), window, weekEnd, ETC))
+                .isEqualTo(500_000);
+        assertThat(AiFeedbackService.anomalyBudget(java.util.Map.of(ETC, 0L), List.of(), weekEnd, ETC))
+                .isZero();
+    }
 }

@@ -882,7 +882,7 @@ public class AiFeedbackService {
             if (detector.isSpikeProne(cat)) continue;
 
             List<Expense> catExpenses = entry.getValue();
-            long budget = catBudget.getOrDefault(cat, 0L);
+            long budget = anomalyBudget(catBudget, window, weekEnd, cat);
 
             for (Expense e : catExpenses) {
                 LocalDate d = e.getDate();
@@ -910,7 +910,7 @@ public class AiFeedbackService {
                 if (detector.isSpikeProne(cat)) continue;
 
                 double[] weekly = weeklySeries(window, cat, weekEnd, weeks);
-                if (detector.trendConfirmed(weekly, weeks - 1, catBudget.getOrDefault(cat, 0L))) {
+                if (detector.trendConfirmed(weekly, weeks - 1, anomalyBudget(catBudget, window, weekEnd, cat))) {
                     // 확정 판정과 같은 구간(최근 2주 vs 그 앞 4주)의 배수를 그대로 쓴다 (#138)
                     AnomalyDetector.TrendStats trend = detector.trendStats(weekly, weeks - 1);
                     double rm = trend.recentMean();
@@ -983,7 +983,7 @@ public class AiFeedbackService {
             if (detector.isSpikeProne(cat)) continue;
 
             List<Expense> catExpenses = entry.getValue();
-            long budget = catBudget.getOrDefault(cat, 0L);
+            long budget = anomalyBudget(catBudget, window, weekEnd, cat);
 
             for (Expense e : catExpenses) {
                 LocalDate d = e.getDate();
@@ -1263,6 +1263,15 @@ public class AiFeedbackService {
      * @param monthStart 이번 달 1일
      * @return 전월 변동 지출 일평균(원), 거래 없으면 0.0
      */
+    /**
+     * 이상치 판정의 최소 금액·추세 기준에 쓰는 카테고리 예산. 예산이 배분되지 않는 카테고리(기타)는 예산이 0원이라 기준이 없어져 1만 원만 넘어도
+     * 이상치가 되므로, 직전 3개월 평소 월 지출로 대신한다 (#141). 평소를 알 수 없으면 0.
+     */
+    public static long anomalyBudget(Map<Integer, Long> catBudget, List<Expense> window, LocalDate weekEnd, int cat) {
+        long budget = catBudget.getOrDefault(cat, 0L);
+        return budget > 0 ? budget : usualMonthlyTotal(window, weekEnd.withDayOfMonth(1), cat);
+    }
+
     /** 평소 월 지출을 보는 기간 (개월). */
     private static final int USUAL_MONTHS = 3;
     /** 평소를 판단하려면 지출이 있는 달이 이만큼은 있어야 한다. */
@@ -1272,7 +1281,7 @@ public class AiFeedbackService {
      * 카테고리의 평소 월 지출 — 직전 3개월 중 지출이 있는 달의 월평균(고정 포함). 지출이 있는 달이 {@value #USUAL_MIN_MONTHS}개 미만이면 0.
      * 예산이 배분되지 않는 기타의 초과 기준이다 (#141).
      */
-    static long usualMonthlyTotal(List<Expense> window, LocalDate monthStart, int categoryId) {
+    public static long usualMonthlyTotal(List<Expense> window, LocalDate monthStart, int categoryId) {
         long total = 0;
         int months = 0;
         for (int k = 1; k <= USUAL_MONTHS; k++) {
@@ -1396,7 +1405,7 @@ public class AiFeedbackService {
             int cat = e.getCategoryId();
             boolean isAnomaly = false;
             if (!detector.isSpikeProne(cat)) {
-                long budget = catBudget.getOrDefault(cat, 0L);
+                long budget = anomalyBudget(catBudget, window, weekEnd, cat);
                 double[] hist = baselineHistory(byCat.getOrDefault(cat, List.of()), d, cat);
                 isAnomaly = detector.checkPoint(e.getAmount(), hist, budget).isPresent();
             }
