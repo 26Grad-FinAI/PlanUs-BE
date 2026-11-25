@@ -331,6 +331,8 @@ public class AiFeedbackService {
         // 이상치 감지 OR REGRET/IMPULSE 감정 OR 메모 있는 거래, 금액 상위 5건
         List<TransactionHighlight> weekHighlights =
                 isLowData ? List.of() : collectWeekHighlights(window, weekStart, weekEnd, catBudget);
+        // '가장 컸다' 검증용 — 주목 거래 필터(이상치·감정·메모)와 무관하게 이번 주 변동지출 중 가장 큰 한 건
+        TransactionHighlight weekLargest = isLowData ? null : findWeekLargest(window, weekStart, weekEnd);
 
         // ── [8] FeedbackContext 조립 ──
         final Map<Integer, CauseSignals> finalCauseSignals = causeSignalsByCategory;
@@ -479,7 +481,8 @@ public class AiFeedbackService {
                 top != null ? withBaselineWeeks(top.basis()) : null,
                 anomalyWeeklyCount,
                 dim - day,
-                recent4WeekAvgWon);
+                recent4WeekAvgWon,
+                weekLargest);
 
         // ── [9] 렌더링 ──
         FeedbackRenderer.Rendered out = renderer.render(ctx);
@@ -1355,6 +1358,17 @@ public class AiFeedbackService {
         }
 
         return TransactionHighlight.groupIdenticalTopN(result, 5);
+    }
+
+    private static TransactionHighlight findWeekLargest(List<Expense> window, LocalDate weekStart, LocalDate weekEnd) {
+        return window.stream()
+                .filter(e -> e.isVariable()
+                        && !e.getDate().isBefore(weekStart)
+                        && !e.getDate().isAfter(weekEnd))
+                .max(Comparator.comparingLong(Expense::getAmount))
+                .map(e -> new TransactionHighlight(
+                        e.getDate(), Categories.name(e.getCategoryId()), e.getAmount(), e.getMemo(), e.getEmotion()))
+                .orElse(null);
     }
 
     private static boolean isHighlightEmotion(String emotion) {

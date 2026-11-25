@@ -581,8 +581,7 @@ public class FeedbackRenderer {
      * 쉼표로 나뉜 구절 안에서 다른 카테고리 이름과 함께 쓰인 경우만 본다.
      */
     boolean verifyLargest(String text, FeedbackContext c) {
-        Optional<TransactionHighlight> top =
-                c.weekHighlights().stream().max(Comparator.comparingLong(TransactionHighlight::amountWon));
+        Optional<TransactionHighlight> top = c.largestTransaction();
         if (top.isEmpty()) return true;
         Set<String> names = new HashSet<>();
         c.weekHighlights().forEach(h -> names.add(h.categoryName()));
@@ -592,7 +591,23 @@ public class FeedbackRenderer {
         names.remove(top.get().categoryName());
         for (String sentence : sentences(text)) {
             for (String clause : sentence.split(",")) {
-                if (LARGEST.matcher(clause).find() && names.stream().anyMatch(clause::contains)) return false;
+                Matcher m = LARGEST.matcher(clause);
+                if (!m.find()) continue;
+                // '가장 컸다'가 붙은 대상은 그 앞에 가장 가까이 나온 카테고리 이름이다.
+                // "기타보다 식대 한 건이 가장 컸어요"는 식대가 대상이므로 비교 대상(기타)이 앞에 나와도 거절하지 않는다.
+                String before = clause.substring(0, m.start());
+                String subject = null;
+                int at = -1;
+                for (String n : names) {
+                    int i = before.lastIndexOf(n);
+                    if (i > at) {
+                        at = i;
+                        subject = n;
+                    }
+                }
+                String topName = top.get().categoryName();
+                int topAt = before.lastIndexOf(topName);
+                if (subject != null && at > topAt) return false;
             }
         }
         return true;
@@ -1404,13 +1419,11 @@ public class FeedbackRenderer {
         }
 
         // ── 가장 큰 한 건 — '가장 컸다'는 이 한 건에만 (#146) ──
-        c.weekHighlights().stream()
-                .max(Comparator.comparingLong(TransactionHighlight::amountWon))
-                .ifPresent(h -> sb.append("\n[이번 주 가장 큰 한 건] ")
-                        .append(h.categoryName())
-                        .append(" ")
-                        .append(exactWon(h.amountWon()))
-                        .append(" — '가장 컸다'는 이 한 건에만 쓸 것. 카테고리 합계 순위는 재료에 없으므로 카테고리가 가장 컸다고 쓰지 말 것\n"));
+        c.largestTransaction().ifPresent(h -> sb.append("\n[이번 주 가장 큰 한 건] ")
+                .append(h.categoryName())
+                .append(" ")
+                .append(exactWon(h.amountWon()))
+                .append(" — '가장 컸다'는 이 한 건에만 쓸 것. 카테고리 합계 순위는 재료에 없으므로 카테고리가 가장 컸다고 쓰지 말 것\n"));
 
         // ── 절약 액션 [6] ──
         if (codeActionMode(c)) {
@@ -1732,7 +1745,72 @@ public class FeedbackRenderer {
             AnomalyBasis anomalyBasis,
             int anomalyWeeklyCount,
             int remainingDaysInMonth,
-            long recent4WeekAvgWon) {
+            long recent4WeekAvgWon,
+            TransactionHighlight weekLargest) {
+
+        /** 이번 주 가장 큰 한 건을 따로 넘기지 않는 형식 — 주목 거래 중 가장 큰 건을 쓴다. */
+        public FeedbackContext(
+                long predictedMonthEndWon,
+                long availableBudgetWon,
+                long savingsImpactWon,
+                double burnRate,
+                PacingResult pacing,
+                boolean hasAnomaly,
+                String anomalyCategoryName,
+                double anomalyMagnitude,
+                long anomalyWeeklyAmountWon,
+                Confidence anomalyConfidence,
+                String anomalyEmotion,
+                List<AnomalyInfo> additionalHighAnomalies,
+                WeekEmotionSummary weekEmotion,
+                long weekTotalWon,
+                long prevWeekTotalWon,
+                double complianceRate,
+                List<CategoryOverspend> overspendCategories,
+                List<ActionSummary> actions,
+                List<TransactionHighlight> weekHighlights,
+                FeedbackType feedbackType,
+                BandWidth bandWidth,
+                Confidence overallConfidence,
+                AnomalyBasis anomalyBasis,
+                int anomalyWeeklyCount,
+                int remainingDaysInMonth,
+                long recent4WeekAvgWon) {
+            this(
+                    predictedMonthEndWon,
+                    availableBudgetWon,
+                    savingsImpactWon,
+                    burnRate,
+                    pacing,
+                    hasAnomaly,
+                    anomalyCategoryName,
+                    anomalyMagnitude,
+                    anomalyWeeklyAmountWon,
+                    anomalyConfidence,
+                    anomalyEmotion,
+                    additionalHighAnomalies,
+                    weekEmotion,
+                    weekTotalWon,
+                    prevWeekTotalWon,
+                    complianceRate,
+                    overspendCategories,
+                    actions,
+                    weekHighlights,
+                    feedbackType,
+                    bandWidth,
+                    overallConfidence,
+                    anomalyBasis,
+                    anomalyWeeklyCount,
+                    remainingDaysInMonth,
+                    recent4WeekAvgWon,
+                    null);
+        }
+
+        /** 이번 주 가장 큰 한 건: 따로 받은 값, 없으면 주목 거래 중 가장 큰 건. */
+        Optional<TransactionHighlight> largestTransaction() {
+            if (weekLargest != null) return Optional.of(weekLargest);
+            return weekHighlights.stream().max(Comparator.comparingLong(TransactionHighlight::amountWon));
+        }
 
         /** 직전 4주 평균 없이 만드는 이전 형식 (#144 이전 호출부·테스트). */
         public FeedbackContext(

@@ -1802,6 +1802,58 @@ class FeedbackRendererTest {
             assertThat(renderer.verifyLargest("식대 한 건이 가장 컸어요.", ctx)).isTrue();
             assertThat(renderer.verifyLargest("기타에서 결제가 가장 컸어요.", ctx)).isFalse();
             assertThat(renderer.verifyLargest("식대가 가장 컸고, 기타도 늘었어요.", ctx)).isTrue();
+            // 비교 대상이 앞에 나와도 '가장 컸다'의 대상이 가장 큰 한 건이면 거절하지 않는다
+            assertThat(renderer.verifyLargest("기타보다 식대 한 건이 가장 컸어요.", ctx)).isTrue();
+            assertThat(renderer.verifyLargest("식대보다 기타 결제가 가장 컸어요.", ctx)).isFalse();
+        }
+
+        @Test
+        @DisplayName("가장 큰 한 건은 주목 거래 목록이 아니라 따로 받은 이번 주 최대 거래로 검증 (CodeRabbit)")
+        void largest_usesSeparateWeekLargest() {
+            // 주목 거래에는 기타 5만 원만 있고, 메모·감정이 없는 식대 20만 원은 목록에서 빠져 있다
+            FeedbackContext base = week36().weekHighlights(List.of(new FeedbackRenderer.TransactionHighlight(
+                            java.time.LocalDate.of(2026, 5, 4), "기타", 50_000, null, null)))
+                    .build();
+            // 따로 받지 않으면 주목 거래 중 가장 큰 건(기타)이 기준이라, 기타에 붙인 '가장 컸다'가 통과한다
+            assertThat(renderer.verifyLargest("기타에서 결제가 가장 컸어요.", base)).isTrue();
+
+            FeedbackContext ctx = withWeekLargest(
+                    base,
+                    new FeedbackRenderer.TransactionHighlight(
+                            java.time.LocalDate.of(2026, 5, 3), "식대", 200_000, null, null));
+            assertThat(renderer.verifyLargest("식대 한 건이 가장 컸어요.", ctx)).isTrue();
+            assertThat(renderer.verifyLargest("기타에서 결제가 가장 컸어요.", ctx)).isFalse();
+        }
+
+        private static FeedbackContext withWeekLargest(FeedbackContext c, FeedbackRenderer.TransactionHighlight top) {
+            return new FeedbackContext(
+                    c.predictedMonthEndWon(),
+                    c.availableBudgetWon(),
+                    c.savingsImpactWon(),
+                    c.burnRate(),
+                    c.pacing(),
+                    c.hasAnomaly(),
+                    c.anomalyCategoryName(),
+                    c.anomalyMagnitude(),
+                    c.anomalyWeeklyAmountWon(),
+                    c.anomalyConfidence(),
+                    c.anomalyEmotion(),
+                    c.additionalHighAnomalies(),
+                    c.weekEmotion(),
+                    c.weekTotalWon(),
+                    c.prevWeekTotalWon(),
+                    c.complianceRate(),
+                    c.overspendCategories(),
+                    c.actions(),
+                    c.weekHighlights(),
+                    c.feedbackType(),
+                    c.bandWidth(),
+                    c.overallConfidence(),
+                    c.anomalyBasis(),
+                    c.anomalyWeeklyCount(),
+                    c.remainingDaysInMonth(),
+                    c.recent4WeekAvgWon(),
+                    top);
         }
 
         @Test
