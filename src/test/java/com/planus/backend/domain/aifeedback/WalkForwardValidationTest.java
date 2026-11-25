@@ -440,6 +440,172 @@ class WalkForwardValidationTest {
         assertThat(samples).isPositive();
     }
 
+    /**
+     * 이상치 임계값 보정용 라벨링 시트를 만든다 (#141). 환경변수 {@code ANOMALY_LABEL_DIR}이 있을 때만 실행한다 — 개인 거래 내역이 들어가므로
+     * 저장소 밖 폴더에 쓴다.
+     *
+     * <p>후보 종류: 단발(modified-z), 단발(중앙값 배수), 단발(과거 거의 없음), 추세(확정), 추세(확정 직전), 탐지 안 된 큰 거래(재현율 확인용).
+     * 시트에는 현재 판정·신뢰도를 숨기고(블라인드), 키 파일에만 적는다.
+     */
+    @Test
+    @DisplayName("이상치 라벨링 시트 내보내기 (환경변수 ANOMALY_LABEL_DIR)")
+    void exportAnomalyLabelSheet() throws Exception {
+        String dir = System.getenv("ANOMALY_LABEL_DIR");
+        Assumptions.assumeTrue(dir != null && !dir.isBlank(), "ANOMALY_LABEL_DIR 없음");
+        int len = props.getBaselineWeeks();
+        LocalDate dataEnd = ALL_EXPENSES.stream()
+                .map(Expense::getDate)
+                .max(Comparator.naturalOrder())
+                .orElseThrow();
+        Random rnd = new Random(141);
+        // 종류 -> [날짜, 카테고리, 설명, 현재판정]
+        Map<String, List<String[]>> pool = new LinkedHashMap<>();
+
+        for (int week = WARMUP_WEEKS + 1; ; week++) {
+            LocalDate weekEnd = FIRST_MONDAY.plusWeeks(week).minusDays(1);
+            LocalDate weekStart = weekEnd.minusDays(6);
+            if (weekEnd.isAfter(dataEnd)) break;
+            Map<Integer, Long> budgets = budgetForMonth(weekEnd);
+
+            for (Expense e : ALL_EXPENSES) {
+                if (!e.isExpense() || !e.isVariable()) continue;
+                if (e.getDate().isBefore(weekStart) || e.getDate().isAfter(weekEnd)) continue;
+                int cat = e.getCategoryId();
+                if (anomalyDetector.isSpikeProne(cat)) continue;
+                long budget = budgets.getOrDefault(cat, 0L);
+                double[] hist = ALL_EXPENSES.stream()
+                        .filter(x -> x.isExpense()
+                                && x.isVariable()
+                                && Objects.equals(x.getCategoryId(), cat)
+                                && x.getDate().isBefore(e.getDate())
+                                && ChronoUnit.DAYS.between(x.getDate(), e.getDate()) <= props.getBaselineWeeks() * 7L
+                                && (!props.isBimodal(cat) || x.getAmount() >= props.getBimodalMin()))
+                        .mapToDouble(Expense::getAmount)
+                        .toArray();
+                OptionalDouble z = anomalyDetector.checkPoint(e.getAmount(), hist, budget);
+                double med = hist.length > 0 ? RobustStats.median(hist) : 0;
+                double max = hist.length > 0 ? Arrays.stream(hist).max().orElse(0) : 0;
+                String desc = String.format(
+                        "%,d원 (%s%s) — 직전 %d주 같은 카테고리 %d건, 중앙값 %,d원, 최대 %,d원",
+                        e.getAmount(),
+                        e.getMemo() == null || e.getMemo().isBlank() ? "메모 없음" : "메모: " + e.getMemo(),
+                        e.getEmotion() == null ? "" : ", 감정 " + e.getEmotion(),
+                        props.getBaselineWeeks(),
+                        hist.length,
+                        (long) med,
+                        (long) max);
+                String kind;
+                String verdict;
+                if (z.isPresent()) {
+                    boolean sparse = hist.length < 2;
+                    boolean lowSpread = !sparse && RobustStats.mad(hist) <= med * 0.10;
+                    kind = sparse ? "단발-과거거의없음" : lowSpread ? "단발-중앙값배수" : "단발-modifiedZ";
+                    verdict = String.format(
+                            "%s mag=%.2f 신뢰도=%s",
+                            kind,
+                            z.getAsDouble(),
+                            Confidence.of(
+                                    z.getAsDouble(),
+                                    hist.length,
+                                    props.getConfHighMinSamples(),
+                                    props.getConfMediumMinSamples()));
+                } else if (hist.length >= 2 && e.getAmount() >= med * 2 && e.getAmount() >= 30_000) {
+                    kind = "탐지안됨-큰거래";
+                    verdict = "탐지 안 됨";
+                } else continue;
+                pool.computeIfAbsent(kind, k -> new ArrayList<>())
+                        .add(new String[] {e.getDate().toString(), Categories.name(cat), "이번 주 지출 1건: " + desc, verdict
+                        });
+            }
+
+            for (int cat : budgets.keySet()) {
+                if (!anomalyDetector.isHighFreq(cat) || anomalyDetector.isSpikeProne(cat)) continue;
+                double[] weekly = new double[len];
+                for (int i = 0; i < len; i++) {
+                    LocalDate end = weekEnd.minusWeeks(len - 1L - i);
+                    LocalDate start = end.minusDays(6);
+                    int c = cat;
+                    weekly[i] = ALL_EXPENSES.stream()
+                            .filter(x -> x.isExpense()
+                                    && x.isVariable()
+                                    && x.getCategoryId() == c
+                                    && !x.getDate().isBefore(start)
+                                    && !x.getDate().isAfter(end))
+                            .mapToLong(Expense::getAmount)
+                            .sum();
+                }
+                long budget = budgets.getOrDefault(cat, 0L);
+                boolean confirmed = anomalyDetector.trendConfirmed(weekly, len - 1, budget);
+                AnomalyDetector.TrendStats t = anomalyDetector.trendStats(weekly, len - 1);
+                if (t == null) continue;
+                boolean near = !confirmed && t.priorMean() > 0 && t.ratio() >= 1.2 && t.recentMean() >= 30_000;
+                if (!confirmed && !near) continue;
+                String series = Arrays.stream(weekly)
+                        .mapToObj(v -> String.format("%,d", (long) v))
+                        .collect(Collectors.joining(" → "));
+                String desc = String.format(
+                        "최근 %d주 주간 지출(오래된 순): %s원 — 최근 2주 평균 %,d원, 그 앞 4주 평균 %,d원 (%.2f배)",
+                        len, series, (long) t.recentMean(), (long) t.priorMean(), t.ratio());
+                String kind = confirmed ? "추세-확정" : "추세-확정직전";
+                String verdict = confirmed
+                        ? String.format(
+                                "추세 확정 mag=%.2f 신뢰도=%s",
+                                t.ratio(),
+                                Confidence.of(
+                                        t.ratio(), 99, props.getConfHighMinSamples(), props.getConfMediumMinSamples()))
+                        : "추세 확정 아님";
+                pool.computeIfAbsent(kind, k -> new ArrayList<>())
+                        .add(new String[] {weekEnd.toString(), Categories.name(cat), desc, verdict});
+            }
+        }
+
+        Map<String, Integer> quota = Map.of(
+                "단발-modifiedZ", 16,
+                "단발-중앙값배수", 8,
+                "단발-과거거의없음", 6,
+                "추세-확정", 14,
+                "추세-확정직전", 8,
+                "탐지안됨-큰거래", 10);
+        List<String[]> picked = new ArrayList<>(); // [종류, 날짜, 카테고리, 설명, 현재판정]
+        for (var en : pool.entrySet()) {
+            List<String[]> rows = en.getValue();
+            Collections.shuffle(rows, rnd);
+            rows.stream()
+                    .limit(quota.getOrDefault(en.getKey(), 0))
+                    .forEach(r -> picked.add(new String[] {en.getKey(), r[0], r[1], r[2], r[3]}));
+        }
+        Collections.shuffle(picked, rnd);
+
+        java.nio.file.Path out = java.nio.file.Path.of(dir);
+        java.nio.file.Files.createDirectories(out);
+        StringBuilder sheet = new StringBuilder("﻿id,날짜(주 마지막 날),카테고리,내용,알려줄 만한가(O/X/?),메모\n");
+        StringBuilder key = new StringBuilder("﻿id,종류,현재 판정\n");
+        for (int i = 0; i < picked.size(); i++) {
+            String id = String.format("L%03d", i + 1);
+            String[] r = picked.get(i);
+            sheet.append(id)
+                    .append(',')
+                    .append(r[1])
+                    .append(',')
+                    .append(r[2])
+                    .append(',')
+                    .append('"')
+                    .append(r[3].replace("\"", "\"\""))
+                    .append('"')
+                    .append(",,\n");
+            key.append(id).append(',').append(r[0]).append(',').append(r[4]).append('\n');
+        }
+        java.nio.file.Files.writeString(out.resolve("이상치라벨.csv"), sheet);
+        java.nio.file.Files.writeString(out.resolve("_key.csv"), key);
+        System.out.printf(
+                "라벨링 시트 %d건 → %s (후보 풀: %s)%n",
+                picked.size(),
+                out,
+                pool.entrySet().stream()
+                        .map(en -> en.getKey() + " " + en.getValue().size())
+                        .collect(Collectors.joining(", ")));
+    }
+
     /** 대안: 최근 2주(w-1, w)를 바로 앞 4주(w-5..w-2)와 비교. */
     private boolean risingContiguous(double[] weekly, int w, long budgetWon) {
         if (w < 5) return false;
