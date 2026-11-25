@@ -927,8 +927,11 @@ public class AiFeedbackService {
                     double pm = trend.priorMean();
                     double mag = trend.ratio();
 
+                    // 기타 평소 월 지출 때문에 조회 범위를 넓혔으므로, 신뢰도 표본은 기준선 기간 안의 거래만 센다
+                    LocalDate baselineFrom = weekStart.minusWeeks(p.getBaselineWeeks());
                     int histLen = (int) byCat.getOrDefault(cat, List.of()).stream()
-                            .filter(x -> x.getDate().isBefore(weekStart))
+                            .filter(x -> x.getDate().isBefore(weekStart)
+                                    && !x.getDate().isBefore(baselineFrom))
                             .count();
 
                     List<Expense> catExpenses = byCat.getOrDefault(cat, List.of());

@@ -506,7 +506,7 @@ public class FeedbackRenderer {
 
     /** 남은 일수가 {@value #EARLY_MONTH_MIN_REMAINING}일보다 적은데 '월초'라고 쓰면 거절 (#141: 월말 주에 '아직 월초'). */
     boolean verifyPeriod(String text, FeedbackContext c) {
-        if (c.remainingDaysInMonth() <= 0 || c.remainingDaysInMonth() >= EARLY_MONTH_MIN_REMAINING) return true;
+        if (c.remainingDaysInMonth() < 0 || c.remainingDaysInMonth() >= EARLY_MONTH_MIN_REMAINING) return true;
         return !EARLY_MONTH.matcher(text).find();
     }
 
@@ -1185,7 +1185,7 @@ public class FeedbackRenderer {
         sb.append("[예산·저축 — 1순위]\n");
         sb.append("- 예상 월말 총지출: ").append(exactWon(c.predictedMonthEndWon())).append("\n");
         sb.append("- 가용예산: ").append(exactWon(c.availableBudgetWon())).append("\n");
-        if (c.remainingDaysInMonth() > 0) {
+        if (c.remainingDaysInMonth() >= 0) {
             // 월초·월말 같은 시점을 LLM이 거래 날짜로 추측하다 틀린다 (#146 판정: 월말 주에 '아직 월초') — 시점은 남은 일수로만 판단하게 한다
             sb.append("- 이번 달 남은 일수: ")
                     .append(c.remainingDaysInMonth())

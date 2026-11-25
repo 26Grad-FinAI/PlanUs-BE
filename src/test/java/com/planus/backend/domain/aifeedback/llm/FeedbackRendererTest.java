@@ -711,6 +711,23 @@ class FeedbackRendererTest {
         }
 
         @Test
+        @DisplayName("월 마지막 날(남은 일수 0)도 정상 입력 — 프롬프트에 주고 '월초'는 거절, 남은 일수를 모르면(음수) 검사하지 않는다 (CodeRabbit)")
+        void period_lastDayOfMonth() {
+            FeedbackContext lastDay = contextBuilder()
+                    .feedbackType(FeedbackType.ALERT)
+                    .remainingDaysInMonth(0)
+                    .build();
+            FeedbackContext unknown = contextBuilder()
+                    .feedbackType(FeedbackType.ALERT)
+                    .remainingDaysInMonth(-1)
+                    .build();
+
+            assertThat(capturedUserPrompt(lastDay)).contains("- 이번 달 남은 일수: 0일");
+            assertThat(renderer.verifyPeriod("아직 월초라 속도를 조절하면 돼요.", lastDay)).isFalse();
+            assertThat(renderer.verifyPeriod("아직 월초라 속도를 조절하면 돼요.", unknown)).isTrue();
+        }
+
+        @Test
         @DisplayName("만족 톤: 초과 카테고리의 만족한 지출은 유지해도 괜찮다고 존중하되 줄인다면 횟수부터 (#141)")
         void tone_satisfiedKeepsChoice() {
             assertThat(capturedSystemPrompt(

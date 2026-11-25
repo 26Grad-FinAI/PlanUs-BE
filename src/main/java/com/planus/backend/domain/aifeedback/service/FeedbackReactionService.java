@@ -2,6 +2,7 @@ package com.planus.backend.domain.aifeedback.service;
 
 import com.planus.backend.domain.aifeedback.dto.FeedbackReactionRequest;
 import com.planus.backend.domain.aifeedback.dto.FeedbackReactionResponse;
+import com.planus.backend.domain.aifeedback.dto.WeeklyFeedbackResponse;
 import com.planus.backend.domain.aifeedback.entity.AiFeedback;
 import com.planus.backend.domain.aifeedback.entity.Reaction;
 import com.planus.backend.domain.aifeedback.entity.RejectionReason;
@@ -44,8 +45,14 @@ public class FeedbackReactionService {
         if (request.reaction() == Reaction.NOT_HELPFUL) {
             reason = request.rejectionReason();
             if (reason == null) throw new GeneralException(GeneralErrorCode.REACTION_REASON_REQUIRED);
-            if (reason == RejectionReason.DONT_WANT_REDUCE && request.categoryId() == null)
-                throw new GeneralException(GeneralErrorCode.REACTION_CATEGORY_REQUIRED);
+            if (reason == RejectionReason.DONT_WANT_REDUCE) {
+                if (request.categoryId() == null)
+                    throw new GeneralException(GeneralErrorCode.REACTION_CATEGORY_REQUIRED);
+                // 제안받지 않은 카테고리에는 거절 이력을 만들 수 없다 (조회 응답의 actionCategoryIds 중에서만)
+                if (!WeeklyFeedbackResponse.actionCategoryIds(feedback.getPayload())
+                        .contains(request.categoryId()))
+                    throw new GeneralException(GeneralErrorCode.REACTION_CATEGORY_NOT_SUGGESTED);
+            }
         }
 
         LocalDateTime now = LocalDateTime.now(clock);

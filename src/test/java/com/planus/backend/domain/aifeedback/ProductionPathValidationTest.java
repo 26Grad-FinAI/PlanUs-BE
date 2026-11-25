@@ -296,7 +296,7 @@ class ProductionPathValidationTest {
             System.out.printf(
                     "%n[%s] 초과 있는 ALERT 주 %d, 그중 절약 액션 있는 주 %d%n"
                             + "  최대 초과 카테고리가 액션에 없는 주: %d (%.1f%%)%n"
-                            + "  그중 만족 70%% 규칙 해당: %d%n",
+                            + "  그중 해당 카테고리 만족 비중 70%% 이상: %d (현재 정책에는 만족 제외 규칙이 없다 — 제거 전 코드로 돌렸을 때만 제외 원인)%n",
                     names[b],
                     counts[b][0],
                     counts[b][1],

@@ -56,7 +56,11 @@ class FeedbackReactionServiceTest {
     }
 
     private static AiFeedback feedback(long userId) {
-        return AiFeedback.builder().id(FEEDBACK).userId(userId).build();
+        return AiFeedback.builder()
+                .id(FEEDBACK)
+                .userId(userId)
+                .payload("{\"actions\":[{\"categoryId\":10},{\"categoryId\":1},{\"categoryId\":2}]}")
+                .build();
     }
 
     private static FeedbackReactionRequest req(Reaction r, RejectionReason reason, Integer category) {
@@ -122,6 +126,20 @@ class FeedbackReactionServiceTest {
     }
 
     @Test
+    @DisplayName("이 피드백에서 줄이라고 제안하지 않은 카테고리는 거절 이력을 만들 수 없다 — HELPFUL에는 적용하지 않는다")
+    void rejectionCategoryMustBeSuggested() {
+        assertThatThrownBy(() ->
+                        service.save(USER, FEEDBACK, req(Reaction.NOT_HELPFUL, RejectionReason.DONT_WANT_REDUCE, 5)))
+                .isInstanceOfSatisfying(GeneralException.class, e -> assertThat(e.getErrorCode())
+                        .isEqualTo(GeneralErrorCode.REACTION_CATEGORY_NOT_SUGGESTED));
+        verify(reactionRepo, never()).save(any());
+
+        // 도움이 됐어요 / 다른 사유는 카테고리 검사 대상이 아니다
+        service.save(USER, FEEDBACK, req(Reaction.HELPFUL, null, 5));
+        assertThat(stored).hasSize(1);
+    }
+
+    @Test
     @DisplayName("없는 피드백과 남의 피드백은 똑같이 404 — 존재 여부를 드러내지 않는다")
     void notFoundOrNotMine() {
         when(feedbackRepo.findById(7L)).thenReturn(Optional.empty());
@@ -150,8 +168,11 @@ class FeedbackReactionServiceTest {
     void savedReactionsReachProfileAndActions() {
         // 서로 다른 두 피드백에서 같은 카테고리(2)를 "줄이고 싶지 않아요"로 거절
         when(feedbackRepo.findById(43L))
-                .thenReturn(
-                        Optional.of(AiFeedback.builder().id(43L).userId(USER).build()));
+                .thenReturn(Optional.of(AiFeedback.builder()
+                        .id(43L)
+                        .userId(USER)
+                        .payload("{\"actions\":[{\"categoryId\":2}]}")
+                        .build()));
         when(reactionRepo.findByUserIdAndFeedbackId(USER, 43L)).thenReturn(List.of());
         service.save(USER, FEEDBACK, req(Reaction.NOT_HELPFUL, RejectionReason.DONT_WANT_REDUCE, 2));
         service.save(USER, 43L, req(Reaction.NOT_HELPFUL, RejectionReason.DONT_WANT_REDUCE, 2));

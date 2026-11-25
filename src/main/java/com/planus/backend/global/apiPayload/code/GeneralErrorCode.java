@@ -60,6 +60,7 @@ public enum GeneralErrorCode implements BaseErrorCode {
     AI_FEEDBACK_NOT_FOUND(HttpStatus.NOT_FOUND, "AIFEEDBACK_404_001", "해당 피드백을 찾을 수 없습니다."),
     REACTION_REASON_REQUIRED(HttpStatus.BAD_REQUEST, "AIFEEDBACK_400_001", "별로예요를 고르면 사유를 함께 보내야 합니다."),
     REACTION_CATEGORY_REQUIRED(HttpStatus.BAD_REQUEST, "AIFEEDBACK_400_002", "줄이고 싶지 않은 카테고리를 함께 보내야 합니다."),
+    REACTION_CATEGORY_NOT_SUGGESTED(HttpStatus.BAD_REQUEST, "AIFEEDBACK_400_003", "이 피드백에서 줄이라고 제안하지 않은 카테고리입니다."),
 
     // Savings Simulation
     FEEDBACK_NOT_FOUND(HttpStatus.NOT_FOUND, "SIMULATION_404_001", "해당 월의 피드백을 찾을 수 없습니다."),

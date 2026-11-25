@@ -136,8 +136,9 @@ class SavingsActionCalculatorTest {
             List<Expense> expenses = new java.util.ArrayList<>();
             expenses.add(variableWithEmotion(7, 300_000, "REGRET"));
             for (int i = 0; i < 9; i++) expenses.add(variableWithEmotion(7, 5_000, "SATISFIED"));
-            expenses.add(variableWithEmotion(4, 100_000, "SATISFIED"));
-            expenses.add(variableWithEmotion(4, 100_000, "SATISFIED"));
+            // 대조군: 태그 없는 카테고리 4는 기본 점수 1.0 — 건수 기준이면 카테고리 7(만족 9/10건)이 감점되어 4가 먼저 나온다
+            expenses.add(variable(4, 100_000));
+            expenses.add(variable(4, 100_000));
 
             List<ActionPlan> plans = calculator.calculate(
                     overspend,
