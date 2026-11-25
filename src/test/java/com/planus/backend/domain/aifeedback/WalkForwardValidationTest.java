@@ -383,6 +383,73 @@ class WalkForwardValidationTest {
         }
     }
 
+    /**
+     * 추세 이상치의 '그 앞 4주' 구간이 최근 2주 바로 앞 한 주(w-2)를 건너뛰는 것이 판정에 미치는 영향 (#141).
+     *
+     * <p>현재: 최근 2주(w-1, w) vs 그 앞 4주(w-6..w-3). 대안: 바로 앞 4주(w-5..w-2). 두 방식으로 확정되는 (주, 카테고리) 수와
+     * 서로 다르게 판정되는 경우를 센다. 정답 라벨이 없어 어느 쪽이 맞는지는 말하지 않고, 판정이 얼마나 갈리는지만 기록한다.
+     */
+    @Test
+    @DisplayName("[검증 6] 추세 구간 w-2 건너뜀: 현재 방식과 바로 앞 4주 방식의 판정 차이")
+    void trend_gapWeekEffect() {
+        int len = props.getBaselineWeeks();
+        LocalDate dataEnd = ALL_EXPENSES.stream()
+                .map(Expense::getDate)
+                .max(Comparator.naturalOrder())
+                .orElseThrow();
+        int both = 0, onlyCurrent = 0, onlyAlt = 0, samples = 0;
+        List<String> diffs = new ArrayList<>();
+
+        for (int week = WARMUP_WEEKS + 1; ; week++) {
+            LocalDate weekEnd = FIRST_MONDAY.plusWeeks(week).minusDays(1);
+            if (weekEnd.isAfter(dataEnd)) break;
+            Map<Integer, Long> budgets = budgetForMonth(weekEnd);
+            for (int cat : budgets.keySet()) {
+                if (!anomalyDetector.isHighFreq(cat) || anomalyDetector.isSpikeProne(cat)) continue;
+                double[] weekly = new double[len];
+                for (int i = 0; i < len; i++) {
+                    LocalDate end = weekEnd.minusWeeks(len - 1L - i);
+                    LocalDate start = end.minusDays(6);
+                    weekly[i] = ALL_EXPENSES.stream()
+                            .filter(e -> e.isExpense()
+                                    && e.isVariable()
+                                    && e.getCategoryId() == cat
+                                    && !e.getDate().isBefore(start)
+                                    && !e.getDate().isAfter(end))
+                            .mapToLong(Expense::getAmount)
+                            .sum();
+                }
+                long budget = budgets.getOrDefault(cat, 0L);
+                boolean current = anomalyDetector.trendConfirmed(weekly, len - 1, budget);
+                boolean alt = risingContiguous(weekly, len - 1, budget) && risingContiguous(weekly, len - 2, budget);
+                samples++;
+                if (current && alt) both++;
+                else if (current) {
+                    onlyCurrent++;
+                    diffs.add("현재만 " + weekEnd + " " + Categories.name(cat));
+                } else if (alt) {
+                    onlyAlt++;
+                    diffs.add("바로앞4주만 " + weekEnd + " " + Categories.name(cat));
+                }
+            }
+        }
+        System.out.println("=== [검증 6] 추세 구간 w-2 건너뜀 영향 ===");
+        System.out.printf(
+                "표본 %d (주×고빈도 카테고리) | 둘 다 확정 %d | 현재만 %d | 바로 앞 4주만 %d%n", samples, both, onlyCurrent, onlyAlt);
+        diffs.forEach(d -> System.out.println("  " + d));
+        assertThat(samples).isPositive();
+    }
+
+    /** 대안: 최근 2주(w-1, w)를 바로 앞 4주(w-5..w-2)와 비교. */
+    private boolean risingContiguous(double[] weekly, int w, long budgetWon) {
+        if (w < 5) return false;
+        double recent = (weekly[w - 1] + weekly[w]) / 2.0;
+        double prior = (weekly[w - 5] + weekly[w - 4] + weekly[w - 3] + weekly[w - 2]) / 4.0;
+        double frac = budgetWon * props.getTrendFrac();
+        if (prior <= 0) return recent > 0 && recent >= frac;
+        return recent >= prior * props.getTrendRatio() && (recent - prior) >= frac;
+    }
+
     private long monthSum(LocalDate from, LocalDate to, Boolean variable) {
         return ALL_EXPENSES.stream()
                 .filter(e -> e.isExpense()
