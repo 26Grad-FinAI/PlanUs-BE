@@ -298,88 +298,103 @@ class WalkForwardValidationTest {
     }
 
     // ──────────────────────────────────────────────────────────────
-    // [검증 3] BudgetProjector 예측 오차 (MAPE)
+    // [검증 3] BudgetProjector 예측 오차 (경과일 구간별, 단순 예측과 비교)
     // ──────────────────────────────────────────────────────────────
+    /**
+     * 월말 예측 오차를 경과일 구간별로 나누고 단순 예측과 비교한다 (#141).
+     *
+     * <p>전체 평균(MAPE)은 월말에 가까운 주차(거의 확정)와 월초 주차(거의 추측)를 섞어 평균내므로 오차가 가려진다.
+     * 운영({@code AiFeedbackService})과 같은 입력을 쓴다: 평소 일평균 = 전월 변동지출 ÷ 전월 일수. 고정 지출 추정은 따로라서 변동지출만 비교한다.
+     * 단순 예측: 선형 외삽(지금까지 일평균 × 월 일수), 전월 그대로(지난달 변동지출).
+     */
     @Test
-    @DisplayName("[검증 3] BudgetProjector: 월말 예측 오차 (MAPE)")
-    void budgetProjector_mape() {
-        System.out.println("=== [검증 3] BudgetProjector 예측 오차 (주차별 시점 → 월말 실제 비교) ===");
-        System.out.printf("%-6s %-22s %-14s %-14s %-8s%n", "주차", "기간", "예측(원)", "실제(원)", "오차(%)");
-        System.out.println("-".repeat(70));
-
+    @DisplayName("[검증 3] BudgetProjector: 경과일 구간별 오차, 단순 예측과 비교")
+    void budgetProjector_mapeByElapsedDays() {
+        LocalDate dataStart = ALL_EXPENSES.stream()
+                .map(Expense::getDate)
+                .min(Comparator.naturalOrder())
+                .orElseThrow();
         LocalDate dataEnd = ALL_EXPENSES.stream()
                 .map(Expense::getDate)
                 .max(Comparator.naturalOrder())
                 .orElseThrow();
 
-        double totalMape = 0;
-        int count = 0;
+        String[] bucketNames = {"1~7일", "8~14일", "15~21일", "22일~"};
+        double[][] sums = new double[4][4]; // [구간][프로젝터, 선형 외삽, 전월 그대로, 프로젝터(전월 있는 표본)]
+        int[] counts = new int[4];
+        int[] prevCounts = new int[4];
 
         for (int week = WARMUP_WEEKS + 1; ; week++) {
             LocalDate weekEnd = FIRST_MONDAY.plusWeeks(week).minusDays(1);
-            LocalDate weekStart = weekEnd.minusDays(6);
             if (weekEnd.isAfter(dataEnd)) break;
-
             LocalDate monthStart = weekEnd.withDayOfMonth(1);
             LocalDate monthEnd = weekEnd.withDayOfMonth(weekEnd.lengthOfMonth());
-            // 월말 실제값 확인 가능한 달만 검증
             if (monthEnd.isAfter(dataEnd)) continue;
 
             int daysElapsed = (int) java.time.temporal.ChronoUnit.DAYS.between(monthStart, weekEnd) + 1;
             int daysInMonth = weekEnd.lengthOfMonth();
+            int bucket = Math.min(3, (daysElapsed - 1) / 7);
 
-            long variableMtd = ALL_EXPENSES.stream()
-                    .filter(e -> e.isExpense()
-                            && e.isVariable()
-                            && !e.getDate().isBefore(monthStart)
-                            && !e.getDate().isAfter(weekEnd))
-                    .mapToLong(Expense::getAmount)
-                    .sum();
+            long variableMtd = monthSum(monthStart, weekEnd, true);
+            long actual = monthSum(monthStart, monthEnd, true);
+            if (actual <= 0) continue;
 
-            long fixedMtd = ALL_EXPENSES.stream()
-                    .filter(e -> e.isExpense()
-                            && !e.isVariable()
-                            && !e.getDate().isBefore(monthStart)
-                            && !e.getDate().isAfter(weekEnd))
-                    .mapToLong(Expense::getAmount)
-                    .sum();
+            LocalDate prevStart = monthStart.minusMonths(1);
+            boolean hasPrev = !prevStart.isBefore(dataStart.withDayOfMonth(1));
+            long prevTotal = hasPrev ? monthSum(prevStart, monthStart.minusDays(1), true) : 0;
+            double priorDailyRate = prevTotal > 0 ? (double) prevTotal / prevStart.lengthOfMonth() : 0.0;
 
-            LocalDate threeMonthsAgo = monthStart.minusMonths(3);
-            double priorDailyRate = ALL_EXPENSES.stream()
-                    .filter(e -> e.isExpense()
-                            && e.isVariable()
-                            && !e.getDate().isBefore(threeMonthsAgo)
-                            && e.getDate().isBefore(monthStart))
-                    .mapToLong(Expense::getAmount)
-                    .average()
-                    .orElse(0.0);
+            long projector = budgetProjector
+                    .project(variableMtd, 0, 0, daysElapsed, daysInMonth, priorDailyRate, null, null)
+                    .predictedMonthEndWon();
+            double linear = (double) variableMtd / daysElapsed * daysInMonth;
 
-            BudgetProjector.Projection proj = budgetProjector.project(
-                    variableMtd, fixedMtd, 0, daysElapsed, daysInMonth, priorDailyRate, null, null);
-
-            long actual = ALL_EXPENSES.stream()
-                    .filter(e -> e.isExpense()
-                            && !e.getDate().isBefore(monthStart)
-                            && !e.getDate().isAfter(monthEnd))
-                    .mapToLong(Expense::getAmount)
-                    .sum();
-
-            double error = actual > 0 ? Math.abs(proj.predictedMonthEndWon() - actual) / (double) actual * 100 : 0.0;
-            totalMape += error;
-            count++;
-
-            System.out.printf(
-                    "%-6d %-22s %-14s %-14s %-8.1f%n",
-                    week,
-                    weekStart + " ~ " + weekEnd,
-                    String.format("%,d", proj.predictedMonthEndWon()),
-                    String.format("%,d", actual),
-                    error);
+            sums[bucket][0] += pctError(projector, actual);
+            sums[bucket][1] += pctError(linear, actual);
+            counts[bucket]++;
+            if (prevTotal > 0) {
+                sums[bucket][2] += pctError(prevTotal, actual);
+                sums[bucket][3] += pctError(projector, actual);
+                prevCounts[bucket]++;
+            }
         }
 
-        double mape = count > 0 ? totalMape / count : 0.0;
-        System.out.printf("%-30s %.1f%%%n", "평균 오차 (MAPE) :", mape);
-        assertThat(mape).isLessThan(50.0);
+        System.out.println("=== [검증 3] 경과일 구간별 월말 변동지출 예측 오차 (MAPE %) ===");
+        System.out.printf(
+                "%-8s %-4s %-10s %-10s | %-4s %-10s %-10s%n", "구간", "n", "프로젝터", "선형외삽", "n", "프로젝터", "전월그대로");
+        for (int b = 0; b < 4; b++) {
+            if (counts[b] == 0) continue;
+            System.out.printf(
+                    "%-8s %-4d %-10.1f %-10.1f | %-4d %-10.1f %-10.1f%n",
+                    bucketNames[b],
+                    counts[b],
+                    sums[b][0] / counts[b],
+                    sums[b][1] / counts[b],
+                    prevCounts[b],
+                    prevCounts[b] > 0 ? sums[b][3] / prevCounts[b] : Double.NaN,
+                    prevCounts[b] > 0 ? sums[b][2] / prevCounts[b] : Double.NaN);
+        }
+
+        // 표본이 구간당 5~7개월이라 구간별 순위는 참고용이다. 그래도 월초(전월 평소를 섞는 구간)가 선형 외삽보다 나쁘면
+        // 혼합식이 의미가 없고, 어느 구간이든 20%를 넘으면 월말 초과 판정을 믿을 수 없다.
+        assertThat(sums[0][0] / counts[0]).isLessThan(sums[0][1] / counts[0]);
+        for (int b = 0; b < 4; b++) {
+            if (counts[b] > 0) assertThat(sums[b][0] / counts[b]).isLessThan(20.0);
+        }
+    }
+
+    private long monthSum(LocalDate from, LocalDate to, Boolean variable) {
+        return ALL_EXPENSES.stream()
+                .filter(e -> e.isExpense()
+                        && (variable == null || e.isVariable() == variable)
+                        && !e.getDate().isBefore(from)
+                        && !e.getDate().isAfter(to))
+                .mapToLong(Expense::getAmount)
+                .sum();
+    }
+
+    private static double pctError(double predicted, long actual) {
+        return Math.abs(predicted - actual) / (double) actual * 100;
     }
 
     // ──────────────────────────────────────────────────────────────
