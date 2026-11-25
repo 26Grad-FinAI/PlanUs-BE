@@ -63,9 +63,9 @@ public class AiFeedbackService {
     private static final Logger log = LoggerFactory.getLogger(AiFeedbackService.class);
 
     /** v3.0 (#111): 배수 기준 명시, 건수·묶음 표기, 절약 액션 출처 제한, 내부 용어 제거, 거래처별 건수. */
-    private static final String PROMPT_VERSION = "v4.4";
+    private static final String PROMPT_VERSION = "v4.5";
 
-    private static final String LOGIC_VERSION = "v2.3";
+    private static final String LOGIC_VERSION = "v2.4";
 
     /** 피드백의 '평소' = 이번 주를 뺀 직전 {@value}주 주당 평균 (#144). */
     static final int RECENT_WEEKS = 4;
@@ -331,6 +331,8 @@ public class AiFeedbackService {
         // 이상치 감지 OR REGRET/IMPULSE 감정 OR 메모 있는 거래, 금액 상위 5건
         List<TransactionHighlight> weekHighlights =
                 isLowData ? List.of() : collectWeekHighlights(window, weekStart, weekEnd, catBudget);
+        // '가장 컸다' 검증용 — 주목 거래 필터(이상치·감정·메모)와 무관하게 이번 주 변동지출 중 가장 큰 한 건
+        TransactionHighlight weekLargest = isLowData ? null : findWeekLargest(window, weekStart, weekEnd);
 
         // ── [8] FeedbackContext 조립 ──
         final Map<Integer, CauseSignals> finalCauseSignals = causeSignalsByCategory;
@@ -479,7 +481,8 @@ public class AiFeedbackService {
                 top != null ? withBaselineWeeks(top.basis()) : null,
                 anomalyWeeklyCount,
                 dim - day,
-                recent4WeekAvgWon);
+                recent4WeekAvgWon,
+                weekLargest);
 
         // ── [9] 렌더링 ──
         FeedbackRenderer.Rendered out = renderer.render(ctx);
@@ -1355,6 +1358,17 @@ public class AiFeedbackService {
         }
 
         return TransactionHighlight.groupIdenticalTopN(result, 5);
+    }
+
+    private static TransactionHighlight findWeekLargest(List<Expense> window, LocalDate weekStart, LocalDate weekEnd) {
+        return window.stream()
+                .filter(e -> e.isVariable()
+                        && !e.getDate().isBefore(weekStart)
+                        && !e.getDate().isAfter(weekEnd))
+                .max(Comparator.comparingLong(Expense::getAmount))
+                .map(e -> new TransactionHighlight(
+                        e.getDate(), Categories.name(e.getCategoryId()), e.getAmount(), e.getMemo(), e.getEmotion()))
+                .orElse(null);
     }
 
     private static boolean isHighlightEmotion(String emotion) {

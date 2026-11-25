@@ -639,55 +639,23 @@ class FeedbackRendererTest {
         }
 
         @Test
-        @DisplayName("액션이 셋 이상이면 줄일 금액이 큰 두 개만 지킨 효과도 준다 — 두 개만 말하면서 '모두 지키면' 효과를 붙이지 않게 (#143)")
-        void actions_topPairEffectLine() {
+        @DisplayName("프롬프트에 절약 액션 목록 대신 코드가 붙인다는 안내와 가장 큰 한 건이 들어간다 (#146)")
+        void prompt_hidesActionsAndShowsLargest() {
             FeedbackContext ctx = contextBuilder()
                     .feedbackType(FeedbackType.ALERT)
                     .savingsImpactWon(-300_000)
-                    .actions(List.of(
-                            new ActionSummary("교통", 30_000, null, 1.0),
-                            new ActionSummary("기타", 150_000, null, 1.0),
-                            new ActionSummary("식대", 80_000, null, 1.0)))
+                    .actions(List.of(new ActionSummary("기타", 100_000, null, 1.0, 180_000)))
+                    .weekHighlights(List.of(
+                            new FeedbackRenderer.TransactionHighlight(
+                                    java.time.LocalDate.of(2026, 5, 3), "식대", 130_000, null, null),
+                            new FeedbackRenderer.TransactionHighlight(
+                                    java.time.LocalDate.of(2026, 5, 4), "기타", 50_000, null, null)))
                     .build();
 
             assertThat(capturedUserPrompt(ctx))
-                    .contains("- 기타·식대만 지키면 전체 월말 초과 300,000원 → 70,000원")
-                    .contains("모두 지키면 전체 월말 초과 300,000원 → 40,000원");
-
-            // 두 개를 말하고 두 개 조합 효과 → 통과 / 한 개만 말하고 두 개 조합 효과 → 거절 / 두 개만 말하고 전부 효과 → 거절
-            assertThat(renderer.verifyEffectScope("기타와 식대를 지키면 월말 초과를 30만 원에서 7만 원으로 줄일 수 있어요.", ctx))
-                    .isTrue();
-            assertThat(renderer.verifyEffectScope("기타만 지키면 월말 초과를 7만 원으로 줄일 수 있어요.", ctx))
-                    .isFalse();
-            assertThat(renderer.verifyEffectScope("기타와 식대를 지키면 월말 초과를 4만 원으로 줄일 수 있어요.", ctx))
-                    .isFalse();
-            assertThat(renderer.verifyNumbers("기타와 식대를 지키면 월말 초과를 30만 원에서 7만 원으로 줄일 수 있어요.", ctx))
-                    .isTrue();
-            // 감소 동사 없이도 한 카테고리만 말하고 두 개 조합의 월말 초과 금액을 쓰면 거절
-            assertThat(renderer.verifyEffectScope("기타만 지키면 월말 초과는 7만 원이에요.", ctx))
-                    .isFalse();
-            // 이번 주 지출·평균 비교 금액이 조합 잔액과 같아도 월말 초과 문장이 아니면 거절하지 않음
-            FeedbackContext weekSame = contextBuilder()
-                    .weekTotalWon(70_000)
-                    .recent4WeekAvgWon(100_000)
-                    .savingsImpactWon(-300_000)
-                    .actions(ctx.actions())
-                    .build();
-            assertThat(renderer.verifyEffectScope("이번 주는 7만 원을 써서 최근 4주 평균보다 3만 원 줄었어요.", weekSame))
-                    .isTrue();
-        }
-
-        @Test
-        @DisplayName("액션이 둘 이하면 두 개 조합 줄은 없다 (모두 지키면과 같으므로)")
-        void actions_noPairLineForTwo() {
-            FeedbackContext ctx = contextBuilder()
-                    .feedbackType(FeedbackType.ALERT)
-                    .savingsImpactWon(-300_000)
-                    .actions(List.of(
-                            new ActionSummary("기타", 150_000, null, 1.0), new ActionSummary("식대", 80_000, null, 1.0)))
-                    .build();
-
-            assertThat(capturedUserPrompt(ctx)).doesNotContain("기타·식대만 지키면");
+                    .contains("[절약 액션] 마지막 문장은 시스템이 붙인다")
+                    .contains("[이번 주 가장 큰 한 건] 식대 130,000원")
+                    .doesNotContain("까지만 쓰기");
         }
 
         private String capturedSystemPrompt(FeedbackContext ctx) {
@@ -913,43 +881,6 @@ class FeedbackRendererTest {
                     .contains(", 감정: 필요")
                     .contains("\"토스페이\" (충동)");
             assertThat(prompt).doesNotContainPattern("NECESSARY|SATISFIED|IMPULSE|STRESS_RELIEF|REGRET");
-        }
-
-        @Test
-        @DisplayName("절약 액션을 다 지켜도 남는 초과를 표시 (#122 실험 0, 29주차: '8만 5천 원만 줄이면 예산 안에')")
-        void actionTotal_showsRemainingOverspend() {
-            FeedbackContext ctx = contextBuilder()
-                    .feedbackType(FeedbackType.ALERT)
-                    .savingsImpactWon(-196_455)
-                    .remainingDaysInMonth(10)
-                    .actions(List.of(new ActionSummary("기타", 85_219, null, 0.5)))
-                    .build();
-
-            assertThat(capturedUserPrompt(ctx))
-                    .contains("[절약 액션] (이번 달 남은 기간 10일)\n")
-                    .contains("- 기타 모두 지키면 전체 월말 초과 196,455원 → 111,236원으로 줄어듦");
-            assertThat(renderer.verifyNumbers("기타에서 85,219원 줄이면 월말 초과가 19만 6천 원에서 11만 원대로 줄어요.", ctx))
-                    .isTrue();
-        }
-
-        @Test
-        @DisplayName("절약 액션이 초과를 모두 덮으면 '예산 안에 들어올 수 있음'")
-        void actionTotal_coversGap() {
-            FeedbackContext ctx = contextBuilder()
-                    .feedbackType(FeedbackType.ALERT)
-                    .savingsImpactWon(-120_746)
-                    .actions(List.of(
-                            new ActionSummary("기타", 103_056, null, 0.5), new ActionSummary("식료품", 17_690, null, 0.5)))
-                    .build();
-
-            String prompt = capturedUserPrompt(ctx);
-            assertThat(prompt).contains("[절약 액션]\n");
-            // 카테고리가 둘 이상이면 하나씩 지켰을 때 효과도 (#122 실험 7, 22주차)
-            assertThat(prompt).contains("- 기타만 지키면 전체 월말 초과 120,746원 → 17,690원\n");
-            assertThat(prompt).contains("- 식료품만 지키면 전체 월말 초과 120,746원 → 103,056원\n");
-            assertThat(renderer.verifyNumbers("기타만 줄여도 월말 초과가 120,746원에서 17,690원으로 줄어요.", ctx))
-                    .isTrue();
-            assertThat(prompt).contains("- 기타·식료품 모두 지키면 이번 달 예산 안에 들어올 수 있음");
         }
 
         @Test
@@ -1613,25 +1544,6 @@ class FeedbackRendererTest {
         }
 
         @Test
-        @DisplayName("절약 액션에 남은 기간 예상 지출·비율·상한을 넣고, 카테고리 초과를 다 덮으면 예산 안에 들어온다고 밝힌다")
-        void prompt_actionHasBaseAndCap() {
-            FeedbackContext ctx = week36().savingsImpactWon(-505_523)
-                    .remainingDaysInMonth(20)
-                    .overspendCategories(List.of(new CategoryOverspend("기타", 103_056, 140_203, null, 6)))
-                    .actions(List.of(new ActionSummary("기타", 103_056, "FREQUENCY", 1.0, 180_000)))
-                    .build();
-
-            assertThat(userPromptOf(ctx))
-                    .contains(
-                            "- 기타에서 103,056원 줄이기 (횟수를 줄이는 방향) — 남은 기간 기타 예상 지출 180,000원 중 57% → 남은 기간 기타는 76,944원까지만 쓰기"
-                                    + " (이만큼 덜 쓰면 기타가 월말에 예산 안에 들어옴)");
-            assertThat(renderer.verifyNumbers("남은 20일 동안 기타는 7만 7천 원까지만 써보세요.", ctx))
-                    .isTrue();
-            assertThat(renderer.verifyNumbers("남은 기간 기타 예상 지출 18만 원 중 10만 원을 줄여보세요.", ctx))
-                    .isTrue();
-        }
-
-        @Test
         @DisplayName("첫 문장에 이번 주 총지출이 없으면 거절 — 반올림 표현은 허용")
         void firstSentence_mustHaveWeekTotal() {
             FeedbackContext ctx = week36().build();
@@ -1840,6 +1752,108 @@ class FeedbackRendererTest {
                     .build();
 
             assertThat(renderer.render(ctx).text()).contains("남은 기간 기타는 예상 18만원 중 8만원까지만 쓰면");
+        }
+
+        @Test
+        @DisplayName("절약 액션이 있으면 세 번째 문장은 코드가 만든다 — LLM이 세 문장을 써도 앞 두 문장만 쓰고 뒤에 붙인다 (#146)")
+        void actionSentence_isBuiltByCode() {
+            LlmClient client = mock(LlmClient.class);
+            when(llmProvider.getIfAvailable()).thenReturn(client);
+            when(client.complete(anyString(), anyString()))
+                    .thenReturn(
+                            "이번 주는 185,533원을 써서 최근 4주 평균보다 134,467원 적게 썼어요. 기타가 가장 컸어요. 기타는 줄이고 식대는 그대로 두면 4만 원으로 낮출 수 있어요.");
+            FeedbackContext ctx = week36().savingsImpactWon(-300_000)
+                    .remainingDaysInMonth(23)
+                    .actions(List.of(
+                            new ActionSummary("기타", 215_261, null, 1.0, 430_522),
+                            new ActionSummary("식대", 28_550, null, 1.0, 309_350)))
+                    .build();
+
+            assertThat(renderer.render(ctx).text())
+                    .isEqualTo("이번 주는 185,533원을 써서 최근 4주 평균보다 134,467원 적게 썼어요. 기타가 가장 컸어요."
+                            + " 남은 23일 동안 기타는 21만 5천 원까지만, 식대는 28만 원까지만 쓰면 월말 초과가 30만 원에서 5만 6천 원으로 줄어요.");
+        }
+
+        @Test
+        @DisplayName("코드 문장: 초과를 다 덮으면 예산 안, 상한을 모르면 줄일 금액, 천 원 단위 내림 (#146)")
+        void actionSentence_formats() {
+            FeedbackContext covered = contextBuilder()
+                    .savingsImpactWon(-100_000)
+                    .remainingDaysInMonth(0)
+                    .actions(List.of(new ActionSummary("기타", 100_000, null, 1.0)))
+                    .build();
+
+            assertThat(FeedbackRenderer.actionSentence(covered)).isEqualTo("남은 기간 기타는 10만 원 덜 쓰면 이번 달 예산 안에 들어와요.");
+            assertThat(FeedbackRenderer.koWon(215_999, false)).isEqualTo("21만 5천 원");
+            assertThat(FeedbackRenderer.koWon(215_500, true)).isEqualTo("21만 6천 원");
+            assertThat(FeedbackRenderer.koWon(900, false)).isEqualTo("900원");
+        }
+
+        @Test
+        @DisplayName("'가장 컸다'가 가장 큰 한 건이 아닌 카테고리에 붙으면 거절 (#146)")
+        void largest_onlyOnTopTransaction() {
+            FeedbackContext ctx = week36().weekHighlights(List.of(
+                            new FeedbackRenderer.TransactionHighlight(
+                                    java.time.LocalDate.of(2026, 5, 3), "식대", 130_000, null, null),
+                            new FeedbackRenderer.TransactionHighlight(
+                                    java.time.LocalDate.of(2026, 5, 4), "기타", 50_000, null, null)))
+                    .build();
+
+            assertThat(renderer.verifyLargest("식대 한 건이 가장 컸어요.", ctx)).isTrue();
+            assertThat(renderer.verifyLargest("기타에서 결제가 가장 컸어요.", ctx)).isFalse();
+            assertThat(renderer.verifyLargest("식대가 가장 컸고, 기타도 늘었어요.", ctx)).isTrue();
+            // 비교 대상이 앞에 나와도 '가장 컸다'의 대상이 가장 큰 한 건이면 거절하지 않는다
+            assertThat(renderer.verifyLargest("기타보다 식대 한 건이 가장 컸어요.", ctx)).isTrue();
+            assertThat(renderer.verifyLargest("식대보다 기타 결제가 가장 컸어요.", ctx)).isFalse();
+        }
+
+        @Test
+        @DisplayName("가장 큰 한 건은 주목 거래 목록이 아니라 따로 받은 이번 주 최대 거래로 검증 (CodeRabbit)")
+        void largest_usesSeparateWeekLargest() {
+            // 주목 거래에는 기타 5만 원만 있고, 메모·감정이 없는 식대 20만 원은 목록에서 빠져 있다
+            FeedbackContext base = week36().weekHighlights(List.of(new FeedbackRenderer.TransactionHighlight(
+                            java.time.LocalDate.of(2026, 5, 4), "기타", 50_000, null, null)))
+                    .build();
+            // 따로 받지 않으면 주목 거래 중 가장 큰 건(기타)이 기준이라, 기타에 붙인 '가장 컸다'가 통과한다
+            assertThat(renderer.verifyLargest("기타에서 결제가 가장 컸어요.", base)).isTrue();
+
+            FeedbackContext ctx = withWeekLargest(
+                    base,
+                    new FeedbackRenderer.TransactionHighlight(
+                            java.time.LocalDate.of(2026, 5, 3), "식대", 200_000, null, null));
+            assertThat(renderer.verifyLargest("식대 한 건이 가장 컸어요.", ctx)).isTrue();
+            assertThat(renderer.verifyLargest("기타에서 결제가 가장 컸어요.", ctx)).isFalse();
+        }
+
+        private static FeedbackContext withWeekLargest(FeedbackContext c, FeedbackRenderer.TransactionHighlight top) {
+            return new FeedbackContext(
+                    c.predictedMonthEndWon(),
+                    c.availableBudgetWon(),
+                    c.savingsImpactWon(),
+                    c.burnRate(),
+                    c.pacing(),
+                    c.hasAnomaly(),
+                    c.anomalyCategoryName(),
+                    c.anomalyMagnitude(),
+                    c.anomalyWeeklyAmountWon(),
+                    c.anomalyConfidence(),
+                    c.anomalyEmotion(),
+                    c.additionalHighAnomalies(),
+                    c.weekEmotion(),
+                    c.weekTotalWon(),
+                    c.prevWeekTotalWon(),
+                    c.complianceRate(),
+                    c.overspendCategories(),
+                    c.actions(),
+                    c.weekHighlights(),
+                    c.feedbackType(),
+                    c.bandWidth(),
+                    c.overallConfidence(),
+                    c.anomalyBasis(),
+                    c.anomalyWeeklyCount(),
+                    c.remainingDaysInMonth(),
+                    c.recent4WeekAvgWon(),
+                    top);
         }
 
         @Test

@@ -186,9 +186,11 @@ public class FeedbackRenderer {
             if (candidate == null || candidate.isBlank()) {
                 break;
             }
+            // 절약 행동·효과 문장은 코드가 붙이므로 LLM 응답은 앞 두 문장만 쓴다 (#146)
+            if (codeActionMode(c)) candidate = leadSentences(candidate);
             String reason = firstFailure(candidate, c);
             if (reason == null) {
-                return candidate;
+                return withActionSentence(c, candidate);
             }
             // 첫 문장 총지출만 빠진 응답은 기억해 두었다가, 끝까지 고쳐지지 않으면 코드로 만든 첫 문장을 앞에 붙여 쓴다 (#144)
             if (reason.equals("첫 문장 총지출") && firstFailure(candidate, c, false) == null) onlyMissingTotal = candidate;
@@ -201,9 +203,69 @@ public class FeedbackRenderer {
         }
         if (onlyMissingTotal != null) {
             log.warn("LLM 첫 문장 총지출 누락 — 코드로 만든 첫 문장으로 보정");
-            return withWeekTotalFirst(c, onlyMissingTotal);
+            return withActionSentence(c, withWeekTotalFirst(c, onlyMissingTotal));
         }
         return template(c);
+    }
+
+    /**
+     * 절약 액션이 있고 월말 초과가 예상되면, 세 번째 문장(남은 기간 상한과 효과)은 LLM이 아니라 코드가 만든다 (#146).
+     * LLM이 일부 카테고리만 말하면서 다른 조합의 효과 금액을 붙이거나 '쓰기'를 '쓰지 않기'로 바꾸는 오류를 구조적으로 없앤다.
+     */
+    static boolean codeActionMode(FeedbackContext c) {
+        return !c.actions().isEmpty() && c.savingsImpactWon() < 0;
+    }
+
+    /** LLM 응답의 앞 두 문장. */
+    static String leadSentences(String text) {
+        List<String> parts = sentences(text);
+        return String.join(" ", parts.subList(0, Math.min(2, parts.size())));
+    }
+
+    private static String withActionSentence(FeedbackContext c, String lead) {
+        return codeActionMode(c) ? lead + " " + actionSentence(c) : lead;
+    }
+
+    /** 코드로 만든 절약 행동 문장 — 카테고리별 남은 기간 상한과, 말한 카테고리를 지켰을 때의 월말 초과. */
+    static String actionSentence(FeedbackContext c) {
+        List<ActionSummary> named = c.actions().stream()
+                .sorted(Comparator.comparingLong(ActionSummary::reductionWon).reversed())
+                .limit(3)
+                .toList();
+        long gap = Math.abs(c.savingsImpactWon());
+        long left = gap - named.stream().mapToLong(ActionSummary::reductionWon).sum();
+        List<String> clauses = new ArrayList<>();
+        for (ActionSummary a : named) {
+            if (a.remainingExpectedWon() > 0) {
+                long cap = Math.max(0, a.remainingExpectedWon() - a.reductionWon());
+                clauses.add(topic(a.categoryName()) + " " + koWon(cap, false) + "까지만");
+            } else {
+                clauses.add(topic(a.categoryName()) + " " + koWon(a.reductionWon(), false) + " 덜");
+            }
+        }
+        String days = c.remainingDaysInMonth() > 0 ? "남은 " + c.remainingDaysInMonth() + "일 동안 " : "남은 기간 ";
+        String effect =
+                left > 0 ? "월말 초과가 " + koWon(gap, true) + "에서 " + koWon(left, true) + "으로 줄어요." : "이번 달 예산 안에 들어와요.";
+        return days + String.join(", ", clauses) + " 쓰면 " + effect;
+    }
+
+    /** "21만 5천 원" 표기. 상한은 내림(초과하지 않게), 효과는 반올림. 천 원 미만은 그대로 쓴다. */
+    static String koWon(long v, boolean round) {
+        if (v < 1_000) return v + "원";
+        long unit = round ? Math.round(v / 1_000.0) * 1_000 : v / 1_000 * 1_000;
+        long man = unit / 10_000;
+        long cheon = unit % 10_000 / 1_000;
+        List<String> parts = new ArrayList<>();
+        if (man > 0) parts.add(man + "만");
+        if (cheon > 0) parts.add(cheon + "천");
+        return String.join(" ", parts) + " 원";
+    }
+
+    /** 받침에 따라 '은/는'을 붙인 주제어. */
+    private static String topic(String word) {
+        char last = word.charAt(word.length() - 1);
+        boolean batchim = last >= 0xAC00 && last <= 0xD7A3 && (last - 0xAC00) % 28 != 0;
+        return word + (batchim ? "은" : "는");
     }
 
     /**
@@ -228,6 +290,7 @@ public class FeedbackRenderer {
                                 + " 이번 달 속도는 [예산 사용 비율]에 적힌 빠름·느림 그대로 쓸 것.";
                     case "절약 효과 범위" ->
                         "'모두 지키면' 효과 금액은 [절약 액션]의 카테고리를 모두 말할 때만 쓸 것. 일부만 말하면 'X만 지키면' 숫자를 쓰거나 효과 숫자를 빼고 쓸 것.";
+                    case "가장 큰 항목" -> "'가장 컸다'는 [이번 주 가장 큰 한 건]에만 쓰고, 다른 카테고리나 건수·배수가 큰 것에 쓰지 말 것.";
                     case "평소 기준" -> "'평소'는 직전 4주 평균이다. 지난주와 비교한 금액에는 '지난주보다'라고 쓸 것.";
                     case "출력 형식" -> "마크다운 제목(#) 없이 문장만 쓰고, 단어 안에 영문·그리스 문자가 섞이지 않게 쓸 것.";
                     default -> "분석 재료와 맞지 않는 부분을 고칠 것.";
@@ -254,6 +317,7 @@ public class FeedbackRenderer {
         if (!verifyEach(candidate, c)) return "'각각' 금액";
         if (!verifySavingsAmounts(candidate, c)) return "절약 금액";
         if (!verifyEffectScope(candidate, c)) return "절약 효과 범위";
+        if (!verifyLargest(candidate, c)) return "가장 큰 항목";
         if (checkFirstSentence && !verifyFirstSentence(candidate, c)) return "첫 문장 총지출";
         return null;
     }
@@ -467,17 +531,6 @@ public class FeedbackRenderer {
             if (c.actions().size() >= 2 && !c.actions().stream().allMatch(a -> sentence.contains(a.categoryName())))
                 return false;
         }
-        // 큰 두 개 조합 효과는 그 두 카테고리를 말한 문장에만 (#143)
-        Optional<Long> pairLeft = topPairLeft(c);
-        if (pairLeft.isPresent() && pairLeft.get() != allLeft) {
-            for (String sentence : sentences(text)) {
-                // 월말 초과의 결과 금액에만 적용한다 — 이번 주 지출·평균 비교 금액이 우연히 같아도 거절하지 않고, 감소 동사 없이
-                // "기타만 지키면 월말 초과는 7만 원"이라고 써도 잡는다 (리뷰 지적)
-                boolean claimsPair = sentence.contains("초과")
-                        && extractMoneyMentions(sentence).stream().anyMatch(m -> matches(m, pairLeft.get()));
-                if (claimsPair && !topPair(c).stream().allMatch(a -> sentence.contains(a.categoryName()))) return false;
-            }
-        }
         return true;
     }
 
@@ -521,6 +574,45 @@ public class FeedbackRenderer {
         return comparesAverage && (hasDiff || (weekDirection(c) == 0 && first.contains("비슷")));
     }
 
+    private static final Pattern LARGEST = Pattern.compile("가장\s*(?:컸|큰|크)");
+
+    /**
+     * '가장 컸다'가 이번 주 가장 큰 한 건의 카테고리가 아닌 카테고리에 붙으면 거절 (#146, #144: 건수가 많거나 배수가 큰 것에 씀).
+     * 쉼표로 나뉜 구절 안에서 다른 카테고리 이름과 함께 쓰인 경우만 본다.
+     */
+    boolean verifyLargest(String text, FeedbackContext c) {
+        Optional<TransactionHighlight> top = c.largestTransaction();
+        if (top.isEmpty()) return true;
+        Set<String> names = new HashSet<>();
+        c.weekHighlights().forEach(h -> names.add(h.categoryName()));
+        c.overspendCategories().forEach(o -> names.add(o.categoryName()));
+        c.actions().forEach(a -> names.add(a.categoryName()));
+        if (c.anomalyCategoryName() != null) names.add(c.anomalyCategoryName());
+        names.remove(top.get().categoryName());
+        for (String sentence : sentences(text)) {
+            for (String clause : sentence.split(",")) {
+                Matcher m = LARGEST.matcher(clause);
+                if (!m.find()) continue;
+                // '가장 컸다'가 붙은 대상은 그 앞에 가장 가까이 나온 카테고리 이름이다.
+                // "기타보다 식대 한 건이 가장 컸어요"는 식대가 대상이므로 비교 대상(기타)이 앞에 나와도 거절하지 않는다.
+                String before = clause.substring(0, m.start());
+                String subject = null;
+                int at = -1;
+                for (String n : names) {
+                    int i = before.lastIndexOf(n);
+                    if (i > at) {
+                        at = i;
+                        subject = n;
+                    }
+                }
+                String topName = top.get().categoryName();
+                int topAt = before.lastIndexOf(topName);
+                if (subject != null && at > topAt) return false;
+            }
+        }
+        return true;
+    }
+
     /** 숫자 검증과 같은 반올림 기준으로 금액 언급이 원본 값의 표현인지. */
     private boolean matches(MoneyMention m, long original) {
         return m.manWonRange()
@@ -541,7 +633,7 @@ public class FeedbackRenderer {
      */
     static String withWeekTotalFirst(FeedbackContext c, String candidate) {
         List<String> parts = sentences(candidate);
-        List<String> rest = parts.size() >= 3 ? parts.subList(1, parts.size()) : parts;
+        List<String> rest = parts.size() >= (codeActionMode(c) ? 2 : 3) ? parts.subList(1, parts.size()) : parts;
         return weekTotalSentence(c) + " " + String.join(" ", rest);
     }
 
@@ -926,7 +1018,6 @@ public class FeedbackRenderer {
             if (c.actions().size() >= 2) {
                 c.actions().forEach(a -> values.add(Math.abs(Math.abs(c.savingsImpactWon()) - a.reductionWon())));
             }
-            topPairLeft(c).ifPresent(values::add);
         }
 
         values.add(c.weekTotalWon());
@@ -1051,6 +1142,12 @@ public class FeedbackRenderer {
                 case MEDIUM -> sb.append("\n- 중간 시점이므로 범위로 표현하고 추이 관찰을 안내.");
                 case NARROW -> sb.append("\n- 월말이라 데이터가 충분하므로 구체적이고 확신 있는 톤 사용.");
             }
+        }
+        if (codeActionMode(c)) {
+            sb.append("\n\n[이번 응답의 문장 수 — 위 규칙보다 우선]")
+                    .append("\n- 정확히 2문장만 쓴다. ① 이번 주 총지출과 직전 4주 평균 대비 ② 가장 큰 이유 한 가지.")
+                    .append(
+                            "\n- 지금 해볼 행동(세 번째 문장)은 시스템이 뒤에 붙인다. 절약 행동, 줄이라는 권유, 절약 금액, '월말 초과가 A에서 B로' 같은 효과를 쓰지 않는다.");
         }
         return sb.toString();
     }
@@ -1321,52 +1418,19 @@ public class FeedbackRenderer {
             }
         }
 
+        // ── 가장 큰 한 건 — '가장 컸다'는 이 한 건에만 (#146) ──
+        c.largestTransaction().ifPresent(h -> sb.append("\n[이번 주 가장 큰 한 건] ")
+                .append(h.categoryName())
+                .append(" ")
+                .append(exactWon(h.amountWon()))
+                .append(" — '가장 컸다'는 이 한 건에만 쓸 것. 카테고리 합계 순위는 재료에 없으므로 카테고리가 가장 컸다고 쓰지 말 것\n"));
+
         // ── 절약 액션 [6] ──
-        if (c.actions().isEmpty()) {
+        if (codeActionMode(c)) {
+            sb.append("\n[절약 액션] 마지막 문장은 시스템이 붙인다 — 절약 행동·절약 금액·효과(원)를 쓰지 말고 2문장으로 끝낼 것\n");
+        } else {
             // 액션이 없는 주에도 LLM이 "주 1~2회 줄이면 월 5~10만 원" 같은 금액을 지어냄 (#111 exp5 17주차)
             sb.append("\n[절약 액션] 없음 — 절약 금액이나 절약 효과(원)를 제시하지 말 것\n");
-        } else {
-            sb.append("\n[절약 액션]");
-            if (c.remainingDaysInMonth() > 0) {
-                sb.append(" (이번 달 남은 기간 ").append(c.remainingDaysInMonth()).append("일)");
-            }
-            sb.append("\n");
-            for (ActionSummary a : c.actions()) {
-                sb.append("- ")
-                        .append(a.categoryName())
-                        .append("에서 ")
-                        .append(exactWon(a.reductionWon()))
-                        .append(" 줄이기");
-                if (a.dominantFactor() != null) {
-                    String tip =
-                            switch (a.dominantFactor()) {
-                                case "FREQUENCY" -> " (횟수를 줄이는 방향)";
-                                case "UNIT_PRICE" -> " (건당 금액을 낮추는 방향)";
-                                default -> "";
-                            };
-                    sb.append(tip);
-                }
-                if (a.remainingExpectedWon() > 0) {
-                    // 줄일 금액의 기준과 상한 — "103,056원을 줄이면"이 줄일 금액인지 쓸 수 있는 금액인지 구분되지 않음 (#140 판정자 질문)
-                    long cap = Math.max(0, a.remainingExpectedWon() - a.reductionWon());
-                    sb.append(" — 남은 기간 ")
-                            .append(a.categoryName())
-                            .append(" 예상 지출 ")
-                            .append(exactWon(a.remainingExpectedWon()))
-                            .append(" 중 ")
-                            .append(Math.round(100.0 * a.reductionWon() / a.remainingExpectedWon()))
-                            .append("% → 남은 기간 ")
-                            .append(a.categoryName())
-                            .append("는 ")
-                            .append(exactWon(cap))
-                            .append("까지만 쓰기");
-                    if (coversCategoryOverspend(c, a)) {
-                        sb.append(" (이만큼 덜 쓰면 ").append(a.categoryName()).append("가 월말에 예산 안에 들어옴)");
-                    }
-                }
-                sb.append("\n");
-            }
-            appendActionCoverage(sb, c);
         }
 
         // 추가 HIGH 이상치 언급 강제 — 프롬프트 끝에 명시적 지시
@@ -1472,85 +1536,6 @@ public class FeedbackRenderer {
             sb.append(", 감정: ").append(emotionLabel(emotion));
         }
         sb.append("\n");
-    }
-
-    /**
-     * 절약 액션을 다 지켰을 때 남는 월말 초과. 없으면 LLM이 "8만 5천 원만 줄이면 예산 안에 들어와요"처럼 일부 절약을
-     * 전부인 것처럼 쓴다 (#122 실험 0, 29주차: 초과 196,455원에 절약 85,219원).
-     */
-    private static void appendActionCoverage(StringBuilder sb, FeedbackContext c) {
-        if (c.savingsImpactWon() >= 0) return;
-        long gap = Math.abs(c.savingsImpactWon());
-        // 카테고리가 둘 이상이면 하나씩 지켰을 때의 효과도 준다 — 한 카테고리만 말하면서 전체 효과를 붙이는 오류 (#122 실험 7, 22주차:
-        // "오락문화 56,856원을 아껴보면 월말 초과가 134,328원으로" — 134,328원은 교통까지 합친 결과)
-        if (c.actions().size() >= 2) {
-            for (ActionSummary a : c.actions()) {
-                long single = gap - a.reductionWon();
-                if (single <= 0) continue;
-                sb.append("- ")
-                        .append(a.categoryName())
-                        .append("만 지키면 전체 월말 초과 ")
-                        .append(exactWon(gap))
-                        .append(" → ")
-                        .append(exactWon(single))
-                        .append("\n");
-            }
-        }
-
-        // 셋 이상이면 큰 두 개 조합도 준다 — 숫자 개수 제한으로 두 카테고리만 말하면서 '모두 지키면' 효과를 붙이는 오류 (#143 홀드아웃,
-        // 6주차: 액션 5개 중 식대·기타만 말하고 5개 모두의 효과를 씀). 다 지켜도 초과가 남으면 그 값, 아니면 '예산 안'.
-        topPairLeft(c).ifPresent(pairLeft -> sb.append("- ")
-                .append(topPair(c).get(0).categoryName())
-                .append("·")
-                .append(topPair(c).get(1).categoryName())
-                .append("만 지키면 전체 월말 초과 ")
-                .append(exactWon(gap))
-                .append(" → ")
-                .append(exactWon(pairLeft))
-                .append('\n'));
-
-        long left = Math.abs(c.savingsImpactWon()) - actionTotal(c);
-        if (left > 0) {
-            sb.append("- ")
-                    .append(actionCategories(c))
-                    .append(" 모두 지키면 전체 월말 초과 ")
-                    .append(exactWon(Math.abs(c.savingsImpactWon())))
-                    .append(" → ")
-                    .append(exactWon(left))
-                    .append("으로 줄어듦");
-        } else {
-            sb.append("- ").append(actionCategories(c)).append(" 모두 지키면 이번 달 예산 안에 들어올 수 있음");
-        }
-        sb.append("\n");
-    }
-
-    /** 줄일 금액이 큰 두 액션 (액션이 셋 이상일 때만). */
-    static List<ActionSummary> topPair(FeedbackContext c) {
-        if (c.actions().size() < 3) return List.of();
-        return c.actions().stream()
-                .sorted(Comparator.comparingLong(ActionSummary::reductionWon).reversed())
-                .limit(2)
-                .toList();
-    }
-
-    /** 큰 두 액션만 지켰을 때 남는 전체 월말 초과. 액션이 셋 미만이거나 초과가 없어지면 비어 있다. */
-    static Optional<Long> topPairLeft(FeedbackContext c) {
-        List<ActionSummary> pair = topPair(c);
-        if (pair.isEmpty() || c.savingsImpactWon() >= 0) return Optional.empty();
-        long left = Math.abs(c.savingsImpactWon())
-                - pair.get(0).reductionWon()
-                - pair.get(1).reductionWon();
-        return left > 0 ? Optional.of(left) : Optional.empty();
-    }
-
-    /** 줄일 금액이 그 카테고리의 월말 예상 초과액 이상이면, 다 지켰을 때 그 카테고리는 예산 안이다. */
-    private static boolean coversCategoryOverspend(FeedbackContext c, ActionSummary a) {
-        return c.overspendCategories().stream()
-                .anyMatch(ov -> ov.categoryName().equals(a.categoryName()) && a.reductionWon() >= ov.overAmountWon());
-    }
-
-    private static String actionCategories(FeedbackContext c) {
-        return c.actions().stream().map(ActionSummary::categoryName).collect(java.util.stream.Collectors.joining("·"));
     }
 
     private static long actionTotal(FeedbackContext c) {
@@ -1760,7 +1745,72 @@ public class FeedbackRenderer {
             AnomalyBasis anomalyBasis,
             int anomalyWeeklyCount,
             int remainingDaysInMonth,
-            long recent4WeekAvgWon) {
+            long recent4WeekAvgWon,
+            TransactionHighlight weekLargest) {
+
+        /** 이번 주 가장 큰 한 건을 따로 넘기지 않는 형식 — 주목 거래 중 가장 큰 건을 쓴다. */
+        public FeedbackContext(
+                long predictedMonthEndWon,
+                long availableBudgetWon,
+                long savingsImpactWon,
+                double burnRate,
+                PacingResult pacing,
+                boolean hasAnomaly,
+                String anomalyCategoryName,
+                double anomalyMagnitude,
+                long anomalyWeeklyAmountWon,
+                Confidence anomalyConfidence,
+                String anomalyEmotion,
+                List<AnomalyInfo> additionalHighAnomalies,
+                WeekEmotionSummary weekEmotion,
+                long weekTotalWon,
+                long prevWeekTotalWon,
+                double complianceRate,
+                List<CategoryOverspend> overspendCategories,
+                List<ActionSummary> actions,
+                List<TransactionHighlight> weekHighlights,
+                FeedbackType feedbackType,
+                BandWidth bandWidth,
+                Confidence overallConfidence,
+                AnomalyBasis anomalyBasis,
+                int anomalyWeeklyCount,
+                int remainingDaysInMonth,
+                long recent4WeekAvgWon) {
+            this(
+                    predictedMonthEndWon,
+                    availableBudgetWon,
+                    savingsImpactWon,
+                    burnRate,
+                    pacing,
+                    hasAnomaly,
+                    anomalyCategoryName,
+                    anomalyMagnitude,
+                    anomalyWeeklyAmountWon,
+                    anomalyConfidence,
+                    anomalyEmotion,
+                    additionalHighAnomalies,
+                    weekEmotion,
+                    weekTotalWon,
+                    prevWeekTotalWon,
+                    complianceRate,
+                    overspendCategories,
+                    actions,
+                    weekHighlights,
+                    feedbackType,
+                    bandWidth,
+                    overallConfidence,
+                    anomalyBasis,
+                    anomalyWeeklyCount,
+                    remainingDaysInMonth,
+                    recent4WeekAvgWon,
+                    null);
+        }
+
+        /** 이번 주 가장 큰 한 건: 따로 받은 값, 없으면 주목 거래 중 가장 큰 건. */
+        Optional<TransactionHighlight> largestTransaction() {
+            if (weekLargest != null) return Optional.of(weekLargest);
+            return weekHighlights.stream().max(Comparator.comparingLong(TransactionHighlight::amountWon));
+        }
 
         /** 직전 4주 평균 없이 만드는 이전 형식 (#144 이전 호출부·테스트). */
         public FeedbackContext(

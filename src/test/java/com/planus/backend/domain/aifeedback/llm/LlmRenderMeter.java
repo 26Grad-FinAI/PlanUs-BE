@@ -66,6 +66,9 @@ public final class LlmRenderMeter {
         };
     }
 
+    /** 프롬프트에 이 표시가 있으면 마지막 문장을 코드가 붙이는 렌더다 (FeedbackRenderer 프롬프트의 [절약 액션] 줄). */
+    private static final String ACTION_MODE_MARKER = "마지막 문장은 시스템이 붙인다";
+
     /** 렌더 1회 측정을 시작한다. */
     public void begin() {
         begin(null);
@@ -116,8 +119,13 @@ public final class LlmRenderMeter {
         totalCalls += currentCalls.size() + currentErrors;
         responses += (int) currentCalls.stream().filter(LlmRenderMeter::hasText).count();
 
+        // 코드가 마지막 문장을 붙이는 렌더(프롬프트에 표시됨)만 행동 문장을 떼고 판정한다 — 그 밖의 렌더는 템플릿이 세 문장이어도 폴백으로 센다
+        boolean actionMode = currentPrompt != null && currentPrompt.contains(ACTION_MODE_MARKER);
+        // 행동 문장을 뗀 앞 두 문장으로 통과·첫 문장 보정을 판정한다
+        String body = actionMode ? FeedbackRenderer.leadSentences(finalText) : finalText;
         int acceptedIdx = currentCalls.lastIndexOf(finalText);
-        int correctedIdx = acceptedIdx >= 0 ? -1 : correctedFrom(finalText);
+        if (acceptedIdx < 0 && actionMode) acceptedIdx = acceptedWithActionSentence(body);
+        int correctedIdx = acceptedIdx >= 0 ? -1 : correctedFrom(body, actionMode);
         if (acceptedIdx >= 0) {
             passedAtAttempt.merge(acceptedIdx + 1, 1, Integer::sum);
         } else if (correctedIdx >= 0) {
@@ -152,14 +160,30 @@ public final class LlmRenderMeter {
      *
      * @return 원 응답의 순번(0부터), 아니면 -1
      */
-    private int correctedFrom(String finalText) {
+    /**
+     * 절약 액션이 있는 주는 마지막 문장을 코드가 붙인다 (#146). 마지막 문장을 뺀 나머지가 어떤 응답의 앞 두 문장과 같으면 그 응답이 통과한 것이다.
+     *
+     * @return 통과한 응답의 순번(0부터), 아니면 -1
+     */
+    private int acceptedWithActionSentence(String lead) {
+        for (int i = currentCalls.size() - 1; i >= 0; i--) {
+            String call = currentCalls.get(i);
+            if (hasText(call) && FeedbackRenderer.leadSentences(call).equals(lead)) return i;
+        }
+        return -1;
+    }
+
+    private int correctedFrom(String finalText, boolean actionMode) {
         int cut = finalText.indexOf(". ");
         if (cut < 0) return -1;
         String rest = finalText.substring(cut + 2).strip();
         if (rest.isEmpty()) return -1;
         for (int i = currentCalls.size() - 1; i >= 0; i--) {
             String call = currentCalls.get(i);
-            if (hasText(call) && call.strip().endsWith(rest)) return i;
+            if (!hasText(call)) continue;
+            // 행동 모드에서는 LLM이 세 문장을 써도 앞 두 문장만 쓰이므로 앞 두 문장의 끝과 비교한다
+            String compared = actionMode ? FeedbackRenderer.leadSentences(call) : call.strip();
+            if (compared.endsWith(rest)) return i;
         }
         return -1;
     }
