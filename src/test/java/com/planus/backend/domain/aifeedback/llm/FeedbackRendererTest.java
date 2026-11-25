@@ -677,6 +677,48 @@ class FeedbackRendererTest {
         }
 
         @Test
+        @DisplayName("초과의 큰 부분을 차지하는 이미 쓴 한 건은 줄이기가 아니라 다음 달 계획으로 잇게 안내하고, 그 금액은 숫자 검증 허용값 (#141)")
+        void overspend_largestSingleLine() {
+            FeedbackContext ctx = contextBuilder()
+                    .feedbackType(FeedbackType.ALERT)
+                    .overspendCategories(List.of(new FeedbackRenderer.CategoryOverspend(
+                            "식대", 330_000, 90_000, null, 3, java.util.Map.of(), 0, 204_000, "리정원")))
+                    .build();
+
+            assertThat(capturedUserPrompt(ctx))
+                    .contains("이번 달 큰 한 건: 리정원 204,000원")
+                    .contains("줄이라고 하지 말고 다음 달 계획");
+            assertThat(renderer.verifyNumbers("리정원 20만 원 한 건이 컸어요.", ctx)).isTrue();
+        }
+
+        @Test
+        @DisplayName("남은 일수를 프롬프트에 주고, 남은 일수가 적은데 '월초'라고 쓰면 거절 (#141, #146 판정의 '아직 월초')")
+        void period_remainingDaysAndEarlyMonthCheck() {
+            FeedbackContext lateMonth = contextBuilder()
+                    .feedbackType(FeedbackType.ALERT)
+                    .remainingDaysInMonth(5)
+                    .build();
+            FeedbackContext earlyMonth = contextBuilder()
+                    .feedbackType(FeedbackType.ALERT)
+                    .remainingDaysInMonth(25)
+                    .build();
+
+            assertThat(capturedUserPrompt(lateMonth)).contains("- 이번 달 남은 일수: 5일");
+            assertThat(renderer.verifyPeriod("아직 월초라 속도를 조절하면 돼요.", lateMonth)).isFalse();
+            assertThat(renderer.verifyPeriod("이번 달 초반이라 여유가 있어요.", lateMonth)).isFalse();
+            assertThat(renderer.verifyPeriod("월말에 50만 원 넘을 것 같아요.", lateMonth)).isTrue();
+            assertThat(renderer.verifyPeriod("아직 월초라 속도를 조절하면 돼요.", earlyMonth)).isTrue();
+        }
+
+        @Test
+        @DisplayName("만족 톤: 초과 카테고리의 만족한 지출은 유지해도 괜찮다고 존중하되 줄인다면 횟수부터 (#141)")
+        void tone_satisfiedKeepsChoice() {
+            assertThat(capturedSystemPrompt(
+                            contextBuilder().feedbackType(FeedbackType.ALERT).build()))
+                    .contains("만족한 지출이라면 유지해도 괜찮지만, 줄인다면 횟수부터");
+        }
+
+        @Test
         @DisplayName("월말 결산도 예산 없는 카테고리는 평소 대비로 표기 (#141)")
         void monthEnd_vsUsualWording() {
             LlmClient client = mock(LlmClient.class);

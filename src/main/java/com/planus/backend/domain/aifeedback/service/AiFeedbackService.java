@@ -359,6 +359,7 @@ public class AiFeedbackService {
                             && ex.isVariable();
                     List<String> memos = new ArrayList<>();
                     for (Expense ex : window) if (thisWeekVar.test(ex)) memos.add(ex.getMemo());
+                    Expense big = largestSingleOfOverspend(window, cat, monthStart, weekEnd, e.getValue());
                     return new CategoryOverspend(
                             Categories.name(cat),
                             e.getValue(),
@@ -366,7 +367,16 @@ public class AiFeedbackService {
                             finalCauseSignals.get(cat),
                             count(window, thisWeekVar),
                             MerchantNames.countByMerchant(memos),
-                            usualMonthly.getOrDefault(cat, 0L));
+                            usualMonthly.getOrDefault(cat, 0L),
+                            big != null ? big.getAmount() : 0L,
+                            big != null
+                                            && big.getMemo() != null
+                                            && !big.getMemo().isBlank()
+                                    ? MerchantNames.countByMerchant(List.of(big.getMemo()))
+                                            .keySet()
+                                            .iterator()
+                                            .next()
+                                    : null);
                 })
                 .toList();
 
@@ -1419,6 +1429,27 @@ public class AiFeedbackService {
         }
 
         return TransactionHighlight.groupIdenticalTopN(result, 5);
+    }
+
+    /** 큰 한 건이 월말 예상 초과의 이만큼(30%) 이상이고 이 금액 이상이어야 따로 알린다. */
+    private static final long LARGE_SINGLE_MIN_WON = 50_000;
+
+    private static final double LARGE_SINGLE_SHARE = 0.3;
+
+    /**
+     * 이번 달 이 카테고리의 가장 큰 변동 지출 한 건이 월말 예상 초과의 {@value #LARGE_SINGLE_SHARE}배 이상이면 그 거래, 아니면 null (#141).
+     * 이미 쓴 돈이라 '줄이기'가 아니라 다음 달 계획으로 연결하기 위한 재료다.
+     */
+    static Expense largestSingleOfOverspend(
+            List<Expense> window, int cat, LocalDate monthStart, LocalDate weekEnd, long overWon) {
+        return window.stream()
+                .filter(x -> x.getCategoryId() == cat
+                        && x.isVariable()
+                        && !x.getDate().isBefore(monthStart)
+                        && !x.getDate().isAfter(weekEnd))
+                .max(Comparator.comparingLong(Expense::getAmount))
+                .filter(x -> x.getAmount() >= LARGE_SINGLE_MIN_WON && x.getAmount() >= overWon * LARGE_SINGLE_SHARE)
+                .orElse(null);
     }
 
     private static TransactionHighlight findWeekLargest(List<Expense> window, LocalDate weekStart, LocalDate weekEnd) {
