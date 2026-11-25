@@ -56,6 +56,12 @@ public enum GeneralErrorCode implements BaseErrorCode {
     PROFILE_NOT_COMPLETED(HttpStatus.BAD_REQUEST, "BUDGET_400_002", "프로필 입력이 완료되지 않았습니다."),
     AI_BUDGET_SERVICE_UNAVAILABLE(HttpStatus.SERVICE_UNAVAILABLE, "BUDGET_503_001", "AI 예산 산출 서비스가 일시적으로 불가합니다."),
 
+    // AI Feedback Reaction
+    AI_FEEDBACK_NOT_FOUND(HttpStatus.NOT_FOUND, "AIFEEDBACK_404_001", "해당 피드백을 찾을 수 없습니다."),
+    REACTION_REASON_REQUIRED(HttpStatus.BAD_REQUEST, "AIFEEDBACK_400_001", "별로예요를 고르면 사유를 함께 보내야 합니다."),
+    REACTION_CATEGORY_REQUIRED(HttpStatus.BAD_REQUEST, "AIFEEDBACK_400_002", "줄이고 싶지 않은 카테고리를 함께 보내야 합니다."),
+    REACTION_CATEGORY_NOT_SUGGESTED(HttpStatus.BAD_REQUEST, "AIFEEDBACK_400_003", "이 피드백에서 줄이라고 제안하지 않은 카테고리입니다."),
+
     // Savings Simulation
     FEEDBACK_NOT_FOUND(HttpStatus.NOT_FOUND, "SIMULATION_404_001", "해당 월의 피드백을 찾을 수 없습니다."),
     NO_ENRICHED_ACTIONS(HttpStatus.NOT_FOUND, "SIMULATION_404_002", "절약 제안이 없습니다."),

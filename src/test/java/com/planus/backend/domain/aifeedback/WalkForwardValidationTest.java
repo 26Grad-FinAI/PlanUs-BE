@@ -298,88 +298,349 @@ class WalkForwardValidationTest {
     }
 
     // ──────────────────────────────────────────────────────────────
-    // [검증 3] BudgetProjector 예측 오차 (MAPE)
+    // [검증 3] BudgetProjector 예측 오차 (경과일 구간별, 단순 예측과 비교)
     // ──────────────────────────────────────────────────────────────
+    /**
+     * 월말 예측 오차를 경과일 구간별로 나누고 단순 예측과 비교한다 (#141).
+     *
+     * <p>전체 평균(MAPE)은 월말에 가까운 주차(거의 확정)와 월초 주차(거의 추측)를 섞어 평균내므로 오차가 가려진다.
+     * 평소 일평균은 운영({@code AiFeedbackService})과 같다(전월 변동지출 ÷ 전월 일수). 다만 운영이 쓰는 요일 가중치는 적용하지 않은 균등 경로의
+     * 결과이고, 고정 지출 추정도 빠져 있다(변동지출만 비교). 운영 예측 오차 그대로가 아니라 월 진행에 따른 경향을 보는 측정이다.
+     * 단순 예측: 선형 외삽(지금까지 일평균 × 월 일수), 전월 그대로(지난달 변동지출).
+     */
     @Test
-    @DisplayName("[검증 3] BudgetProjector: 월말 예측 오차 (MAPE)")
-    void budgetProjector_mape() {
-        System.out.println("=== [검증 3] BudgetProjector 예측 오차 (주차별 시점 → 월말 실제 비교) ===");
-        System.out.printf("%-6s %-22s %-14s %-14s %-8s%n", "주차", "기간", "예측(원)", "실제(원)", "오차(%)");
-        System.out.println("-".repeat(70));
-
+    @DisplayName("[검증 3] BudgetProjector: 경과일 구간별 오차, 단순 예측과 비교")
+    void budgetProjector_mapeByElapsedDays() {
+        LocalDate dataStart = ALL_EXPENSES.stream()
+                .map(Expense::getDate)
+                .min(Comparator.naturalOrder())
+                .orElseThrow();
         LocalDate dataEnd = ALL_EXPENSES.stream()
                 .map(Expense::getDate)
                 .max(Comparator.naturalOrder())
                 .orElseThrow();
 
-        double totalMape = 0;
-        int count = 0;
+        String[] bucketNames = {"1~7일", "8~14일", "15~21일", "22일~"};
+        double[][] sums = new double[4][4]; // [구간][프로젝터, 선형 외삽, 전월 그대로, 프로젝터(전월 있는 표본)]
+        int[] counts = new int[4];
+        int[] prevCounts = new int[4];
+
+        for (int week = WARMUP_WEEKS + 1; ; week++) {
+            LocalDate weekEnd = FIRST_MONDAY.plusWeeks(week).minusDays(1);
+            if (weekEnd.isAfter(dataEnd)) break;
+            LocalDate monthStart = weekEnd.withDayOfMonth(1);
+            LocalDate monthEnd = weekEnd.withDayOfMonth(weekEnd.lengthOfMonth());
+            if (monthEnd.isAfter(dataEnd)) continue;
+
+            int daysElapsed = (int) java.time.temporal.ChronoUnit.DAYS.between(monthStart, weekEnd) + 1;
+            int daysInMonth = weekEnd.lengthOfMonth();
+            int bucket = Math.min(3, (daysElapsed - 1) / 7);
+
+            long variableMtd = monthSum(monthStart, weekEnd, true);
+            long actual = monthSum(monthStart, monthEnd, true);
+            if (actual <= 0) continue;
+
+            LocalDate prevStart = monthStart.minusMonths(1);
+            boolean hasPrev = !prevStart.isBefore(dataStart.withDayOfMonth(1));
+            long prevTotal = hasPrev ? monthSum(prevStart, monthStart.minusDays(1), true) : 0;
+            double priorDailyRate = prevTotal > 0 ? (double) prevTotal / prevStart.lengthOfMonth() : 0.0;
+
+            long projector = budgetProjector
+                    .project(variableMtd, 0, 0, daysElapsed, daysInMonth, priorDailyRate, null, null)
+                    .predictedMonthEndWon();
+            double linear = (double) variableMtd / daysElapsed * daysInMonth;
+
+            sums[bucket][0] += pctError(projector, actual);
+            sums[bucket][1] += pctError(linear, actual);
+            counts[bucket]++;
+            if (prevTotal > 0) {
+                sums[bucket][2] += pctError(prevTotal, actual);
+                sums[bucket][3] += pctError(projector, actual);
+                prevCounts[bucket]++;
+            }
+        }
+
+        System.out.println("=== [검증 3] 경과일 구간별 월말 변동지출 예측 오차 (MAPE %) ===");
+        System.out.printf(
+                "%-8s %-4s %-10s %-10s | %-4s %-10s %-10s%n", "구간", "n", "프로젝터", "선형외삽", "n", "프로젝터", "전월그대로");
+        for (int b = 0; b < 4; b++) {
+            if (counts[b] == 0) continue;
+            System.out.printf(
+                    "%-8s %-4d %-10.1f %-10.1f | %-4d %-10.1f %-10.1f%n",
+                    bucketNames[b],
+                    counts[b],
+                    sums[b][0] / counts[b],
+                    sums[b][1] / counts[b],
+                    prevCounts[b],
+                    prevCounts[b] > 0 ? sums[b][3] / prevCounts[b] : Double.NaN,
+                    prevCounts[b] > 0 ? sums[b][2] / prevCounts[b] : Double.NaN);
+        }
+
+        // 표본이 구간당 5~7개월이라 구간별 순위는 참고용이다. 그래도 월초(전월 평소를 섞는 구간)가 선형 외삽보다 나쁘면
+        // 혼합식이 의미가 없고, 어느 구간이든 20%를 넘으면 월말 초과 판정을 믿을 수 없다.
+        assertThat(sums[0][0] / counts[0]).isLessThan(sums[0][1] / counts[0]);
+        for (int b = 0; b < 4; b++) {
+            if (counts[b] > 0) assertThat(sums[b][0] / counts[b]).isLessThan(20.0);
+        }
+    }
+
+    /**
+     * 추세 이상치의 '그 앞 4주' 구간이 최근 2주 바로 앞 한 주(w-2)를 건너뛰는 것이 판정에 미치는 영향 (#141).
+     *
+     * <p>현재: 최근 2주(w-1, w) vs 그 앞 4주(w-6..w-3). 대안: 바로 앞 4주(w-5..w-2). 두 방식으로 확정되는 (주, 카테고리) 수와
+     * 서로 다르게 판정되는 경우를 센다. 정답 라벨이 없어 어느 쪽이 맞는지는 말하지 않고, 판정이 얼마나 갈리는지만 기록한다.
+     */
+    @Test
+    @DisplayName("[검증 6] 추세 구간 w-2 건너뜀: 현재 방식과 바로 앞 4주 방식의 판정 차이")
+    void trend_gapWeekEffect() {
+        int len = props.getBaselineWeeks();
+        LocalDate dataEnd = ALL_EXPENSES.stream()
+                .map(Expense::getDate)
+                .max(Comparator.naturalOrder())
+                .orElseThrow();
+        int both = 0, onlyCurrent = 0, onlyAlt = 0, samples = 0;
+        List<String> diffs = new ArrayList<>();
+
+        for (int week = WARMUP_WEEKS + 1; ; week++) {
+            LocalDate weekEnd = FIRST_MONDAY.plusWeeks(week).minusDays(1);
+            if (weekEnd.isAfter(dataEnd)) break;
+            Map<Integer, Long> budgets = budgetForMonth(weekEnd);
+            for (int cat : budgets.keySet()) {
+                if (!anomalyDetector.isHighFreq(cat) || anomalyDetector.isSpikeProne(cat)) continue;
+                double[] weekly = new double[len];
+                for (int i = 0; i < len; i++) {
+                    LocalDate end = weekEnd.minusWeeks(len - 1L - i);
+                    LocalDate start = end.minusDays(6);
+                    weekly[i] = ALL_EXPENSES.stream()
+                            .filter(e -> e.isExpense()
+                                    && e.isVariable()
+                                    && e.getCategoryId() == cat
+                                    && !e.getDate().isBefore(start)
+                                    && !e.getDate().isAfter(end))
+                            .mapToLong(Expense::getAmount)
+                            .sum();
+                }
+                long budget = budgets.getOrDefault(cat, 0L);
+                boolean current = anomalyDetector.trendConfirmed(weekly, len - 1, budget);
+                boolean alt = risingContiguous(weekly, len - 1, budget) && risingContiguous(weekly, len - 2, budget);
+                samples++;
+                if (current && alt) both++;
+                else if (current) {
+                    onlyCurrent++;
+                    diffs.add("현재만 " + weekEnd + " " + Categories.name(cat));
+                } else if (alt) {
+                    onlyAlt++;
+                    diffs.add("바로앞4주만 " + weekEnd + " " + Categories.name(cat));
+                }
+            }
+        }
+        System.out.println("=== [검증 6] 추세 구간 w-2 건너뜀 영향 ===");
+        System.out.printf(
+                "표본 %d (주×고빈도 카테고리) | 둘 다 확정 %d | 현재만 %d | 바로 앞 4주만 %d%n", samples, both, onlyCurrent, onlyAlt);
+        diffs.forEach(d -> System.out.println("  " + d));
+        assertThat(samples).isPositive();
+    }
+
+    /**
+     * 이상치 임계값 보정용 라벨링 시트를 만든다 (#141). 환경변수 {@code ANOMALY_LABEL_DIR}이 있을 때만 실행한다 — 개인 거래 내역이 들어가므로
+     * 저장소 밖 폴더에 쓴다.
+     *
+     * <p>후보 종류: 단발(modified-z), 단발(중앙값 배수), 단발(과거 거의 없음), 추세(확정), 추세(확정 직전), 탐지 안 된 큰 거래(재현율 확인용).
+     * 시트에는 현재 판정·신뢰도를 숨기고(블라인드), 키 파일에만 적는다.
+     */
+    @Test
+    @DisplayName("이상치 라벨링 시트 내보내기 (환경변수 ANOMALY_LABEL_DIR)")
+    void exportAnomalyLabelSheet() throws Exception {
+        String dir = System.getenv("ANOMALY_LABEL_DIR");
+        Assumptions.assumeTrue(dir != null && !dir.isBlank(), "ANOMALY_LABEL_DIR 없음");
+        int len = props.getBaselineWeeks();
+        LocalDate dataEnd = ALL_EXPENSES.stream()
+                .map(Expense::getDate)
+                .max(Comparator.naturalOrder())
+                .orElseThrow();
+        Random rnd = new Random(141);
+        // 종류 -> [날짜, 카테고리, 설명, 현재판정]
+        Map<String, List<String[]>> pool = new LinkedHashMap<>();
 
         for (int week = WARMUP_WEEKS + 1; ; week++) {
             LocalDate weekEnd = FIRST_MONDAY.plusWeeks(week).minusDays(1);
             LocalDate weekStart = weekEnd.minusDays(6);
             if (weekEnd.isAfter(dataEnd)) break;
+            Map<Integer, Long> budgets = budgetForMonth(weekEnd);
 
-            LocalDate monthStart = weekEnd.withDayOfMonth(1);
-            LocalDate monthEnd = weekEnd.withDayOfMonth(weekEnd.lengthOfMonth());
-            // 월말 실제값 확인 가능한 달만 검증
-            if (monthEnd.isAfter(dataEnd)) continue;
+            for (Expense e : ALL_EXPENSES) {
+                if (!e.isExpense() || !e.isVariable()) continue;
+                if (e.getDate().isBefore(weekStart) || e.getDate().isAfter(weekEnd)) continue;
+                int cat = e.getCategoryId();
+                if (anomalyDetector.isSpikeProne(cat)) continue;
+                long budget = com.planus.backend.domain.aifeedback.service.AiFeedbackService.anomalyBudget(
+                        budgets,
+                        ALL_EXPENSES.stream()
+                                .filter(x -> !x.getDate().isAfter(weekEnd))
+                                .toList(),
+                        weekEnd,
+                        cat);
+                double[] hist = ALL_EXPENSES.stream()
+                        .filter(x -> x.isExpense()
+                                && x.isVariable()
+                                && Objects.equals(x.getCategoryId(), cat)
+                                && x.getDate().isBefore(e.getDate())
+                                && ChronoUnit.DAYS.between(x.getDate(), e.getDate()) <= props.getBaselineWeeks() * 7L
+                                && (!props.isBimodal(cat) || x.getAmount() >= props.getBimodalMin()))
+                        .mapToDouble(Expense::getAmount)
+                        .toArray();
+                OptionalDouble z = anomalyDetector.checkPoint(e.getAmount(), hist, budget);
+                double med = hist.length > 0 ? RobustStats.median(hist) : 0;
+                double max = hist.length > 0 ? Arrays.stream(hist).max().orElse(0) : 0;
+                String desc = String.format(
+                        "%,d원 (%s%s) — 직전 %d주 같은 카테고리 %d건, 중앙값 %,d원, 최대 %,d원",
+                        e.getAmount(),
+                        e.getMemo() == null || e.getMemo().isBlank() ? "메모 없음" : "메모: " + e.getMemo(),
+                        e.getEmotion() == null ? "" : ", 감정 " + e.getEmotion(),
+                        props.getBaselineWeeks(),
+                        hist.length,
+                        (long) med,
+                        (long) max);
+                String kind;
+                String verdict;
+                if (z.isPresent()) {
+                    boolean sparse = hist.length < 2;
+                    boolean lowSpread = !sparse && RobustStats.mad(hist) <= med * 0.10;
+                    kind = sparse ? "단발-과거거의없음" : lowSpread ? "단발-중앙값배수" : "단발-modifiedZ";
+                    verdict = String.format(
+                            "%s mag=%.2f 신뢰도=%s",
+                            kind,
+                            z.getAsDouble(),
+                            Confidence.of(
+                                    z.getAsDouble(),
+                                    hist.length,
+                                    props.getConfHighMinSamples(),
+                                    props.getConfMediumMinSamples()));
+                } else if (hist.length >= 2 && e.getAmount() >= med * 2 && e.getAmount() >= 30_000) {
+                    kind = "탐지안됨-큰거래";
+                    verdict = "탐지 안 됨";
+                } else continue;
+                pool.computeIfAbsent(kind, k -> new ArrayList<>())
+                        .add(new String[] {e.getDate().toString(), Categories.name(cat), "이번 주 지출 1건: " + desc, verdict
+                        });
+            }
 
-            int daysElapsed = (int) java.time.temporal.ChronoUnit.DAYS.between(monthStart, weekEnd) + 1;
-            int daysInMonth = weekEnd.lengthOfMonth();
-
-            long variableMtd = ALL_EXPENSES.stream()
-                    .filter(e -> e.isExpense()
-                            && e.isVariable()
-                            && !e.getDate().isBefore(monthStart)
-                            && !e.getDate().isAfter(weekEnd))
-                    .mapToLong(Expense::getAmount)
-                    .sum();
-
-            long fixedMtd = ALL_EXPENSES.stream()
-                    .filter(e -> e.isExpense()
-                            && !e.isVariable()
-                            && !e.getDate().isBefore(monthStart)
-                            && !e.getDate().isAfter(weekEnd))
-                    .mapToLong(Expense::getAmount)
-                    .sum();
-
-            LocalDate threeMonthsAgo = monthStart.minusMonths(3);
-            double priorDailyRate = ALL_EXPENSES.stream()
-                    .filter(e -> e.isExpense()
-                            && e.isVariable()
-                            && !e.getDate().isBefore(threeMonthsAgo)
-                            && e.getDate().isBefore(monthStart))
-                    .mapToLong(Expense::getAmount)
-                    .average()
-                    .orElse(0.0);
-
-            BudgetProjector.Projection proj = budgetProjector.project(
-                    variableMtd, fixedMtd, 0, daysElapsed, daysInMonth, priorDailyRate, null, null);
-
-            long actual = ALL_EXPENSES.stream()
-                    .filter(e -> e.isExpense()
-                            && !e.getDate().isBefore(monthStart)
-                            && !e.getDate().isAfter(monthEnd))
-                    .mapToLong(Expense::getAmount)
-                    .sum();
-
-            double error = actual > 0 ? Math.abs(proj.predictedMonthEndWon() - actual) / (double) actual * 100 : 0.0;
-            totalMape += error;
-            count++;
-
-            System.out.printf(
-                    "%-6d %-22s %-14s %-14s %-8.1f%n",
-                    week,
-                    weekStart + " ~ " + weekEnd,
-                    String.format("%,d", proj.predictedMonthEndWon()),
-                    String.format("%,d", actual),
-                    error);
+            for (int cat : budgets.keySet()) {
+                if (!anomalyDetector.isHighFreq(cat) || anomalyDetector.isSpikeProne(cat)) continue;
+                double[] weekly = new double[len];
+                for (int i = 0; i < len; i++) {
+                    LocalDate end = weekEnd.minusWeeks(len - 1L - i);
+                    LocalDate start = end.minusDays(6);
+                    int c = cat;
+                    weekly[i] = ALL_EXPENSES.stream()
+                            .filter(x -> x.isExpense()
+                                    && x.isVariable()
+                                    && x.getCategoryId() == c
+                                    && !x.getDate().isBefore(start)
+                                    && !x.getDate().isAfter(end))
+                            .mapToLong(Expense::getAmount)
+                            .sum();
+                }
+                long budget = com.planus.backend.domain.aifeedback.service.AiFeedbackService.anomalyBudget(
+                        budgets,
+                        ALL_EXPENSES.stream()
+                                .filter(x -> !x.getDate().isAfter(weekEnd))
+                                .toList(),
+                        weekEnd,
+                        cat);
+                boolean confirmed = anomalyDetector.trendConfirmed(weekly, len - 1, budget);
+                AnomalyDetector.TrendStats t = anomalyDetector.trendStats(weekly, len - 1);
+                if (t == null) continue;
+                boolean near = !confirmed && t.priorMean() > 0 && t.ratio() >= 1.2 && t.recentMean() >= 30_000;
+                if (!confirmed && !near) continue;
+                String series = Arrays.stream(weekly)
+                        .mapToObj(v -> String.format("%,d", (long) v))
+                        .collect(Collectors.joining(" → "));
+                String desc = String.format(
+                        "최근 %d주 주간 지출(오래된 순): %s원 — 최근 2주 평균 %,d원, 그 앞 4주 평균 %,d원 (%.2f배)",
+                        len, series, (long) t.recentMean(), (long) t.priorMean(), t.ratio());
+                String kind = confirmed ? "추세-확정" : "추세-확정직전";
+                String verdict = confirmed
+                        ? String.format(
+                                "추세 확정 mag=%.2f 신뢰도=%s",
+                                t.ratio(),
+                                Confidence.of(
+                                        t.ratio(), 99, props.getConfHighMinSamples(), props.getConfMediumMinSamples()))
+                        : "추세 확정 아님";
+                pool.computeIfAbsent(kind, k -> new ArrayList<>())
+                        .add(new String[] {weekEnd.toString(), Categories.name(cat), desc, verdict});
+            }
         }
 
-        double mape = count > 0 ? totalMape / count : 0.0;
-        System.out.printf("%-30s %.1f%%%n", "평균 오차 (MAPE) :", mape);
-        assertThat(mape).isLessThan(50.0);
+        Map<String, Integer> quota = Map.of(
+                "단발-modifiedZ", 16,
+                "단발-중앙값배수", 8,
+                "단발-과거거의없음", 6,
+                "추세-확정", 14,
+                "추세-확정직전", 8,
+                "탐지안됨-큰거래", 10);
+        List<String[]> picked = new ArrayList<>(); // [종류, 날짜, 카테고리, 설명, 현재판정]
+        for (var en : pool.entrySet()) {
+            List<String[]> rows = en.getValue();
+            Collections.shuffle(rows, rnd);
+            rows.stream()
+                    .limit(quota.getOrDefault(en.getKey(), 0))
+                    .forEach(r -> picked.add(new String[] {en.getKey(), r[0], r[1], r[2], r[3]}));
+        }
+        Collections.shuffle(picked, rnd);
+
+        java.nio.file.Path out = java.nio.file.Path.of(dir);
+        java.nio.file.Files.createDirectories(out);
+        StringBuilder sheet = new StringBuilder("﻿id,날짜(주 마지막 날),카테고리,내용,알려줄 만한가(O/X/?),메모\n");
+        StringBuilder key = new StringBuilder("﻿id,종류,현재 판정\n");
+        for (int i = 0; i < picked.size(); i++) {
+            String id = String.format("L%03d", i + 1);
+            String[] r = picked.get(i);
+            sheet.append(id)
+                    .append(',')
+                    .append(r[1])
+                    .append(',')
+                    .append(r[2])
+                    .append(',')
+                    .append('"')
+                    .append(r[3].replace("\"", "\"\""))
+                    .append('"')
+                    .append(",,\n");
+            key.append(id).append(',').append(r[0]).append(',').append(r[4]).append('\n');
+        }
+        java.nio.file.Files.writeString(out.resolve("이상치라벨.csv"), sheet);
+        java.nio.file.Files.writeString(out.resolve("_key.csv"), key);
+        System.out.printf(
+                "라벨링 시트 %d건 → %s (후보 풀: %s)%n",
+                picked.size(),
+                out,
+                pool.entrySet().stream()
+                        .map(en -> en.getKey() + " " + en.getValue().size())
+                        .collect(Collectors.joining(", ")));
+    }
+
+    /** 대안: 최근 2주(w-1, w)를 바로 앞 4주(w-5..w-2)와 비교. */
+    private boolean risingContiguous(double[] weekly, int w, long budgetWon) {
+        if (w < 5) return false;
+        double recent = (weekly[w - 1] + weekly[w]) / 2.0;
+        double prior = (weekly[w - 5] + weekly[w - 4] + weekly[w - 3] + weekly[w - 2]) / 4.0;
+        double frac = budgetWon * props.getTrendFrac();
+        if (prior <= 0) return recent > 0 && recent >= frac;
+        return recent >= prior * props.getTrendRatio() && (recent - prior) >= frac;
+    }
+
+    private long monthSum(LocalDate from, LocalDate to, Boolean variable) {
+        return ALL_EXPENSES.stream()
+                .filter(e -> e.isExpense()
+                        && (variable == null || e.isVariable() == variable)
+                        && !e.getDate().isBefore(from)
+                        && !e.getDate().isAfter(to))
+                .mapToLong(Expense::getAmount)
+                .sum();
+    }
+
+    private static double pctError(double predicted, long actual) {
+        return Math.abs(predicted - actual) / (double) actual * 100;
     }
 
     // ──────────────────────────────────────────────────────────────

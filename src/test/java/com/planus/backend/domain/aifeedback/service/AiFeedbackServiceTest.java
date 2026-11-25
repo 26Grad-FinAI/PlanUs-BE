@@ -295,6 +295,134 @@ class AiFeedbackServiceTest {
         verify(savingsCalculator).calculate(any(), anyLong(), anyInt(), anyInt(), any(), any(), any(), any(), any());
     }
 
+    /** 기타(예산 0원)가 있는 ALERT 주를 만들고 렌더러에 넘어간 초과 카테고리를 돌려준다. */
+    private List<com.planus.backend.domain.aifeedback.llm.FeedbackRenderer.CategoryOverspend> etcOverspend(
+            long julyEtc, boolean withHistory) {
+        stubCommon();
+        stubNormalActivity();
+        stubProjection(1_800_000, -300_000);
+        when(feedbackTypeResolver.resolve(eq(false), eq(-300_000L), eq(false), anyBoolean()))
+                .thenReturn(FeedbackType.ALERT);
+        when(causeAssembler.assemble(anyInt(), any(), any(), any(), any()))
+                .thenReturn(new CauseSignals(null, null, 0, 0, Map.of(), Map.of(), null, List.of(), false));
+        when(savingsCalculator.calculate(any(), anyLong(), anyInt(), anyInt(), any(), any(), any(), any(), any()))
+                .thenReturn(List.of());
+        when(renderer.render(any())).thenReturn(new Rendered("절약이 필요해요.", Confidence.HIGH));
+        when(budgetCatRepo.findByBudgetId(1L))
+                .thenReturn(List.of(
+                        BudgetCategory.builder()
+                                .budgetId(1L)
+                                .categoryId(1)
+                                .amount(300_000)
+                                .build(),
+                        BudgetCategory.builder()
+                                .budgetId(1L)
+                                .categoryId(10)
+                                .amount(0)
+                                .build()));
+        var window = new java.util.ArrayList<>(defaultWindow());
+        java.util.function.BiConsumer<LocalDate, Long> etc = (date, amount) -> window.add(Expense.builder()
+                .userId(USER_ID)
+                .categoryId(10)
+                .type("EXPENSE")
+                .amount(amount)
+                .expenseDate(date.atTime(12, 0))
+                .recurring(false)
+                .planned(false)
+                .build());
+        if (withHistory) {
+            etc.accept(MONTH_START.minusMonths(1).plusDays(10), 400_000L); // 6월
+            etc.accept(MONTH_START.minusMonths(2).plusDays(10), 400_000L); // 5월
+        }
+        etc.accept(MONTH_START.plusDays(3), julyEtc); // 이번 달
+        when(expenseRepo.findByUserIdAndExpenseDateBetween(eq(USER_ID), any(), any()))
+                .thenReturn(window);
+
+        service.generateWeekly(USER_ID, WEEK_END);
+
+        var captor = org.mockito.ArgumentCaptor.forClass(
+                com.planus.backend.domain.aifeedback.llm.FeedbackRenderer.FeedbackContext.class);
+        verify(renderer).render(captor.capture());
+        return captor.getValue().overspendCategories();
+    }
+
+    @Test
+    @DisplayName("기타(예산 0원)는 평소 월평균 안이면 초과가 아니다 — 지출 전액을 초과로 보지 않는다 (#141)")
+    void etcBudgetZero_withinUsual_notOverspend() {
+        assertThat(etcOverspend(150_000, true)).noneMatch(o -> o.categoryName().equals("기타"));
+    }
+
+    @Test
+    @DisplayName("기타(예산 0원)는 평소 월평균을 넘기면 평소 대비 초과로 표시 (#141)")
+    void etcBudgetZero_aboveUsual_overspendVsUsual() {
+        var over = etcOverspend(900_000, true);
+
+        assertThat(over)
+                .filteredOn(o -> o.categoryName().equals("기타"))
+                .singleElement()
+                .satisfies(o -> assertThat(o.usualMonthlyWon()).isEqualTo(400_000));
+    }
+
+    @Test
+    @DisplayName("기타(예산 0원)는 평소를 알 수 없으면(지난 달 기록 없음) 초과를 판정하지 않는다 (#141)")
+    void etcBudgetZero_noHistory_notJudged() {
+        assertThat(etcOverspend(900_000, false)).noneMatch(o -> o.categoryName().equals("기타"));
+    }
+
+    @Test
+    @DisplayName("만료된 거절은 절약 액션에 넘기지 않고, 효력 있는 거절 카테고리는 바로 제외 대상으로 넘긴다 (#141)")
+    void generateWeekly_expiredRejectionsDropped() {
+        stubCommon();
+        stubNormalActivity();
+        stubProjection(1_800_000, -300_000);
+        when(feedbackTypeResolver.resolve(eq(false), eq(-300_000L), eq(false), anyBoolean()))
+                .thenReturn(FeedbackType.ALERT);
+        when(causeAssembler.assemble(anyInt(), any(), any(), any(), any()))
+                .thenReturn(new CauseSignals(null, null, 0, 0, Map.of(), Map.of(), null, List.of(), false));
+        when(savingsCalculator.calculate(any(), anyLong(), anyInt(), anyInt(), any(), any(), any(), any(), any()))
+                .thenReturn(List.of());
+        when(renderer.render(any())).thenReturn(new Rendered("절약이 필요해요.", Confidence.HIGH));
+        LocalDateTime now = LocalDateTime.now(FIXED_CLOCK);
+        when(reactionRepo.findByUserId(USER_ID))
+                .thenReturn(List.of(
+                        com.planus.backend.domain.aifeedback.entity.UserReaction.builder()
+                                .userId(USER_ID)
+                                .reaction(com.planus.backend.domain.aifeedback.entity.Reaction.NOT_HELPFUL)
+                                .rejectionReason(
+                                        com.planus.backend.domain.aifeedback.entity.RejectionReason.DONT_WANT_REDUCE)
+                                .categoryId(1)
+                                .createdAt(now.minusMonths(4)) // 만료
+                                .build(),
+                        com.planus.backend.domain.aifeedback.entity.UserReaction.builder()
+                                .userId(USER_ID)
+                                .reaction(com.planus.backend.domain.aifeedback.entity.Reaction.NOT_HELPFUL)
+                                .rejectionReason(
+                                        com.planus.backend.domain.aifeedback.entity.RejectionReason.DONT_WANT_REDUCE)
+                                .categoryId(6)
+                                .createdAt(now.minusDays(10)) // 효력 있음
+                                .build()));
+
+        service.generateWeekly(USER_ID, WEEK_END);
+
+        @SuppressWarnings("unchecked")
+        var rejections = org.mockito.ArgumentCaptor.forClass(List.class);
+        @SuppressWarnings("unchecked")
+        var sensitive = org.mockito.ArgumentCaptor.forClass(List.class);
+        verify(savingsCalculator)
+                .calculate(
+                        any(),
+                        anyLong(),
+                        anyInt(),
+                        anyInt(),
+                        any(),
+                        any(),
+                        any(),
+                        rejections.capture(),
+                        sensitive.capture());
+        assertThat(rejections.getValue()).hasSize(1);
+        assertThat(sensitive.getValue()).containsExactly(6L);
+    }
+
     @Test
     @DisplayName("같은 주 피드백이 이미 있으면 기존 피드백을 반환하고 분석·LLM·저장을 하지 않는다 (#130)")
     void generateWeekly_existingFeedback_skipsGeneration() {
@@ -351,8 +479,8 @@ class AiFeedbackServiceTest {
         // update()가 호출되면 feedbackText, payload, 버전이 모두 갱신됨
         assertThat(existing.getFeedbackText()).isEqualTo("좋은 소비 습관이에요.");
         assertThat(existing.getPayload()).isNotNull();
-        assertThat(existing.getPromptVersion()).isEqualTo("v4.5");
-        assertThat(existing.getLogicVersion()).isEqualTo("v2.4");
+        assertThat(existing.getPromptVersion()).isEqualTo("v4.6");
+        assertThat(existing.getLogicVersion()).isEqualTo("v2.5");
         verify(feedbackRepo).save(existing);
     }
 
@@ -383,8 +511,8 @@ class AiFeedbackServiceTest {
 
         assertThat(result).isPresent();
         AiFeedback fb = result.get();
-        assertThat(fb.getPromptVersion()).isEqualTo("v4.5");
-        assertThat(fb.getLogicVersion()).isEqualTo("v2.4");
+        assertThat(fb.getPromptVersion()).isEqualTo("v4.6");
+        assertThat(fb.getLogicVersion()).isEqualTo("v2.5");
     }
 
     @Test
@@ -425,8 +553,8 @@ class AiFeedbackServiceTest {
         assertThat(result).isPresent();
         String payload = result.get().getPayload();
         var tree = new ObjectMapper().readTree(payload);
-        assertThat(tree.path("version").path("prompt").asText()).isEqualTo("v4.5");
-        assertThat(tree.path("version").path("logic").asText()).isEqualTo("v2.4");
+        assertThat(tree.path("version").path("prompt").asText()).isEqualTo("v4.6");
+        assertThat(tree.path("version").path("logic").asText()).isEqualTo("v2.5");
     }
 
     @Test

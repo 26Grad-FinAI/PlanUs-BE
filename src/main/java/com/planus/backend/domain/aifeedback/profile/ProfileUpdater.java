@@ -35,7 +35,9 @@ public class ProfileUpdater {
 
     private static final Logger log = LoggerFactory.getLogger(ProfileUpdater.class);
 
-    private static final int DONT_WANT_REDUCE_THRESHOLD = 2;
+    /** 한 번이라도 "줄이고 싶지 않아요"를 누른 카테고리는 제안에서 뺀다 — 만료는 호출 측이 효력 있는 반응만 넘겨 처리한다 (#141). */
+    private static final int DONT_WANT_REDUCE_THRESHOLD = 1;
+
     private static final int COMPLIANCE_WINDOW_WEEKS = 12;
 
     private final ObjectMapper objectMapper;
@@ -99,27 +101,27 @@ public class ProfileUpdater {
     }
 
     /**
-     * DONT_WANT_REDUCE 거부가 {@value DONT_WANT_REDUCE_THRESHOLD}회+ 된 카테고리를
-     * sensitiveAreas에 추가한다.
+     * 효력 있는 반응에서 "줄이고 싶지 않아요"(DONT_WANT_REDUCE)로 거절된 카테고리 — 절약 제안에서 제외할 대상.
      *
-     * <p>현재 제거 경로 없음 — v1.1에서 설정 화면 해제 기능 추가 예정.
+     * <p>호출 측이 만료된 반응을 빼고 넘긴다. 이 값은 매번 그 시점의 반응에서 다시 계산되므로, 만료되면 자연스럽게 빠진다.
      */
-    private void updateSensitiveAreas(UserProfile profile, List<UserReaction> reactions) {
-        Map<Integer, Long> dontWantCount = reactions.stream()
+    public static Set<Long> sensitiveCategories(List<UserReaction> activeReactions) {
+        Map<Integer, Long> dontWantCount = activeReactions.stream()
                 .filter(r -> r.getRejectionReason() == RejectionReason.DONT_WANT_REDUCE)
                 .filter(r -> r.getCategoryId() != null)
                 .collect(Collectors.groupingBy(UserReaction::getCategoryId, Collectors.counting()));
+        Set<Long> out = new LinkedHashSet<>();
+        dontWantCount.forEach((cat, n) -> {
+            if (n >= DONT_WANT_REDUCE_THRESHOLD) out.add(cat.longValue());
+        });
+        return out;
+    }
 
-        Set<Long> currentSensitive = parseSensitiveAreas(profile);
-
-        for (Map.Entry<Integer, Long> entry : dontWantCount.entrySet()) {
-            if (entry.getValue() >= DONT_WANT_REDUCE_THRESHOLD) {
-                currentSensitive.add(entry.getKey().longValue());
-            }
-        }
-
+    /** 프로필의 sensitiveAreas를 효력 있는 반응으로 다시 쓴다 (누적이 아니라 교체). */
+    private void updateSensitiveAreas(UserProfile profile, List<UserReaction> reactions) {
         try {
-            profile.updateSensitiveAreas(objectMapper.writeValueAsString(new ArrayList<>(currentSensitive)));
+            profile.updateSensitiveAreas(
+                    objectMapper.writeValueAsString(new ArrayList<>(sensitiveCategories(reactions))));
         } catch (Exception e) {
             log.warn("프로필 sensitive_areas 직렬화 실패. userId={}", profile.getUserId(), e);
         }
@@ -161,25 +163,6 @@ public class ProfileUpdater {
         } catch (Exception e) {
             log.warn("프로필 repeat_patterns 파싱 실패. userId={}", profile.getUserId(), e);
             return new HashMap<>();
-        }
-    }
-
-    private Set<Long> parseSensitiveAreas(UserProfile profile) {
-        return new HashSet<>(parseSensitiveAreaIds(objectMapper, profile));
-    }
-
-    /**
-     * UserProfile의 sensitiveAreas JSON을 파싱한다. 공용 헬퍼.
-     *
-     * @return 민감 카테고리 ID 리스트, 파싱 실패 시 빈 리스트
-     */
-    public static List<Long> parseSensitiveAreaIds(ObjectMapper objectMapper, UserProfile profile) {
-        if (profile == null || profile.getSensitiveAreas() == null) return List.of();
-        try {
-            return objectMapper.readValue(profile.getSensitiveAreas(), new TypeReference<List<Long>>() {});
-        } catch (Exception e) {
-            log.warn("프로필 sensitive_areas 파싱 실패. userId={}", profile.getUserId(), e);
-            return List.of();
         }
     }
 

@@ -75,17 +75,26 @@ class SavingsActionCalculatorTest {
         }
 
         @Test
-        @DisplayName("SATISFIED 비중 70%+ 카테고리 제외, 대안 없으면 유지")
-        void excludes_satisfied_with_fallback() {
-            // 카테고리 2만 있고, SATISFIED 100%
-            Map<Integer, Long> overspend = Map.of(2, 100_000L);
+        @DisplayName("만족 태그가 많아도 초과면 절약 대상 — 만족 비중으로 제외하지 않는다 (#141)")
+        void satisfied_category_still_included() {
+            // 카테고리 7(식대)은 만족 100%, 카테고리 4는 태그 없음. 갭 150,000 = 4에서 100,000 + 7에서 50,000
+            Map<Integer, Long> overspend = Map.of(7, 100_000L, 4, 100_000L);
             List<Expense> expenses =
-                    List.of(variableWithEmotion(2, 50_000, "SATISFIED"), variableWithEmotion(2, 50_000, "SATISFIED"));
+                    List.of(variableWithEmotion(7, 50_000, "SATISFIED"), variableWithEmotion(7, 50_000, "SATISFIED"));
 
-            // 대안 없음 → 폴백으로 유지
             List<ActionPlan> plans = calculator.calculate(
-                    overspend, 100_000, 15, 15, Map.of(2, 200_000L), Map.of(), expenses, List.of(), List.of());
-            assertThat(plans).isNotEmpty();
+                    overspend,
+                    150_000,
+                    15,
+                    15,
+                    Map.of(7, 400_000L, 4, 400_000L),
+                    Map.of(),
+                    expenses,
+                    List.of(),
+                    List.of());
+
+            assertThat(plans).extracting(ActionPlan::categoryId).containsExactlyInAnyOrder(7, 4);
+            assertThat(plans.get(0).categoryId()).isEqualTo(4); // 만족은 순위만 뒤로
         }
     }
 
@@ -118,6 +127,52 @@ class SavingsActionCalculatorTest {
 
             assertThat(plans).isNotEmpty();
             assertThat(plans.get(0).categoryId()).isEqualTo(2); // REGRET → 높은 점수
+        }
+
+        @Test
+        @DisplayName("감정 점수는 건수가 아니라 금액 비중 — 소액 만족 9건보다 후회 큰 한 건이 우선 (#141)")
+        void emotion_weighted_by_amount() {
+            Map<Integer, Long> overspend = Map.of(7, 80_000L, 4, 80_000L);
+            List<Expense> expenses = new java.util.ArrayList<>();
+            expenses.add(variableWithEmotion(7, 300_000, "REGRET"));
+            for (int i = 0; i < 9; i++) expenses.add(variableWithEmotion(7, 5_000, "SATISFIED"));
+            // 대조군: 태그 없는 카테고리 4는 기본 점수 1.0 — 건수 기준이면 카테고리 7(만족 9/10건)이 감점되어 4가 먼저 나온다
+            expenses.add(variable(4, 100_000));
+            expenses.add(variable(4, 100_000));
+
+            List<ActionPlan> plans = calculator.calculate(
+                    overspend,
+                    80_000,
+                    15,
+                    15,
+                    Map.of(7, 400_000L, 4, 400_000L),
+                    Map.of(),
+                    expenses,
+                    List.of(),
+                    List.of());
+
+            assertThat(plans).extracting(ActionPlan::categoryId).containsExactly(7);
+        }
+
+        @Test
+        @DisplayName("태그가 붙은 금액이 변동 지출의 절반 미만이면 감정 점수를 쓰지 않는다 (#141)")
+        void weak_tag_coverage_ignored() {
+            Map<Integer, Long> overspend = Map.of(7, 100_000L);
+            // 후회 10,000원만 태그, 나머지 190,000원은 태그 없음 → 태그 5%
+            List<Expense> weak = List.of(variableWithEmotion(7, 10_000, "REGRET"), variable(7, 190_000));
+            List<Expense> enough = List.of(variableWithEmotion(7, 150_000, "REGRET"), variable(7, 50_000));
+
+            double weakScore = calculator
+                    .calculate(overspend, 100_000, 15, 15, Map.of(7, 400_000L), Map.of(), weak, List.of(), List.of())
+                    .get(0)
+                    .feasibilityScore();
+            double enoughScore = calculator
+                    .calculate(overspend, 100_000, 15, 15, Map.of(7, 400_000L), Map.of(), enough, List.of(), List.of())
+                    .get(0)
+                    .feasibilityScore();
+
+            assertThat(weakScore).isEqualTo(1.0);
+            assertThat(enoughScore).isGreaterThan(weakScore);
         }
 
         @Test
@@ -248,6 +303,10 @@ class SavingsActionCalculatorTest {
     }
 
     // ── 헬퍼 ──
+
+    private static Expense variable(int categoryId, long amount) {
+        return variableWithEmotion(categoryId, amount, null);
+    }
 
     private static Expense variableWithEmotion(int categoryId, long amount, String emotion) {
         return Expense.builder()

@@ -63,9 +63,9 @@ public class AiFeedbackService {
     private static final Logger log = LoggerFactory.getLogger(AiFeedbackService.class);
 
     /** v3.0 (#111): 배수 기준 명시, 건수·묶음 표기, 절약 액션 출처 제한, 내부 용어 제거, 거래처별 건수. */
-    private static final String PROMPT_VERSION = "v4.5";
+    private static final String PROMPT_VERSION = "v4.6";
 
-    private static final String LOGIC_VERSION = "v2.4";
+    private static final String LOGIC_VERSION = "v2.5";
 
     /** 피드백의 '평소' = 이번 주를 뺀 직전 {@value}주 주당 평균 (#144). */
     static final int RECENT_WEEKS = 4;
@@ -199,15 +199,18 @@ public class AiFeedbackService {
         if (catBudget.isEmpty()) return Optional.empty();
 
         // ── [1] 지출 데이터 윈도우 조회 ──
-        LocalDate queryStart =
-                Collections.min(List.of(weekStart.minusWeeks(p.getBaselineWeeks()), monthStart.minusMonths(1)));
+        LocalDate queryStart = Collections.min(
+                List.of(weekStart.minusWeeks(p.getBaselineWeeks()), monthStart.minusMonths(USUAL_MONTHS)));
         LocalDate queryEnd = weekEnd.withDayOfMonth(dim);
         LocalDateTime from = queryStart.atStartOfDay();
         LocalDateTime to = queryEnd.atTime(LocalTime.MAX);
         List<Expense> window = expenseRepo.findByUserIdAndExpenseDateBetween(userId, from, to);
 
-        // 거부 이력: 한 번만 조회 (프로필 갱신·절약 액션 양쪽에서 사용)
-        List<UserReaction> reactions = reactionRepo.findByUserId(userId);
+        // 거부 이력: 한 번만 조회 (프로필 갱신·절약 액션 양쪽에서 사용). 만료된 거절은 뺀다 (#141)
+        LocalDateTime reactionNow = LocalDateTime.now(clock);
+        List<UserReaction> reactions = reactionRepo.findByUserId(userId).stream()
+                .filter(r -> r.isActiveAt(reactionNow, p.getRejectionExpiryMonths()))
+                .toList();
 
         // 프로필 로드 (원인 신호·절약 액션에서 사용)
         UserProfile profile = userProfileRepo.findByUserId(userId).orElse(null);
@@ -238,6 +241,8 @@ public class AiFeedbackService {
         Anomaly top = null;
         Confidence anomalyConfidence = Confidence.LOW;
         Map<Integer, Long> overspend = Map.of();
+        // 예산이 배분되지 않은 카테고리(기타)의 평소 월 지출 — 초과를 예산 대신 평소와 비교한다 (#141)
+        Map<Integer, Long> usualMonthly = new HashMap<>();
         Map<Integer, CauseSignals> causeSignalsByCategory = Map.of();
         List<ActionPlan> actions = List.of();
         Map<Integer, Long> categoryRemainingExpected = Map.of();
@@ -278,7 +283,7 @@ public class AiFeedbackService {
             burnRate = available > 0 ? (double) predictedMonthEnd / available : 0;
 
             // ── [5] 카테고리별 초과 + 원인 신호 조립 ──
-            overspend = computeOverspend(window, catBudget, monthStart, weekEnd, day, dim, dowWeights);
+            overspend = computeOverspend(window, catBudget, monthStart, weekEnd, day, dim, dowWeights, usualMonthly);
             causeSignalsByCategory = new HashMap<>();
             for (int cat : overspend.keySet()) {
                 CauseSignals signals = causeAssembler.assemble(cat, window, weekStart, weekEnd, profile);
@@ -298,7 +303,8 @@ public class AiFeedbackService {
             if (feedbackType == FeedbackType.ALERT && savingsGap > 0) {
                 categoryRemainingExpected =
                         buildCategoryRemainingExpected(window, monthStart, weekEnd, day, dim, dowWeights);
-                List<Long> sensitiveAreas = parseSensitiveAreas(profile);
+                // 프로필 값이 아니라 지금 효력 있는 반응에서 바로 계산한다 — 프로필은 이 실행 뒤에 갱신되므로, 새 거절이 한 주기 늦게 반영되는 걸 막는다
+                List<Long> sensitiveAreas = new ArrayList<>(ProfileUpdater.sensitiveCategories(reactions));
                 actions = savingsCalculator.calculate(
                         overspend,
                         savingsGap,
@@ -353,13 +359,24 @@ public class AiFeedbackService {
                             && ex.isVariable();
                     List<String> memos = new ArrayList<>();
                     for (Expense ex : window) if (thisWeekVar.test(ex)) memos.add(ex.getMemo());
+                    Expense big = largestSingleOfOverspend(window, cat, monthStart, weekEnd, e.getValue());
                     return new CategoryOverspend(
                             Categories.name(cat),
                             e.getValue(),
                             sum(window, thisWeekVar),
                             finalCauseSignals.get(cat),
                             count(window, thisWeekVar),
-                            MerchantNames.countByMerchant(memos));
+                            MerchantNames.countByMerchant(memos),
+                            usualMonthly.getOrDefault(cat, 0L),
+                            big != null ? big.getAmount() : 0L,
+                            big != null
+                                            && big.getMemo() != null
+                                            && !big.getMemo().isBlank()
+                                    ? MerchantNames.countByMerchant(List.of(big.getMemo()))
+                                            .keySet()
+                                            .iterator()
+                                            .next()
+                                    : null);
                 })
                 .toList();
 
@@ -554,6 +571,13 @@ public class AiFeedbackService {
         LocalDateTime from = monthStart.atStartOfDay();
         LocalDateTime to = monthEnd.atTime(LocalTime.MAX);
         List<Expense> expenses = expenseRepo.findByUserIdAndExpenseDateBetween(userId, from, to);
+        // 예산이 배분되지 않은 카테고리(기타)는 직전 3개월 월평균과 비교한다 (#141)
+        List<Expense> history = catBudget.containsValue(0L)
+                ? expenseRepo.findByUserIdAndExpenseDateBetween(
+                        userId,
+                        monthStart.minusMonths(USUAL_MONTHS).atStartOfDay(),
+                        monthStart.minusDays(1).atTime(LocalTime.MAX))
+                : List.of();
 
         // 실제 총지출 (변동+고정 포함)
         long actualTotal = expenses.stream()
@@ -576,12 +600,17 @@ public class AiFeedbackService {
         for (var entry : catBudget.entrySet()) {
             int cat = entry.getKey();
             long budget = entry.getValue();
+            boolean vsUsual = budget <= 0;
+            if (vsUsual) {
+                budget = usualMonthlyTotal(history, monthStart, cat);
+                if (budget <= 0) continue; // 평소를 알 수 없으면 판정하지 않는다
+            }
             long actual = catActual.getOrDefault(cat, 0L);
             long diff = actual - budget;
             if (diff > 0) {
-                overspend.add(new CategoryResult(Categories.name(cat), diff));
+                overspend.add(new CategoryResult(Categories.name(cat), diff, vsUsual));
             } else if (diff < 0 && actual > 0) {
-                savings.add(new CategoryResult(Categories.name(cat), -diff));
+                savings.add(new CategoryResult(Categories.name(cat), -diff, vsUsual));
             }
         }
         overspend.sort(Comparator.comparingLong(CategoryResult::amountWon).reversed());
@@ -863,7 +892,7 @@ public class AiFeedbackService {
             if (detector.isSpikeProne(cat)) continue;
 
             List<Expense> catExpenses = entry.getValue();
-            long budget = catBudget.getOrDefault(cat, 0L);
+            long budget = anomalyBudget(catBudget, window, weekEnd, cat);
 
             for (Expense e : catExpenses) {
                 LocalDate d = e.getDate();
@@ -891,15 +920,18 @@ public class AiFeedbackService {
                 if (detector.isSpikeProne(cat)) continue;
 
                 double[] weekly = weeklySeries(window, cat, weekEnd, weeks);
-                if (detector.trendConfirmed(weekly, weeks - 1, catBudget.getOrDefault(cat, 0L))) {
+                if (detector.trendConfirmed(weekly, weeks - 1, anomalyBudget(catBudget, window, weekEnd, cat))) {
                     // 확정 판정과 같은 구간(최근 2주 vs 그 앞 4주)의 배수를 그대로 쓴다 (#138)
                     AnomalyDetector.TrendStats trend = detector.trendStats(weekly, weeks - 1);
                     double rm = trend.recentMean();
                     double pm = trend.priorMean();
                     double mag = trend.ratio();
 
+                    // 기타 평소 월 지출 때문에 조회 범위를 넓혔으므로, 신뢰도 표본은 기준선 기간 안의 거래만 센다
+                    LocalDate baselineFrom = weekStart.minusWeeks(p.getBaselineWeeks());
                     int histLen = (int) byCat.getOrDefault(cat, List.of()).stream()
-                            .filter(x -> x.getDate().isBefore(weekStart))
+                            .filter(x -> x.getDate().isBefore(weekStart)
+                                    && !x.getDate().isBefore(baselineFrom))
                             .count();
 
                     List<Expense> catExpenses = byCat.getOrDefault(cat, List.of());
@@ -964,7 +996,7 @@ public class AiFeedbackService {
             if (detector.isSpikeProne(cat)) continue;
 
             List<Expense> catExpenses = entry.getValue();
-            long budget = catBudget.getOrDefault(cat, 0L);
+            long budget = anomalyBudget(catBudget, window, weekEnd, cat);
 
             for (Expense e : catExpenses) {
                 LocalDate d = e.getDate();
@@ -1037,10 +1069,18 @@ public class AiFeedbackService {
             LocalDate weekEnd,
             int day,
             int dim,
-            double[] dowWeights) {
+            double[] dowWeights,
+            Map<Integer, Long> usualMonthlyOut) {
         Map<Integer, Long> overspend = new HashMap<>();
         for (var entry : catBudget.entrySet()) {
             int cat = entry.getKey();
+            // 예산이 배분되지 않은 카테고리(기타 등)는 예산 0원과 비교하면 지출 전액이 초과가 된다 (#141) — 평소(직전 3개월 월평균)와 비교한다
+            long budget = entry.getValue();
+            if (budget <= 0) {
+                budget = usualMonthlyTotal(window, monthStart, cat);
+                if (budget <= 0) continue; // 평소를 알 수 없으면 초과를 판정하지 않는다
+                usualMonthlyOut.put(cat, budget);
+            }
             long varMtd =
                     sum(window, e -> e.getCategoryId() == cat && inMonth(e, monthStart, weekEnd) && e.isVariable());
             long fixMtd = sum(
@@ -1053,7 +1093,7 @@ public class AiFeedbackService {
             long blended =
                     BudgetProjector.predictCategory(varMtd, fixMtd, day, dim, priorCatRate, dowWeights, monthStart);
             long currentPaceOnly = Math.round((double) varMtd / Math.max(day, 1) * dim) + fixMtd;
-            long over = Math.min(blended, currentPaceOnly) - entry.getValue();
+            long over = Math.min(blended, currentPaceOnly) - budget;
             if (over > 0) overspend.put(cat, over);
         }
         return overspend;
@@ -1099,11 +1139,6 @@ public class AiFeedbackService {
             return Confidence.lower(base, anomalyConfidence);
         }
         return base;
-    }
-
-    /** UserProfile의 sensitiveAreas JSON을 파싱한다. ProfileUpdater의 공용 헬퍼 재사용. */
-    private List<Long> parseSensitiveAreas(UserProfile profile) {
-        return ProfileUpdater.parseSensitiveAreaIds(objectMapper, profile);
     }
 
     /** 페이로드 JSON 조립 (버전 포함). */
@@ -1241,6 +1276,45 @@ public class AiFeedbackService {
      * @param monthStart 이번 달 1일
      * @return 전월 변동 지출 일평균(원), 거래 없으면 0.0
      */
+    /**
+     * 이상치 판정의 최소 금액·추세 기준에 쓰는 카테고리 예산. 예산이 배분되지 않는 카테고리(기타)는 예산이 0원이라 기준이 없어져 1만 원만 넘어도
+     * 이상치가 되므로, 직전 3개월 평소 월 지출로 대신한다 (#141). 평소를 알 수 없으면 0.
+     */
+    public static long anomalyBudget(Map<Integer, Long> catBudget, List<Expense> window, LocalDate weekEnd, int cat) {
+        long budget = catBudget.getOrDefault(cat, 0L);
+        return budget > 0 ? budget : usualMonthlyTotal(window, weekEnd.withDayOfMonth(1), cat);
+    }
+
+    /** 평소 월 지출을 보는 기간 (개월). */
+    private static final int USUAL_MONTHS = 3;
+    /** 평소를 판단하려면 지출이 있는 달이 이만큼은 있어야 한다. */
+    private static final int USUAL_MIN_MONTHS = 2;
+
+    /**
+     * 카테고리의 평소 월 지출 — 직전 3개월 중 지출이 있는 달의 월평균(고정 포함). 지출이 있는 달이 {@value #USUAL_MIN_MONTHS}개 미만이면 0.
+     * 예산이 배분되지 않는 기타의 초과 기준이다 (#141).
+     */
+    public static long usualMonthlyTotal(List<Expense> window, LocalDate monthStart, int categoryId) {
+        long total = 0;
+        int months = 0;
+        for (int k = 1; k <= USUAL_MONTHS; k++) {
+            LocalDate from = monthStart.minusMonths(k);
+            LocalDate to = from.plusMonths(1);
+            long sum = window.stream()
+                    .filter(e -> e.isExpense()
+                            && e.getCategoryId() == categoryId
+                            && !e.getDate().isBefore(from)
+                            && e.getDate().isBefore(to))
+                    .mapToLong(Expense::getAmount)
+                    .sum();
+            if (sum > 0) {
+                total += sum;
+                months++;
+            }
+        }
+        return months >= USUAL_MIN_MONTHS ? total / months : 0;
+    }
+
     private double priorVariableDailyRate(List<Expense> window, LocalDate monthStart) {
         return priorVariableDailyRate(window, monthStart, null);
     }
@@ -1344,7 +1418,7 @@ public class AiFeedbackService {
             int cat = e.getCategoryId();
             boolean isAnomaly = false;
             if (!detector.isSpikeProne(cat)) {
-                long budget = catBudget.getOrDefault(cat, 0L);
+                long budget = anomalyBudget(catBudget, window, weekEnd, cat);
                 double[] hist = baselineHistory(byCat.getOrDefault(cat, List.of()), d, cat);
                 isAnomaly = detector.checkPoint(e.getAmount(), hist, budget).isPresent();
             }
@@ -1358,6 +1432,27 @@ public class AiFeedbackService {
         }
 
         return TransactionHighlight.groupIdenticalTopN(result, 5);
+    }
+
+    /** 큰 한 건이 월말 예상 초과의 이만큼(30%) 이상이고 이 금액 이상이어야 따로 알린다. */
+    private static final long LARGE_SINGLE_MIN_WON = 50_000;
+
+    private static final double LARGE_SINGLE_SHARE = 0.3;
+
+    /**
+     * 이번 달 이 카테고리의 가장 큰 변동 지출 한 건이 월말 예상 초과의 {@value #LARGE_SINGLE_SHARE}배 이상이면 그 거래, 아니면 null (#141).
+     * 이미 쓴 돈이라 '줄이기'가 아니라 다음 달 계획으로 연결하기 위한 재료다.
+     */
+    static Expense largestSingleOfOverspend(
+            List<Expense> window, int cat, LocalDate monthStart, LocalDate weekEnd, long overWon) {
+        return window.stream()
+                .filter(x -> x.getCategoryId() == cat
+                        && x.isVariable()
+                        && !x.getDate().isBefore(monthStart)
+                        && !x.getDate().isAfter(weekEnd))
+                .max(Comparator.comparingLong(Expense::getAmount))
+                .filter(x -> x.getAmount() >= LARGE_SINGLE_MIN_WON && x.getAmount() >= overWon * LARGE_SINGLE_SHARE)
+                .orElse(null);
     }
 
     private static TransactionHighlight findWeekLargest(List<Expense> window, LocalDate weekStart, LocalDate weekEnd) {

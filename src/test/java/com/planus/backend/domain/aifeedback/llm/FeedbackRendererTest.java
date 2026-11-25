@@ -658,6 +658,104 @@ class FeedbackRendererTest {
                     .doesNotContain("까지만 쓰기");
         }
 
+        @Test
+        @DisplayName("예산이 배분되지 않은 카테고리는 '평소 대비'로 표기하고, 평소 금액은 숫자 검증 허용값 (#141)")
+        void overspend_vsUsualWording() {
+            FeedbackContext ctx = contextBuilder()
+                    .feedbackType(FeedbackType.ALERT)
+                    .overspendCategories(List.of(
+                            new FeedbackRenderer.CategoryOverspend(
+                                    "기타", 180_000, 90_000, null, 5, java.util.Map.of(), 500_000),
+                            new FeedbackRenderer.CategoryOverspend("식대", 70_000, 50_000, null, 3)))
+                    .build();
+
+            assertThat(capturedUserPrompt(ctx))
+                    .contains("- 기타: 평소(직전 3개월 월평균 500,000원)보다 월말 예상 +180,000원")
+                    .contains("- 식대: 월말 예상 초과 +70,000원");
+            assertThat(renderer.verifyNumbers("기타는 평소 월 50만 원보다 18만 원 많아요.", ctx))
+                    .isTrue();
+        }
+
+        @Test
+        @DisplayName("초과의 큰 부분을 차지하는 이미 쓴 한 건은 줄이기가 아니라 다음 달 계획으로 잇게 안내하고, 그 금액은 숫자 검증 허용값 (#141)")
+        void overspend_largestSingleLine() {
+            FeedbackContext ctx = contextBuilder()
+                    .feedbackType(FeedbackType.ALERT)
+                    .overspendCategories(List.of(new FeedbackRenderer.CategoryOverspend(
+                            "식대", 330_000, 90_000, null, 3, java.util.Map.of(), 0, 204_000, "리정원")))
+                    .build();
+
+            assertThat(capturedUserPrompt(ctx))
+                    .contains("이번 달 큰 한 건: 리정원 204,000원")
+                    .contains("줄이라고 하지 말고 다음 달 계획");
+            assertThat(renderer.verifyNumbers("리정원 20만 원 한 건이 컸어요.", ctx)).isTrue();
+        }
+
+        @Test
+        @DisplayName("남은 일수를 프롬프트에 주고, 남은 일수가 적은데 '월초'라고 쓰면 거절 (#141, #146 판정의 '아직 월초')")
+        void period_remainingDaysAndEarlyMonthCheck() {
+            FeedbackContext lateMonth = contextBuilder()
+                    .feedbackType(FeedbackType.ALERT)
+                    .remainingDaysInMonth(5)
+                    .build();
+            FeedbackContext earlyMonth = contextBuilder()
+                    .feedbackType(FeedbackType.ALERT)
+                    .remainingDaysInMonth(25)
+                    .build();
+
+            assertThat(capturedUserPrompt(lateMonth)).contains("- 이번 달 남은 일수: 5일");
+            assertThat(renderer.verifyPeriod("아직 월초라 속도를 조절하면 돼요.", lateMonth)).isFalse();
+            assertThat(renderer.verifyPeriod("이번 달 초반이라 여유가 있어요.", lateMonth)).isFalse();
+            assertThat(renderer.verifyPeriod("월말에 50만 원 넘을 것 같아요.", lateMonth)).isTrue();
+            assertThat(renderer.verifyPeriod("아직 월초라 속도를 조절하면 돼요.", earlyMonth)).isTrue();
+        }
+
+        @Test
+        @DisplayName("월 마지막 날(남은 일수 0)도 정상 입력 — 프롬프트에 주고 '월초'는 거절, 남은 일수를 모르면(음수) 검사하지 않는다 (CodeRabbit)")
+        void period_lastDayOfMonth() {
+            FeedbackContext lastDay = contextBuilder()
+                    .feedbackType(FeedbackType.ALERT)
+                    .remainingDaysInMonth(0)
+                    .build();
+            FeedbackContext unknown = contextBuilder()
+                    .feedbackType(FeedbackType.ALERT)
+                    .remainingDaysInMonth(-1)
+                    .build();
+
+            assertThat(capturedUserPrompt(lastDay)).contains("- 이번 달 남은 일수: 0일");
+            assertThat(renderer.verifyPeriod("아직 월초라 속도를 조절하면 돼요.", lastDay)).isFalse();
+            assertThat(renderer.verifyPeriod("아직 월초라 속도를 조절하면 돼요.", unknown)).isTrue();
+        }
+
+        @Test
+        @DisplayName("만족 톤: 초과 카테고리의 만족한 지출은 유지해도 괜찮다고 존중하되 줄인다면 횟수부터 (#141)")
+        void tone_satisfiedKeepsChoice() {
+            assertThat(capturedSystemPrompt(
+                            contextBuilder().feedbackType(FeedbackType.ALERT).build()))
+                    .contains("만족한 지출이라면 유지해도 괜찮지만, 줄인다면 횟수부터");
+        }
+
+        @Test
+        @DisplayName("월말 결산도 예산 없는 카테고리는 평소 대비로 표기 (#141)")
+        void monthEnd_vsUsualWording() {
+            LlmClient client = mock(LlmClient.class);
+            when(llmProvider.getIfAvailable()).thenReturn(client);
+            when(client.complete(anyString(), anyString())).thenReturn("이번 달 결산이에요.");
+            renderer.renderMonthEnd(new FeedbackRenderer.MonthEndContext(
+                    java.time.YearMonth.of(2026, 8),
+                    2_000_000,
+                    1_800_000,
+                    -200_000,
+                    List.of(new FeedbackRenderer.CategoryResult("기타", 150_000, true)),
+                    List.of(new FeedbackRenderer.CategoryResult("식대", 40_000))));
+            var captor = org.mockito.ArgumentCaptor.forClass(String.class);
+            verify(client).complete(anyString(), captor.capture());
+
+            assertThat(captor.getValue())
+                    .contains("- 기타: 평소(직전 3개월 월평균)보다 +150,000원")
+                    .contains("- 식대: -40,000원");
+        }
+
         private String capturedSystemPrompt(FeedbackContext ctx) {
             LlmClient client = mock(LlmClient.class);
             when(llmProvider.getIfAvailable()).thenReturn(client);
