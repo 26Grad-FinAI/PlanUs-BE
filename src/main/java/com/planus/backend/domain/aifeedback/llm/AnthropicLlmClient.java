@@ -26,19 +26,34 @@ public class AnthropicLlmClient implements LlmClient {
 
     private static final Logger log = LoggerFactory.getLogger(AnthropicLlmClient.class);
     private static final Duration CONNECT_TIMEOUT = Duration.ofSeconds(5);
-    private static final Duration READ_TIMEOUT = Duration.ofSeconds(30);
 
-    private final RestClient client;
+    private RestClient client;
+    private LlmCallGuard guard;
 
-    {
-        JdkClientHttpRequestFactory factory = new JdkClientHttpRequestFactory(
-                HttpClient.newBuilder().connectTimeout(CONNECT_TIMEOUT).build());
-        factory.setReadTimeout(READ_TIMEOUT);
-        client = RestClient.builder()
-                .baseUrl("https://api.anthropic.com")
-                .requestFactory(factory)
-                .build();
-    }
+    @Value("${planus.ai.llm.base-url:https://api.anthropic.com}")
+    private String baseUrl;
+
+    /** 응답 한 번을 기다리는 읽기 타임아웃. */
+    @Value("${planus.ai.llm.read-timeout-seconds:30}")
+    private long readTimeoutSeconds;
+
+    /** 호출 하나(재시도 포함)의 전체 시간 상한. 읽기 타임아웃이 걸리지 않는 정지까지 잡는다 (#124). */
+    @Value("${planus.ai.llm.total-timeout-seconds:60}")
+    private long totalTimeoutSeconds;
+
+    /** 일시 장애(429·529·5xx·연결 실패) 재시도 횟수. 0이면 재시도하지 않는다. */
+    @Value("${planus.ai.llm.max-retries:2}")
+    private int maxRetries;
+
+    @Value("${planus.ai.llm.retry-backoff-millis:1000}")
+    private long retryBackoffMillis;
+
+    /** 연속 실패가 이 횟수에 이르면 서킷을 연다. 영구 장애(크레딧·키 오류)는 1회로 바로 연다. */
+    @Value("${planus.ai.llm.circuit-open-after:5}")
+    private int circuitOpenAfter;
+
+    @Value("${planus.ai.llm.circuit-open-seconds:300}")
+    private long circuitOpenSeconds;
 
     @Value("${planus.ai.llm.api-key:}")
     private String apiKey;
@@ -51,6 +66,16 @@ public class AnthropicLlmClient implements LlmClient {
 
     @PostConstruct
     void init() {
+        JdkClientHttpRequestFactory factory = new JdkClientHttpRequestFactory(
+                HttpClient.newBuilder().connectTimeout(CONNECT_TIMEOUT).build());
+        factory.setReadTimeout(Duration.ofSeconds(readTimeoutSeconds));
+        client = RestClient.builder().baseUrl(baseUrl).requestFactory(factory).build();
+        guard = new LlmCallGuard(new LlmCallGuard.Settings(
+                maxRetries,
+                Duration.ofMillis(retryBackoffMillis),
+                Duration.ofSeconds(totalTimeoutSeconds),
+                circuitOpenAfter,
+                Duration.ofSeconds(circuitOpenSeconds)));
         if (apiKey == null || apiKey.isBlank()) {
             String envKey = System.getenv("ANTHROPIC_API_KEY");
             if (envKey != null && !envKey.isBlank()) {
@@ -62,6 +87,12 @@ public class AnthropicLlmClient implements LlmClient {
         } else {
             log.info("AnthropicLlmClient 초기화 완료 (모델: {})", model);
         }
+    }
+
+    /** 마지막 조회 이후의 호출 통계(성공·원인별 실패·평균 지연)를 가져가고 0으로 되돌린다. 배치 종료 로그용 (#124). */
+    @Override
+    public LlmCallGuard.Stats snapshotStats() {
+        return guard.snapshotAndReset();
     }
 
     /**
@@ -81,14 +112,15 @@ public class AnthropicLlmClient implements LlmClient {
                 "system", systemPrompt,
                 "messages", List.of(Map.of("role", "user", "content", userPrompt)));
         @SuppressWarnings("unchecked")
-        Map<String, Object> resp = client.post()
+        Map<String, Object> resp = guard.call(() -> client.post()
                 .uri("/v1/messages")
                 .header("x-api-key", apiKey)
                 .header("anthropic-version", "2023-06-01")
                 .contentType(MediaType.APPLICATION_JSON)
                 .body(body)
                 .retrieve()
-                .body(Map.class);
+                .body(Map.class));
+        if (resp == null) return "";
         @SuppressWarnings("unchecked")
         List<Map<String, Object>> content = (List<Map<String, Object>>) resp.get("content");
         if (content == null || content.isEmpty()) return "";

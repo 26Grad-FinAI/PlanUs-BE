@@ -10,4 +10,9 @@ public interface LlmClient {
      * @return 생성된 텍스트
      */
     String complete(String systemPrompt, String userPrompt);
+
+    /** 마지막 조회 이후의 호출 통계를 가져가고 0으로 되돌린다. 통계를 모으지 않는 구현은 빈 통계를 돌려준다. */
+    default LlmCallGuard.Stats snapshotStats() {
+        return new LlmCallGuard.Stats(0, 0, 0, 0, 0, 0);
+    }
 }
