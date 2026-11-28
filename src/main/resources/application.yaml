@@ -9,9 +9,10 @@ spring:
           model: claude-sonnet-4-5
           max-tokens: 800
     # ActionEnricher(Spring AI) 경로의 재시도 (#124). 기본값은 10회·최대 3분 대기라 배치를 오래 붙잡는다.
-    # 429·5xx만 재시도하고(on-client-errors 기본 false), 그 밖의 4xx(크레딧·키 오류)는 바로 실패해 기본 actions로 폴백한다.
+    # 429·5xx만 재시도하고(on-http-codes 429 + 5xx 기본, on-client-errors false), 그 밖의 4xx(크레딧·키 오류)는 바로 실패해 기본 actions로 폴백한다.
     retry:
       max-attempts: 3
+      on-http-codes: 429 # 기본값은 429도 재시도하지 않는다. 400·401은 on-client-errors=false로 즉시 실패
       backoff:
         initial-interval: 1s
         multiplier: 2

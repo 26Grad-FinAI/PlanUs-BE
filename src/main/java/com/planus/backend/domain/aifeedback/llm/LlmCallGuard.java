@@ -131,7 +131,7 @@ public class LlmCallGuard {
 
     public <T> T call(Callable<T> action) {
         long start = nowMillis.getAsLong();
-        gate(start);
+        boolean probe = gate(start);
         long deadline = start + settings.totalTimeout().toMillis();
         Throwable last = null;
         for (int attempt = 0; attempt <= settings.maxRetries(); attempt++) {
@@ -149,7 +149,7 @@ public class LlmCallGuard {
             } catch (TimeoutException e) {
                 future.cancel(true);
                 record(Kind.TIMEOUT, callStart, false);
-                tripIfNeeded(Kind.TIMEOUT);
+                tripIfNeeded(Kind.TIMEOUT, probe);
                 throw new LlmUnavailableException(Kind.TIMEOUT, "LLM 호출 전체 시간 초과", e);
             } catch (InterruptedException e) {
                 future.cancel(true);
@@ -161,7 +161,7 @@ public class LlmCallGuard {
                 record(kind, callStart, false);
                 last = cause;
                 if (kind == Kind.PERMANENT) {
-                    tripIfNeeded(kind);
+                    tripIfNeeded(kind, probe);
                     throw new LlmUnavailableException(kind, "LLM 영구 장애: " + cause.getMessage(), cause);
                 }
                 if (attempt < settings.maxRetries()) {
@@ -177,15 +177,15 @@ public class LlmCallGuard {
                 }
             }
         }
-        tripIfNeeded(Kind.TRANSIENT);
+        tripIfNeeded(Kind.TRANSIENT, probe);
         throw new LlmUnavailableException(
                 Kind.TRANSIENT, "LLM 호출 실패" + (last != null ? ": " + last.getMessage() : ""), last);
     }
 
     /** 서킷이 열려 있으면 호출 없이 거절한다. 쿨다운이 지나면 호출 하나만 통과시킨다. */
-    private void gate(long now) {
+    private boolean gate(long now) {
         long until = openUntil.get();
-        if (until == 0) return;
+        if (until == 0) return false;
         if (now < until) {
             circuitSkipped.incrementAndGet();
             throw new LlmUnavailableException(Kind.CIRCUIT_OPEN, "LLM 서킷 열림 — 호출 생략", null);
@@ -197,18 +197,20 @@ public class LlmCallGuard {
             circuitSkipped.incrementAndGet();
             throw new LlmUnavailableException(Kind.CIRCUIT_OPEN, "LLM 서킷 시험 호출 진행 중 — 호출 생략", null);
         }
+        return true;
     }
 
-    private void tripIfNeeded(Kind kind) {
+    /** @param probe 반열림 시험 호출이면 실패 횟수와 무관하게 서킷을 다시 연다 */
+    private void tripIfNeeded(Kind kind, boolean probe) {
         int n = consecutiveFailures.incrementAndGet();
         if (settings.openDuration().isZero()) return; // 서킷 비활성(기준선 측정용)
         boolean permanent = kind == Kind.PERMANENT;
-        if (permanent || n >= settings.openAfterConsecutiveFailures()) {
+        if (permanent || probe || n >= settings.openAfterConsecutiveFailures()) {
             openUntil.set(nowMillis.getAsLong() + settings.openDuration().toMillis());
             probeInFlightUntil.set(0);
             log.error(
                     "LLM 서킷 열림 ({}) — {}초 동안 호출 없이 템플릿 사용",
-                    permanent ? "영구 장애" : "연속 실패 " + n + "회",
+                    permanent ? "영구 장애" : probe ? "시험 호출 실패" : "연속 실패 " + n + "회",
                     settings.openDuration().toSeconds());
         }
     }

@@ -180,6 +180,29 @@ class LlmCallGuardTest {
     }
 
     @Test
+    @DisplayName("시험 호출이 일시 장애로 실패해도 실패 횟수와 무관하게 서킷이 다시 열린다")
+    void halfOpen_transientProbeFailure_reopens() {
+        AtomicLong now = new AtomicLong(1_000);
+        LlmCallGuard guard = new LlmCallGuard(fast(1, 5), now::get);
+        assertThatThrownBy(() -> guard.call(() -> {
+                    throw status4xx(HttpStatus.UNAUTHORIZED);
+                }))
+                .isInstanceOf(LlmUnavailableException.class);
+
+        now.addAndGet(Duration.ofMinutes(5).toMillis() + 1);
+        assertThatThrownBy(() -> guard.call(() -> {
+                    throw status5xx(HttpStatus.INTERNAL_SERVER_ERROR);
+                }))
+                .isInstanceOfSatisfying(
+                        LlmUnavailableException.class, e -> assertThat(e.kind()).isEqualTo(Kind.TRANSIENT));
+
+        now.addAndGet(120_000); // 새 쿨다운(5분) 안이면 호출 없이 거절돼야 한다
+        assertThatThrownBy(() -> guard.call(() -> "x"))
+                .isInstanceOfSatisfying(
+                        LlmUnavailableException.class, e -> assertThat(e.kind()).isEqualTo(Kind.CIRCUIT_OPEN));
+    }
+
+    @Test
     @DisplayName("멈춘 호출은 전체 시간 상한에서 끊고 중단시킨다")
     void hang_isCutAtTotalTimeout() {
         LlmCallGuard guard =
