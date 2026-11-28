@@ -312,12 +312,12 @@ class ProductionPathValidationTest {
      *
      * <ul>
      *   <li>재계산 일치: 일요일 기준 {@code computeActionsAsOf}가 그 주 피드백에 저장된 액션과 같은가 (같은 계산이어야 한다)
-     *   <li>주 단위 저장의 어긋남: 같은 주를 월요일에 열었을 때 일요일 기준(저장분)과 카테고리·감축액이 얼마나 다른가
+     *   <li>주 단위 저장의 어긋남: 일요일에 저장한 뒤 1·3·6일 지나(같은 달 안) 열었을 때 저장분과 카테고리·감축액이 얼마나 다른가
      *   <li>방법·실현 가능성: 코드가 방법을 만들 수 있는 비율, 등급 분포, 방법의 횟수×건당 금액이 감축액과 맞는 정도
      * </ul>
      */
     @Test
-    @DisplayName("[측정] 절약 시뮬레이션 — 재계산 일치, 월요일·일요일 어긋남, 방법·실현 가능성 분포")
+    @DisplayName("[측정] 절약 시뮬레이션 — 재계산 일치, 저장 뒤 지난 날수별 어긋남, 방법·실현 가능성 분포")
     void simulationMeasure() throws Exception {
         Assumptions.assumeTrue(System.getenv("SIM_MEASURE") != null, "SIM_MEASURE 미설정 → 스킵");
 
@@ -335,8 +335,10 @@ class ProductionPathValidationTest {
         AiFeedbackService service = new Store(expenses, budgets).service((system, user) -> "이번 주 피드백이에요.");
         ObjectMapper mapper = new ObjectMapper();
 
-        int weeks = 0, parityOk = 0, mondayDiffers = 0, mondayCatDiffers = 0;
-        long mondayAbsDelta = 0, mondayCompared = 0;
+        int weeks = 0, parityOk = 0;
+        // 저장(일요일) 뒤 d일 지나 열었을 때 [액션이 다른 주, 카테고리 구성이 다른 주, 비교한 주, 겹치는 카테고리 수, 감축액 차이 합]
+        int[] laterDays = {1, 3, 6};
+        long[][] later = new long[laterDays.length][5];
         int cards = 0, withMethod = 0, arithmeticClose = 0, arithmeticChecked = 0;
         Map<String, Integer> levels = new java.util.TreeMap<>();
         for (int week = 5; ; week++) {
@@ -357,13 +359,19 @@ class ProductionPathValidationTest {
             Map<Integer, Long> sunday = reductions(service.computeActionsAsOf(USER_ID, weekEnd));
             if (sunday.equals(stored)) parityOk++;
 
-            Map<Integer, Long> monday = reductions(service.computeActionsAsOf(USER_ID, weekEnd.minusDays(6)));
-            if (!monday.equals(stored)) mondayDiffers++;
-            if (!monday.keySet().equals(stored.keySet())) mondayCatDiffers++;
-            for (var en : stored.entrySet()) {
-                if (monday.containsKey(en.getKey())) {
-                    mondayAbsDelta += Math.abs(monday.get(en.getKey()) - en.getValue());
-                    mondayCompared++;
+            for (int k = 0; k < laterDays.length; k++) {
+                LocalDate opened = weekEnd.plusDays(laterDays[k]);
+                // 같은 달 안이고 데이터가 있는 날만 비교한다 (달이 바뀌면 기준이 달라진다)
+                if (opened.isAfter(dataEnd) || opened.getMonth() != weekEnd.getMonth()) continue;
+                Map<Integer, Long> later1 = reductions(service.computeActionsAsOf(USER_ID, opened));
+                later[k][2]++;
+                if (!later1.equals(stored)) later[k][0]++;
+                if (!later1.keySet().equals(stored.keySet())) later[k][1]++;
+                for (var en : stored.entrySet()) {
+                    if (later1.containsKey(en.getKey())) {
+                        later[k][3]++;
+                        later[k][4] += Math.abs(later1.get(en.getKey()) - en.getValue());
+                    }
                 }
             }
 
@@ -420,13 +428,16 @@ class ProductionPathValidationTest {
 
         System.out.printf("%n=== 절약 시뮬레이션 측정 (ALERT·액션 있는 %d주) ===%n", weeks);
         System.out.printf("일요일 기준 재계산 = 저장된 액션: %d/%d주%n", parityOk, weeks);
-        System.out.printf(
-                "같은 주를 월요일에 열었다면(주 단위 저장 가정): 액션이 일요일과 다른 주 %d/%d, 카테고리 구성이 다른 주 %d/%d, 겹치는 카테고리 감축액 평균 차이 %,d원%n",
-                mondayDiffers,
-                weeks,
-                mondayCatDiffers,
-                weeks,
-                mondayCompared == 0 ? 0 : mondayAbsDelta / mondayCompared);
+        for (int k = 0; k < laterDays.length; k++) {
+            System.out.printf(
+                    "저장(일요일) %d일 뒤에 열었다면: 액션이 다른 주 %d/%d, 카테고리 구성이 다른 주 %d/%d, 겹치는 카테고리 감축액 평균 차이 %,d원%n",
+                    laterDays[k],
+                    later[k][0],
+                    later[k][2],
+                    later[k][1],
+                    later[k][2],
+                    later[k][3] == 0 ? 0 : later[k][4] / later[k][3]);
+        }
         System.out.printf("방법 생성: %d/%d 카드, 실현 가능성 등급 분포 %s%n", withMethod, cards, levels);
         System.out.printf("빈도 방식 방법의 (덜 쓸 횟수 × 건당 평균)이 감축액과 ±50%% 이내: %d/%d%n", arithmeticClose, arithmeticChecked);
         assertThat(weeks).isGreaterThan(0);

@@ -236,6 +236,7 @@ class SavingsSimulationServiceTest {
 
                 assertThat(result.actions()).hasSize(2);
                 assertThat(result.actions()).allMatch(a -> "FEEDBACK".equals(a.source()));
+                assertThat(result.actions().get(0).feedbackReductionWon()).isEqualTo(40_000L);
                 assertThat(result.comparison()).isNull();
             }
 
@@ -929,6 +930,25 @@ class SavingsSimulationServiceTest {
                         .satisfies(ex -> assertThat(((GeneralException) ex).getErrorCode())
                                 .isEqualTo(GeneralErrorCode.FEEDBACK_NOT_FOUND));
                 verifyNoInteractions(budgetRepo, budgetCatRepo, simulationRepo);
+            }
+
+            @Test
+            @DisplayName("사용자가 확인한 감축액과 현재 계산이 다르면 예산을 바꾸지 않고 재확인을 요구한다 (#127)")
+            void confirmedAmountMismatch_rejected() throws Exception {
+                UserAccount user = userWithGoal(3_000_000, 0, 500_000);
+                when(userRepo.findById(1L)).thenReturn(Optional.of(user));
+                when(feedbackRepo.findById(1L))
+                        .thenReturn(Optional.of(feedbackWith(buildPayloadWithEnrichedActions())));
+
+                // 식대(7) 감축 제안은 40,000원인데 사용자는 50,000원으로 알고 있다
+                ApplyRequest request = new ApplyRequest("2026-11", 1L, List.of(7), 50_000L);
+
+                assertThatThrownBy(() -> service.apply(1L, request))
+                        .isInstanceOf(GeneralException.class)
+                        .satisfies(ex -> assertThat(((GeneralException) ex).getErrorCode())
+                                .isEqualTo(GeneralErrorCode.SIMULATION_REDUCTION_CHANGED));
+                verifyNoInteractions(budgetRepo, budgetCatRepo);
+                verify(simulationRepo, never()).save(any());
             }
 
             @Test

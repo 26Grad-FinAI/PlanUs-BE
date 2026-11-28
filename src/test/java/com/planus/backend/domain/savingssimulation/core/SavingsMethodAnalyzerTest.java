@@ -67,6 +67,16 @@ class SavingsMethodAnalyzerTest {
     }
 
     @Test
+    @DisplayName("감축액을 채우도록 덜 쓸 횟수는 올림한다 — 49,000원 ÷ 건당 20,000원은 3번")
+    void method_cutRoundedUp() {
+        Plan p = SavingsMethodAnalyzer.analyze(
+                input("FREQUENCY", 49_000, thisMonth(5, 20_000, null), List.of(), 200_000));
+
+        assertThat(p.cutCount()).isEqualTo(3);
+        assertThat(p.cutCount() * 20_000).isGreaterThanOrEqualTo(49_000);
+    }
+
+    @Test
     @DisplayName("덜 쓸 횟수는 예상 횟수를 넘지 않는다")
     void method_cutCappedAtExpected() {
         Plan p = SavingsMethodAnalyzer.analyze(

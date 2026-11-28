@@ -228,6 +228,18 @@ public class SavingsSimulationService {
                     throw new GeneralException(GeneralErrorCode.ALREADY_APPLIED);
                 });
 
+        // 사용자가 본 금액과 지금 계산한 금액이 다르면 예산을 바꾸지 않고 재확인을 요구한다 (재계산은 거래가 바뀌거나 실패하면 달라질 수 있다)
+        if (request.confirmedReductionWon() != null) {
+            long current = 0;
+            for (int catId : request.selectedCategoryIds().stream().distinct().toList()) {
+                EnrichedAction action = actionMap.get(catId);
+                if (action == null) throw new GeneralException(GeneralErrorCode.INVALID_CATEGORY_SELECTION);
+                current += action.reductionWon();
+            }
+            if (current != request.confirmedReductionWon())
+                throw new GeneralException(GeneralErrorCode.SIMULATION_REDUCTION_CHANGED);
+        }
+
         LocalDate monthStart = parseYearMonth(request.yearMonth());
         Budget budget = budgetRepo
                 .findByUserIdAndYearMonth(userId, monthStart)
@@ -326,18 +338,20 @@ public class SavingsSimulationService {
      */
     private CurrentActions currentActions(Long userId, AiFeedback feedback, String yearMonth) {
         List<EnrichedAction> saved = parseEnrichedActions(feedback, yearMonth);
+        Map<Integer, Long> savedReductions = new HashMap<>();
+        saved.forEach(a -> savedReductions.put(a.categoryId(), a.reductionWon()));
         LocalDate today = LocalDate.now(clock);
         if (!YearMonth.from(today).equals(YearMonth.parse(yearMonth, YM_FORMATTER))) {
-            return new CurrentActions(saved, null, null);
+            return new CurrentActions(saved, savedReductions, null);
         }
         AiFeedbackService.SavingsActionsAsOf now;
         try {
             now = feedbackService.computeActionsAsOf(userId, today);
         } catch (Exception e) {
             log.warn("절약 액션 재계산 실패 — 피드백 저장분 사용: userId={}", userId, e);
-            return new CurrentActions(saved, null, null);
+            return new CurrentActions(saved, savedReductions, null);
         }
-        if (now == null) return new CurrentActions(saved, null, null);
+        if (now == null) return new CurrentActions(saved, savedReductions, null);
 
         Map<Integer, EnrichedAction> savedByCat =
                 saved.stream().collect(Collectors.toMap(EnrichedAction::categoryId, a -> a, (a, b) -> a));
@@ -355,9 +369,7 @@ public class SavingsSimulationService {
                     old != null ? old.contextInsight() : null,
                     old != null ? old.behaviorFeasibility() : plan.feasibilityScore()));
         }
-        Map<Integer, Long> feedbackReductions = new HashMap<>();
-        saved.forEach(a -> feedbackReductions.put(a.categoryId(), a.reductionWon()));
-        return new CurrentActions(actions, feedbackReductions, comparisonLine(feedback, now.savingsGapWon()));
+        return new CurrentActions(actions, savedReductions, comparisonLine(feedback, now.savingsGapWon()));
     }
 
     /** "11/9 피드백 이후 저축 목표까지 부족액 29만 원 → 33만 원". 피드백에 부족액이 저장돼 있지 않으면 null. */

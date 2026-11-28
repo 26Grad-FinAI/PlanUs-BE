@@ -104,7 +104,8 @@ public final class SavingsMethodAnalyzer {
                         0);
             }
         }
-        int cut = (int) Math.min(expected, Math.max(1, Math.round((double) in.reductionWon() / avg)));
+        // 감축액을 채우려면 올림이 필요하다 (49,000원 ÷ 건당 20,000원 = 3번 — 2번이면 9,000원 모자란다). 예상 횟수를 넘길 수는 없다
+        int cut = (int) Math.min(expected, Math.max(1, Math.ceil((double) in.reductionWon() / avg)));
         return new Method(
                 String.format("남은 %d일간 %d번 덜 쓰기 (예상 %d번 → %d번)", remainingDays, cut, expected, expected - cut),
                 expected,
