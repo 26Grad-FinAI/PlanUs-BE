@@ -93,6 +93,11 @@ class FeedbackReactionConcurrencyIntegrationTest {
         ready.await();
         go.countDown();
         for (Thread t : ts) t.join(20_000);
+        // join은 시간이 지나면 스레드가 살아 있어도 반환한다 — 멈춘 요청이 있으면 중단시킨 뒤 실패로 알린다
+        List<Thread> stuck = ts.stream().filter(Thread::isAlive).toList();
+        stuck.forEach(Thread::interrupt);
+        for (Thread t : stuck) t.join(5_000);
+        assertThat(stuck).as("20초 안에 끝나지 않은 요청이 없어야 한다").isEmpty();
         assertThat(errors).as("동시 요청 모두 오류 없이 끝나야 한다").isEmpty();
     }
 
