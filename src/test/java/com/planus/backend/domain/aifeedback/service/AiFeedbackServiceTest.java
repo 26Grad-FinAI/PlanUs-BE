@@ -295,6 +295,57 @@ class AiFeedbackServiceTest {
         verify(savingsCalculator).calculate(any(), anyLong(), anyInt(), anyInt(), any(), any(), any(), any(), any());
     }
 
+    @Test
+    @DisplayName("ALERT 피드백 payload에 저축 목표까지 부족액이 남는다 (#127)")
+    void generateWeekly_alert_payloadHasSavingsGap() {
+        stubCommon();
+        stubNormalActivity();
+        stubProjection(1_800_000, -300_000);
+        when(feedbackTypeResolver.resolve(eq(false), eq(-300_000L), eq(false), anyBoolean()))
+                .thenReturn(FeedbackType.ALERT);
+        when(causeAssembler.assemble(anyInt(), any(), any(), any(), any()))
+                .thenReturn(new CauseSignals(null, null, 0, 0, Map.of(), Map.of(), null, List.of(), false));
+        when(savingsCalculator.calculate(any(), anyLong(), anyInt(), anyInt(), any(), any(), any(), any(), any()))
+                .thenReturn(List.of(new ActionPlan(1, 50_000, "FREQUENCY", 0.8)));
+        when(renderer.render(any())).thenReturn(new Rendered("절약이 필요해요.", Confidence.HIGH));
+
+        Optional<AiFeedback> result = service.generateWeekly(USER_ID, WEEK_END);
+
+        assertThat(result.get().getPayload()).contains("\"savingsGapWon\":300000");
+    }
+
+    @Test
+    @DisplayName("그날 기준 절약 액션 재계산: 같은 계산기로 액션과 부족액을 돌려주고, LLM·저장은 하지 않는다 (#127)")
+    void computeActionsAsOf_returnsActionsAndGap() {
+        stubCommon();
+        stubNormalActivity();
+        stubProjection(1_800_000, -300_000);
+        when(causeAssembler.assemble(anyInt(), any(), any(), any(), any()))
+                .thenReturn(new CauseSignals(null, null, 0, 0, Map.of(), Map.of(), null, List.of(), false));
+        when(savingsCalculator.calculate(any(), anyLong(), anyInt(), anyInt(), any(), any(), any(), any(), any()))
+                .thenReturn(List.of(new ActionPlan(1, 50_000, "FREQUENCY", 0.8)));
+
+        AiFeedbackService.SavingsActionsAsOf r = service.computeActionsAsOf(USER_ID, WEEK_END);
+
+        assertThat(r.savingsGapWon()).isEqualTo(300_000);
+        assertThat(r.actions()).extracting(ActionPlan::categoryId).containsExactly(1);
+        verify(renderer, org.mockito.Mockito.never()).render(any());
+        verify(feedbackRepo, org.mockito.Mockito.never()).save(any());
+    }
+
+    @Test
+    @DisplayName("그날 기준 재계산: 월말 예측이 가용예산 안이면 액션 없이 부족액 0")
+    void computeActionsAsOf_noGap_noActions() {
+        stubCommon();
+        stubNormalActivity();
+        stubProjection(1_800_000, 100_000);
+
+        AiFeedbackService.SavingsActionsAsOf r = service.computeActionsAsOf(USER_ID, WEEK_END);
+
+        assertThat(r.actions()).isEmpty();
+        assertThat(r.savingsGapWon()).isZero();
+    }
+
     /** 기타(예산 0원)가 있는 ALERT 주를 만들고 렌더러에 넘어간 초과 카테고리를 돌려준다. */
     private List<com.planus.backend.domain.aifeedback.llm.FeedbackRenderer.CategoryOverspend> etcOverspend(
             long julyEtc, boolean withHistory) {

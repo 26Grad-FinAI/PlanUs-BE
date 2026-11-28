@@ -3,16 +3,21 @@ package com.planus.backend.domain.savingssimulation.service;
 import com.fasterxml.jackson.core.type.TypeReference;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.planus.backend.domain.aifeedback.ai.EnrichedAction;
+import com.planus.backend.domain.aifeedback.config.AiFeedbackProperties;
 import com.planus.backend.domain.aifeedback.core.BudgetProjector;
 import com.planus.backend.domain.aifeedback.core.Categories;
 import com.planus.backend.domain.aifeedback.entity.AiFeedback;
 import com.planus.backend.domain.aifeedback.entity.Budget;
 import com.planus.backend.domain.aifeedback.entity.BudgetCategory;
 import com.planus.backend.domain.aifeedback.entity.Expense;
+import com.planus.backend.domain.aifeedback.entity.UserReaction;
 import com.planus.backend.domain.aifeedback.repository.AiFeedbackRepository;
 import com.planus.backend.domain.aifeedback.repository.BudgetCategoryRepository;
 import com.planus.backend.domain.aifeedback.repository.BudgetRepository;
 import com.planus.backend.domain.aifeedback.repository.ExpenseRepository;
+import com.planus.backend.domain.aifeedback.repository.UserReactionRepository;
+import com.planus.backend.domain.aifeedback.service.AiFeedbackService;
+import com.planus.backend.domain.savingssimulation.core.SavingsMethodAnalyzer;
 import com.planus.backend.domain.savingssimulation.dto.*;
 import com.planus.backend.domain.savingssimulation.dto.SimulateResponse.DisplayType;
 import com.planus.backend.domain.savingssimulation.entity.SavingSimulation;
@@ -24,6 +29,7 @@ import com.planus.backend.global.apiPayload.code.GeneralErrorCode;
 import com.planus.backend.global.apiPayload.exception.GeneralException;
 import java.time.Clock;
 import java.time.LocalDate;
+import java.time.LocalDateTime;
 import java.time.LocalTime;
 import java.time.YearMonth;
 import java.time.format.DateTimeFormatter;
@@ -55,6 +61,9 @@ public class SavingsSimulationService {
     private final ExpenseRepository expenseRepo;
     private final UserAccountRepository userRepo;
     private final SavingSimulationRepository simulationRepo;
+    private final UserReactionRepository reactionRepo;
+    private final AiFeedbackProperties props;
+    private final AiFeedbackService feedbackService;
     private final ObjectMapper objectMapper;
     private final Clock clock;
 
@@ -67,14 +76,16 @@ public class SavingsSimulationService {
      */
     public SuggestResponse suggest(Long userId, String yearMonth) {
         AiFeedback feedback = loadFeedback(userId, yearMonth);
-        List<EnrichedAction> enriched = parseEnrichedActions(feedback, yearMonth);
         LocalDate monthStart = parseYearMonth(yearMonth);
+        CurrentActions current = currentActions(userId, feedback, yearMonth);
+        List<EnrichedAction> enriched = current.actions();
 
+        Set<Integer> rejected = rejectedCategories(userId);
         List<SuggestResponse.ActionCard> cards = enriched.stream()
                 .filter(a -> a.reductionWon() >= MIN_REDUCTION_WON)
                 .sorted(Comparator.comparingDouble(EnrichedAction::feasibilityScore)
                         .reversed())
-                .map(a -> toCard(userId, monthStart, a))
+                .map(a -> toCard(userId, monthStart, a, rejected, current))
                 .toList();
 
         long totalReduction = cards.stream()
@@ -84,7 +95,14 @@ public class SavingsSimulationService {
                 .mapToLong(SuggestResponse.ActionCard::monthlySavingWon)
                 .sum();
         boolean applied = simulationRepo.existsByUserIdAndFeedbackIdAndIsAppliedTrue(userId, feedback.getId());
-        return new SuggestResponse(feedback.getId(), applied, cards, totalReduction, totalMonthly, totalMonthly * 12);
+        return new SuggestResponse(
+                feedback.getId(),
+                applied,
+                cards,
+                totalReduction,
+                totalMonthly,
+                totalMonthly * 12,
+                current.comparison());
     }
 
     /**
@@ -99,18 +117,19 @@ public class SavingsSimulationService {
                 userRepo.findById(userId).orElseThrow(() -> new GeneralException(GeneralErrorCode.NOT_FOUND));
 
         AiFeedback feedback = loadRequestedFeedback(userId, request.feedbackId(), request.yearMonth());
-        List<EnrichedAction> enriched = parseEnrichedActions(feedback, request.yearMonth());
+        CurrentActions current = currentActions(userId, feedback, request.yearMonth());
         Map<Integer, EnrichedAction> actionMap =
-                enriched.stream().collect(Collectors.toMap(EnrichedAction::categoryId, a -> a, (a, b) -> a));
+                current.actions().stream().collect(Collectors.toMap(EnrichedAction::categoryId, a -> a, (a, b) -> a));
 
         // 선택된 카테고리 검증 (중복 제거)
         List<SuggestResponse.ActionCard> selectedCards = new ArrayList<>();
+        Set<Integer> rejected = rejectedCategories(userId);
         for (int catId : request.selectedCategoryIds().stream().distinct().toList()) {
             EnrichedAction action = actionMap.get(catId);
             if (action == null) {
                 throw new GeneralException(GeneralErrorCode.INVALID_CATEGORY_SELECTION);
             }
-            selectedCards.add(toCard(userId, parseYearMonth(request.yearMonth()), action));
+            selectedCards.add(toCard(userId, parseYearMonth(request.yearMonth()), action, rejected, current));
         }
 
         long reductionTotal = selectedCards.stream()
@@ -198,9 +217,9 @@ public class SavingsSimulationService {
                 userRepo.findById(userId).orElseThrow(() -> new GeneralException(GeneralErrorCode.NOT_FOUND));
 
         AiFeedback feedback = loadRequestedFeedback(userId, request.feedbackId(), request.yearMonth());
-        List<EnrichedAction> enriched = parseEnrichedActions(feedback, request.yearMonth());
         Map<Integer, EnrichedAction> actionMap =
-                enriched.stream().collect(Collectors.toMap(EnrichedAction::categoryId, a -> a, (a, b) -> a));
+                currentActions(userId, feedback, request.yearMonth()).actions().stream()
+                        .collect(Collectors.toMap(EnrichedAction::categoryId, a -> a, (a, b) -> a));
 
         // 멱등성 검사: 동일 피드백에 대해 이미 적용되었는지 확인
         simulationRepo
@@ -208,6 +227,18 @@ public class SavingsSimulationService {
                 .ifPresent(existing -> {
                     throw new GeneralException(GeneralErrorCode.ALREADY_APPLIED);
                 });
+
+        // 사용자가 본 금액과 지금 계산한 금액이 다르면 예산을 바꾸지 않고 재확인을 요구한다 (재계산은 거래가 바뀌거나 실패하면 달라질 수 있다)
+        if (request.confirmedReductionWon() != null) {
+            long current = 0;
+            for (int catId : request.selectedCategoryIds().stream().distinct().toList()) {
+                EnrichedAction action = actionMap.get(catId);
+                if (action == null) throw new GeneralException(GeneralErrorCode.INVALID_CATEGORY_SELECTION);
+                current += action.reductionWon();
+            }
+            if (current != request.confirmedReductionWon())
+                throw new GeneralException(GeneralErrorCode.SIMULATION_REDUCTION_CHANGED);
+        }
 
         LocalDate monthStart = parseYearMonth(request.yearMonth());
         Budget budget = budgetRepo
@@ -280,8 +311,112 @@ public class SavingsSimulationService {
     /** 월 절약액 기준: 직전 몇 개월의 카테고리 월평균 변동지출. */
     private static final int HABIT_BASE_MONTHS = 3;
 
-    private SuggestResponse.ActionCard toCard(Long userId, LocalDate monthStart, EnrichedAction a) {
-        long monthly = monthlySaving(userId, monthStart, a.categoryId(), a.reductionWon());
+    /**
+     * 시뮬레이션에서 보여줄 절약 액션과 피드백과의 비교 (#127).
+     *
+     * @param actions            보여줄 액션. 진행 중인 달이면 오늘 기준으로 다시 계산한 것, 아니면 피드백에 저장된 것
+     * @param feedbackReductions 피드백 시점의 카테고리별 감축 제안액. 비교할 수 없으면 null
+     * @param comparison         피드백 이후 변화 한 줄. 비교할 수 없으면 null
+     */
+    private record CurrentActions(
+            List<EnrichedAction> actions, Map<Integer, Long> feedbackReductions, String comparison) {
+        String sourceOf(int categoryId) {
+            return feedbackReductions == null || feedbackReductions.containsKey(categoryId) ? "FEEDBACK" : "NEW";
+        }
+
+        Long feedbackReductionOf(int categoryId) {
+            return feedbackReductions == null ? null : feedbackReductions.get(categoryId);
+        }
+    }
+
+    /**
+     * 오늘 기준 절약 액션. 피드백은 주 단위로 저장돼 일요일에는 6일 전 기준(남은 일수·지출·초과 카테고리)이 되므로, 진행 중인 달은 피드백 분석을
+     * 오늘 날짜로 다시 계산한다. 요청마다 LLM을 호출하지 않는다 — 문구는 피드백에 저장된 것을 같은 카테고리에 이어 쓰고, 새로 생긴 카테고리는 문구 없이
+     * 코드로 계산한 방법·실현 가능성만 보여준다.
+     *
+     * <p>이번 달이 아니거나 다시 계산할 수 없으면 피드백에 저장된 액션을 그대로 쓴다.
+     */
+    private CurrentActions currentActions(Long userId, AiFeedback feedback, String yearMonth) {
+        List<EnrichedAction> saved = parseEnrichedActions(feedback, yearMonth);
+        Map<Integer, Long> savedReductions = new HashMap<>();
+        saved.forEach(a -> savedReductions.put(a.categoryId(), a.reductionWon()));
+        LocalDate today = LocalDate.now(clock);
+        if (!YearMonth.from(today).equals(YearMonth.parse(yearMonth, YM_FORMATTER))) {
+            return new CurrentActions(saved, savedReductions, null);
+        }
+        AiFeedbackService.SavingsActionsAsOf now;
+        try {
+            now = feedbackService.computeActionsAsOf(userId, today);
+        } catch (Exception e) {
+            log.warn("절약 액션 재계산 실패 — 피드백 저장분 사용: userId={}", userId, e);
+            return new CurrentActions(saved, savedReductions, null);
+        }
+        if (now == null) return new CurrentActions(saved, savedReductions, null);
+
+        Map<Integer, EnrichedAction> savedByCat =
+                saved.stream().collect(Collectors.toMap(EnrichedAction::categoryId, a -> a, (a, b) -> a));
+        List<EnrichedAction> actions = new ArrayList<>();
+        for (var plan : now.actions()) {
+            EnrichedAction old = savedByCat.get(plan.categoryId());
+            actions.add(new EnrichedAction(
+                    plan.categoryId(),
+                    plan.reductionWon(),
+                    plan.dominantFactor(),
+                    plan.feasibilityScore(),
+                    old != null ? old.actionType() : null,
+                    old != null ? old.currentBehavior() : null,
+                    old != null ? old.targetBehavior() : null,
+                    old != null ? old.contextInsight() : null,
+                    old != null ? old.behaviorFeasibility() : plan.feasibilityScore()));
+        }
+        return new CurrentActions(actions, savedReductions, comparisonLine(feedback, now.savingsGapWon()));
+    }
+
+    /** "11/9 피드백 이후 저축 목표까지 부족액 29만 원 → 33만 원". 피드백에 부족액이 저장돼 있지 않으면 null. */
+    private String comparisonLine(AiFeedback feedback, long nowGap) {
+        try {
+            Map<String, Object> payload = objectMapper.readValue(feedback.getPayload(), new TypeReference<>() {});
+            if (!(payload.get("savingsGapWon") instanceof Number n)) return null;
+            long then = n.longValue();
+            LocalDate d = feedback.getPeriodEnd();
+            String when = d == null ? "" : d.getMonthValue() + "/" + d.getDayOfMonth() + " ";
+            if (then == nowGap) return when + "피드백 이후 저축 목표까지 부족액이 그대로 " + won(nowGap) + "이에요";
+            return String.format("%s피드백 이후 저축 목표까지 부족액 %s → %s", when, won(then), won(nowGap));
+        } catch (Exception e) {
+            return null;
+        }
+    }
+
+    /** 만 원 단위로 읽기 쉽게. */
+    private static String won(long w) {
+        if (w == 0) return "0원";
+        return w >= 10_000 ? String.format("%,d만 원", Math.round(w / 10_000.0)) : String.format("%,d원", w);
+    }
+
+    /** 지금 효력 있는, 줄이고 싶지 않다고 한 카테고리 (#141 만료 기준과 같다). */
+    private Set<Integer> rejectedCategories(Long userId) {
+        LocalDateTime now = LocalDateTime.now(clock);
+        return reactionRepo.findByUserId(userId).stream()
+                .filter(r -> r.getRejectionReason() != null
+                        && r.getCategoryId() != null
+                        && r.isActiveAt(now, props.getRejectionExpiryMonths()))
+                .map(UserReaction::getCategoryId)
+                .collect(Collectors.toSet());
+    }
+
+    private SuggestResponse.ActionCard toCard(
+            Long userId, LocalDate monthStart, EnrichedAction a, Set<Integer> rejected, CurrentActions current) {
+        CategoryData data = loadCategoryData(userId, monthStart, a.categoryId());
+        long monthly = monthlySaving(data, a.reductionWon());
+        SavingsMethodAnalyzer.Plan plan = SavingsMethodAnalyzer.analyze(new SavingsMethodAnalyzer.Input(
+                a.categoryId(),
+                a.dominantFactor(),
+                a.reductionWon(),
+                data.upTo(),
+                data.thisMonth(),
+                data.past(),
+                data.remaining(),
+                rejected.contains(a.categoryId())));
         return new SuggestResponse.ActionCard(
                 a.categoryId(),
                 Categories.name(a.categoryId()),
@@ -292,7 +427,51 @@ public class SavingsSimulationService {
                 a.contextInsight(),
                 a.feasibilityScore(),
                 monthly,
-                monthly * 12);
+                monthly * 12,
+                plan.method(),
+                plan.level().name(),
+                plan.reasons(),
+                current.sourceOf(a.categoryId()),
+                current.feedbackReductionOf(a.categoryId()));
+    }
+
+    /** 카테고리 하나의 이번 달·직전 3개월 변동 지출과 남은 기간 예상 지출. */
+    private record CategoryData(
+            LocalDate upTo,
+            List<Expense> thisMonth,
+            List<Expense> past,
+            long mtd,
+            long remaining,
+            YearMonth ym,
+            Map<YearMonth, Long> byMonth) {}
+
+    private CategoryData loadCategoryData(Long userId, LocalDate monthStart, int categoryId) {
+        YearMonth ym = YearMonth.from(monthStart);
+        LocalDate today = LocalDate.now(clock);
+        LocalDate baseStart = monthStart.minusMonths(HABIT_BASE_MONTHS);
+        LocalDate upTo = today.isBefore(ym.atEndOfMonth()) ? today : ym.atEndOfMonth();
+        List<Expense> all = expenseRepo
+                .findByUserIdAndCategoryIdAndExpenseDateBetween(
+                        userId, categoryId, baseStart.atStartOfDay(), upTo.atTime(LocalTime.MAX))
+                .stream()
+                .filter(Expense::isVariable)
+                .toList();
+        List<Expense> thisMonth =
+                all.stream().filter(e -> !e.getDate().isBefore(monthStart)).toList();
+        List<Expense> past =
+                all.stream().filter(e -> e.getDate().isBefore(monthStart)).toList();
+
+        Map<YearMonth, Long> byMonth = new HashMap<>();
+        for (Expense e : all) byMonth.merge(YearMonth.from(e.getDate()), e.getAmount(), Long::sum);
+        long mtd = byMonth.getOrDefault(ym, 0L);
+        long remaining = 0;
+        if (YearMonth.from(today).equals(ym)) {
+            long prev = byMonth.getOrDefault(ym.minusMonths(1), 0L);
+            double priorRate = prev > 0 ? (double) prev / ym.minusMonths(1).lengthOfMonth() : 0.0;
+            remaining = BudgetProjector.remainingCategoryExpected(
+                    mtd, today.getDayOfMonth(), ym.lengthOfMonth(), priorRate, null, null);
+        }
+        return new CategoryData(upTo, thisMonth, past, mtd, remaining, ym, byMonth);
     }
 
     /**
@@ -305,38 +484,18 @@ public class SavingsSimulationService {
      * 월 절약액 = 비율 × 직전 3개월 월평균 지출 (기록이 없으면 이번 달 예상 지출)
      * </pre>
      */
-    private long monthlySaving(Long userId, LocalDate monthStart, int categoryId, long reductionWon) {
-        YearMonth ym = YearMonth.from(monthStart);
-        LocalDate today = LocalDate.now(clock);
-        LocalDate baseStart = monthStart.minusMonths(HABIT_BASE_MONTHS);
-        LocalDate upTo = today.isBefore(ym.atEndOfMonth()) ? today : ym.atEndOfMonth();
-        List<Expense> expenses = expenseRepo.findByUserIdAndCategoryIdAndExpenseDateBetween(
-                userId, categoryId, baseStart.atStartOfDay(), upTo.atTime(LocalTime.MAX));
-
-        Map<YearMonth, Long> byMonth = new HashMap<>();
-        for (Expense e : expenses) {
-            if (e.isVariable()) byMonth.merge(YearMonth.from(e.getDate()), e.getAmount(), Long::sum);
-        }
-        long mtd = byMonth.getOrDefault(ym, 0L);
-        long remaining = 0;
-        if (YearMonth.from(today).equals(ym)) {
-            long prev = byMonth.getOrDefault(ym.minusMonths(1), 0L);
-            double priorRate = prev > 0 ? (double) prev / ym.minusMonths(1).lengthOfMonth() : 0.0;
-            remaining = BudgetProjector.remainingCategoryExpected(
-                    mtd, today.getDayOfMonth(), ym.lengthOfMonth(), priorRate, null, null);
-        }
-
+    private long monthlySaving(CategoryData d, long reductionWon) {
         List<Long> past = new ArrayList<>();
         for (int i = 1; i <= HABIT_BASE_MONTHS; i++) {
-            Long v = byMonth.get(ym.minusMonths(i));
+            Long v = d.byMonth().get(d.ym().minusMonths(i));
             if (v != null && v > 0) past.add(v);
         }
         long base = past.isEmpty()
-                ? mtd + remaining
+                ? d.mtd() + d.remaining()
                 : Math.round(past.stream().mapToLong(Long::longValue).average().orElse(0));
         if (base <= 0) return 0;
 
-        double rate = remaining > 0 ? (double) reductionWon / remaining : (double) reductionWon / base;
+        double rate = d.remaining() > 0 ? (double) reductionWon / d.remaining() : (double) reductionWon / base;
         return Math.round(Math.min(1.0, rate) * base);
     }
 
