@@ -41,11 +41,18 @@ class FeedbackReactionServiceTest {
     private FeedbackReactionService service;
     private final List<UserReaction> stored = new ArrayList<>();
 
+    private org.springframework.transaction.support.TransactionTemplate tx;
+
     @BeforeEach
     void setUp() {
+        tx = mock(org.springframework.transaction.support.TransactionTemplate.class);
+        when(tx.execute(any())).thenAnswer(inv -> {
+            org.springframework.transaction.support.TransactionCallback<?> cb = inv.getArgument(0);
+            return cb.doInTransaction(null);
+        });
         feedbackRepo = mock(AiFeedbackRepository.class);
         reactionRepo = mock(UserReactionRepository.class);
-        service = new FeedbackReactionService(feedbackRepo, reactionRepo, CLOCK);
+        service = new FeedbackReactionService(feedbackRepo, reactionRepo, CLOCK, tx);
         when(feedbackRepo.findById(FEEDBACK)).thenReturn(Optional.of(feedback(USER)));
         when(reactionRepo.findByUserIdAndFeedbackId(USER, FEEDBACK)).thenAnswer(inv -> List.copyOf(stored));
         when(reactionRepo.save(any(UserReaction.class))).thenAnswer(inv -> {
@@ -81,6 +88,35 @@ class FeedbackReactionServiceTest {
             assertThat(r.getFeedbackId()).isEqualTo(FEEDBACK);
             assertThat(r.getCreatedAt()).isEqualTo(LocalDateTime.of(2026, 11, 19, 0, 0));
         });
+    }
+
+    @Test
+    @DisplayName("동시에 처음 들어온 같은 반응으로 유일 제약에 걸리면 한 번 더 시도해 먼저 저장된 행을 덮어쓴다 (#160)")
+    void uniqueViolation_retriesAndOverwrites() {
+        UserReaction existing = UserReaction.builder()
+                .feedbackId(FEEDBACK)
+                .userId(USER)
+                .reaction(Reaction.NOT_HELPFUL)
+                .rejectionReason(RejectionReason.DONT_WANT_REDUCE)
+                .categoryId(10)
+                .createdAt(LocalDateTime.of(2026, 11, 18, 0, 0))
+                .build();
+        java.util.concurrent.atomic.AtomicInteger saves = new java.util.concurrent.atomic.AtomicInteger();
+        when(reactionRepo.save(any(UserReaction.class))).thenAnswer(inv -> {
+            if (saves.getAndIncrement() == 0) {
+                // 첫 시도: 다른 요청이 같은 행을 먼저 넣어 유일 제약 위반
+                stored.add(existing);
+                throw new org.springframework.dao.DataIntegrityViolationException("uq_user_reactions_category");
+            }
+            return inv.getArgument(0);
+        });
+
+        FeedbackReactionResponse out = service.save(USER, FEEDBACK, req(Reaction.HELPFUL, null, 10));
+
+        assertThat(saves).hasValue(2);
+        assertThat(out.reaction()).isEqualTo(Reaction.HELPFUL);
+        assertThat(stored).singleElement().isSameAs(existing);
+        assertThat(existing.getReaction()).isEqualTo(Reaction.HELPFUL);
     }
 
     @Test
