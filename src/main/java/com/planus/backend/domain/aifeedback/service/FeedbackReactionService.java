@@ -15,8 +15,9 @@ import java.time.Clock;
 import java.time.LocalDateTime;
 import java.util.Objects;
 import lombok.RequiredArgsConstructor;
+import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.stereotype.Service;
-import org.springframework.transaction.annotation.Transactional;
+import org.springframework.transaction.support.TransactionTemplate;
 
 /**
  * AI 피드백 반응(도움이 됐어요 / 별로예요 + 사유) 저장.
@@ -31,9 +32,21 @@ public class FeedbackReactionService {
     private final AiFeedbackRepository feedbackRepo;
     private final UserReactionRepository reactionRepo;
     private final Clock clock;
+    private final TransactionTemplate tx;
 
-    @Transactional
+    /**
+     * 반응을 저장한다. 같은 반응이 동시에 처음 들어오면 DB 유일 제약(#160)이 한쪽을 거절하므로, 그때는 새 트랜잭션에서 한 번 더 시도해 이미 저장된
+     * 행을 덮어쓴다.
+     */
     public FeedbackReactionResponse save(Long userId, Long feedbackId, FeedbackReactionRequest request) {
+        try {
+            return tx.execute(status -> saveOnce(userId, feedbackId, request));
+        } catch (DataIntegrityViolationException e) {
+            return tx.execute(status -> saveOnce(userId, feedbackId, request));
+        }
+    }
+
+    private FeedbackReactionResponse saveOnce(Long userId, Long feedbackId, FeedbackReactionRequest request) {
         AiFeedback feedback = feedbackRepo.findById(feedbackId).orElse(null);
         // 남의 피드백은 존재 여부를 드러내지 않도록 없는 것과 같게 응답한다
         if (feedback == null || !Objects.equals(feedback.getUserId(), userId)) {
