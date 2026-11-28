@@ -1,5 +1,6 @@
 package com.planus.backend.domain.aifeedback.batch;
 
+import com.planus.backend.domain.aifeedback.llm.LlmClient;
 import com.planus.backend.domain.aifeedback.service.AiFeedbackService;
 import com.planus.backend.domain.user.repository.UserAccountRepository;
 import java.time.Clock;
@@ -10,6 +11,7 @@ import java.util.List;
 import net.javacrumbs.shedlock.spring.annotation.SchedulerLock;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import org.springframework.beans.factory.ObjectProvider;
 import org.springframework.scheduling.annotation.Scheduled;
 import org.springframework.stereotype.Component;
 
@@ -22,16 +24,20 @@ public class WeeklyFeedbackScheduler {
     private final UserAccountRepository userRepo;
     private final AiFeedbackService service;
     private final Clock clock;
+    private final ObjectProvider<LlmClient> llm;
 
     /**
      * @param userRepo 사용자 ID 조회 리포지토리
      * @param service  AI 피드백 생성 서비스
      * @param clock    시각 제공 (테스트 시 고정 시계 주입 가능)
+     * @param llm      배치 종료 시 LLM 호출 통계를 남기기 위한 클라이언트 (#124)
      */
-    public WeeklyFeedbackScheduler(UserAccountRepository userRepo, AiFeedbackService service, Clock clock) {
+    public WeeklyFeedbackScheduler(
+            UserAccountRepository userRepo, AiFeedbackService service, Clock clock, ObjectProvider<LlmClient> llm) {
         this.userRepo = userRepo;
         this.service = service;
         this.clock = clock;
+        this.llm = llm;
     }
 
     /** 매주 월요일 09:00에 전체 사용자 대상 주간 피드백을 생성한다. 실패한 사용자는 로그 경고 후 건너뛴다. */
@@ -42,6 +48,8 @@ public class WeeklyFeedbackScheduler {
         List<Long> userIds = userRepo.findAllIds();
         log.info("AI-01 주간 시작 weekEnd={} 대상={}명", weekEnd, userIds.size());
 
+        LlmClient llmClient = llm.getIfAvailable();
+        if (llmClient != null) llmClient.snapshotStats(); // 이전 호출분을 비우고 이 배치만 센다
         int ok = 0, skipped = 0, fail = 0;
         for (Long userId : userIds) {
             try {
@@ -57,5 +65,6 @@ public class WeeklyFeedbackScheduler {
             }
         }
         log.info("AI-01 주간 완료 weekEnd={} 성공={} 스킵={} 실패={}", weekEnd, ok, skipped, fail);
+        if (llmClient != null) log.info("AI-01 {}", llmClient.snapshotStats().summary());
     }
 }
