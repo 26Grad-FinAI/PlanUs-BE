@@ -233,7 +233,8 @@ public class SavingsSimulationService {
             long current = 0;
             for (int catId : request.selectedCategoryIds().stream().distinct().toList()) {
                 EnrichedAction action = actionMap.get(catId);
-                if (action == null) throw new GeneralException(GeneralErrorCode.INVALID_CATEGORY_SELECTION);
+                // 미리보기 때 있던 카테고리가 지금 계산에서 사라졌다면 잘못된 선택이 아니라 금액이 달라진 것이다
+                if (action == null) throw new GeneralException(GeneralErrorCode.SIMULATION_REDUCTION_CHANGED);
                 current += action.reductionWon();
             }
             if (current != request.confirmedReductionWon())

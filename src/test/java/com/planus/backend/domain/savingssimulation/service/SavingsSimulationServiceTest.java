@@ -952,6 +952,23 @@ class SavingsSimulationServiceTest {
             }
 
             @Test
+            @DisplayName("확인 금액을 보냈는데 선택한 카테고리가 지금 계산에 없으면 잘못된 선택이 아니라 재확인 요구다 (#127)")
+            void confirmedAmount_categoryGone_reconfirm() throws Exception {
+                UserAccount user = userWithGoal(3_000_000, 0, 500_000);
+                when(userRepo.findById(1L)).thenReturn(Optional.of(user));
+                when(feedbackRepo.findById(1L))
+                        .thenReturn(Optional.of(feedbackWith(buildPayloadWithEnrichedActions())));
+
+                ApplyRequest request = new ApplyRequest("2026-11", 1L, List.of(3), 20_000L);
+
+                assertThatThrownBy(() -> service.apply(1L, request))
+                        .isInstanceOf(GeneralException.class)
+                        .satisfies(ex -> assertThat(((GeneralException) ex).getErrorCode())
+                                .isEqualTo(GeneralErrorCode.SIMULATION_REDUCTION_CHANGED));
+                verifyNoInteractions(budgetRepo, budgetCatRepo);
+            }
+
+            @Test
             @DisplayName("일부 카테고리만 반영했어도 같은 피드백의 나머지 적용을 거절한다")
             void alreadyApplied() throws Exception {
                 UserAccount user = userWithGoal(3_000_000, 0, 500_000);
