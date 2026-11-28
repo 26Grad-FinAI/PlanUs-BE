@@ -154,6 +154,72 @@ public class AiFeedbackService {
         this.eventPublisher = eventPublisher;
     }
 
+    /** {@link #computeActionsAsOf} 결과: 그날 기준 절약 액션과 저축 목표까지 부족액(없으면 0). */
+    public record SavingsActionsAsOf(List<ActionPlan> actions, long savingsGapWon) {}
+
+    /**
+     * 기준일 하루의 절약 액션을 다시 계산한다 (#127). 절약 시뮬레이션이 피드백 시점이 아니라 오늘 기준으로 보여주려고 쓴다.
+     *
+     * <p>{@link #generateWeekly}의 [2]·[4]·[5]·[7]과 같은 계산(월말 예측 → 초과 카테고리 → 원인 → 절약 액션)이며, LLM 호출·저장·이벤트 발행은
+     * 하지 않는다. 기준일이 일요일이 아니어도 된다(직전 7일을 이번 주로 본다).
+     */
+    public SavingsActionsAsOf computeActionsAsOf(Long userId, LocalDate asOf) {
+        UserAccount user = userRepo.findById(userId).orElse(null);
+        if (user == null) return new SavingsActionsAsOf(List.of(), 0);
+
+        LocalDate weekStart = asOf.minusDays(6);
+        LocalDate monthStart = asOf.withDayOfMonth(1);
+        int dim = asOf.lengthOfMonth();
+        int day = asOf.getDayOfMonth();
+        long available = user.availableBudget();
+        Map<Integer, Long> catBudget = loadCategoryBudgets(userId, monthStart);
+        if (catBudget.isEmpty()) return new SavingsActionsAsOf(List.of(), 0);
+
+        LocalDate queryStart = Collections.min(
+                List.of(weekStart.minusWeeks(p.getBaselineWeeks()), monthStart.minusMonths(USUAL_MONTHS)));
+        List<Expense> window = expenseRepo.findByUserIdAndExpenseDateBetween(
+                userId, queryStart.atStartOfDay(), asOf.withDayOfMonth(dim).atTime(LocalTime.MAX));
+        LocalDateTime now = LocalDateTime.now(clock);
+        List<UserReaction> reactions = reactionRepo.findByUserId(userId).stream()
+                .filter(r -> r.isActiveAt(now, p.getRejectionExpiryMonths()))
+                .toList();
+        UserProfile profile = userProfileRepo.findByUserId(userId).orElse(null);
+
+        long totalVarMtd = sum(window, e -> inMonth(e, monthStart, asOf) && e.isVariable());
+        long totalFixPlanMtd = sum(window, e -> inMonth(e, monthStart, asOf) && e.isExpense() && !e.isVariable());
+        long remainingFixPlan = estimateRemainingFixedPlanned(window, monthStart, asOf);
+        double priorRate = priorVariableDailyRate(window, monthStart);
+        double[] dowWeights = computeDayOfWeekWeights(window, asOf);
+        var proj = projector.project(
+                totalVarMtd, totalFixPlanMtd, remainingFixPlan, day, dim, priorRate, dowWeights, monthStart);
+        long savingsGap = -projector.savingsImpact(proj.predictedMonthEndWon(), available);
+        if (savingsGap <= 0) return new SavingsActionsAsOf(List.of(), 0);
+
+        Map<Integer, Long> usualMonthly = new HashMap<>();
+        Map<Integer, Long> overspend =
+                computeOverspend(window, catBudget, monthStart, asOf, day, dim, dowWeights, usualMonthly);
+        Map<Integer, CauseSignals> causes = new HashMap<>();
+        for (int cat : overspend.keySet())
+            causes.put(cat, causeAssembler.assemble(cat, window, weekStart, asOf, profile));
+
+        Map<Integer, Long> remainingExpected =
+                buildCategoryRemainingExpected(window, monthStart, asOf, day, dim, dowWeights);
+        List<Long> sensitiveAreas = new ArrayList<>(ProfileUpdater.sensitiveCategories(reactions));
+        List<ActionPlan> actions = savingsCalculator.calculate(
+                overspend,
+                savingsGap,
+                day,
+                dim - day,
+                remainingExpected,
+                causes,
+                window.stream()
+                        .filter(e -> inMonth(e, monthStart, asOf) && e.isExpense())
+                        .toList(),
+                reactions,
+                sensitiveAreas);
+        return new SavingsActionsAsOf(actions, savingsGap);
+    }
+
     /**
      * 특정 사용자의 주간 AI 소비 피드백을 생성하고 저장한다.
      *
@@ -506,7 +572,8 @@ public class AiFeedbackService {
         LocalDateTime now = LocalDateTime.now(clock);
 
         // ── [10] 페이로드 JSON (버전 포함) ──
-        String payload = buildPayload(feedbackType, pacing, overspend, actions, enrichedActions, predictedMonthEnd);
+        String payload = buildPayload(
+                feedbackType, pacing, overspend, actions, enrichedActions, predictedMonthEnd, savingsImpact);
 
         // ── [11+12] 멱등 upsert + 프로필 갱신 (단일 트랜잭션) ──
         // 동시 실행 시 INSERT 유니크 위반이 발생할 수 있으므로 재시도로 흡수한다.
@@ -1148,12 +1215,15 @@ public class AiFeedbackService {
             Map<Integer, Long> overspend,
             List<ActionPlan> actions,
             List<EnrichedAction> enrichedActions,
-            long predictedMonthEnd) {
+            long predictedMonthEnd,
+            long savingsImpact) {
         try {
             Map<String, Object> payload = new LinkedHashMap<>();
             payload.put("version", Map.of("prompt", PROMPT_VERSION, "logic", LOGIC_VERSION));
             payload.put("feedbackType", feedbackType.name());
             payload.put("predictedMonthEnd", predictedMonthEnd);
+            // 저축 목표까지 부족액 — 시뮬레이션이 그날 다시 계산한 값과 비교하려고 남긴다 (#127)
+            payload.put("savingsGapWon", Math.max(0, -savingsImpact));
             if (pacing != null) {
                 payload.put(
                         "pacing",

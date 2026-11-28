@@ -77,10 +77,16 @@ class SavingsSimulationControllerTest {
                             "금요일 저녁 외식이 전체의 60%",
                             0.74,
                             90000,
-                            1080000)),
+                            1080000,
+                            "남은 20일간 3번 덜 쓰기 (예상 10번 → 7번)",
+                            "NORMAL",
+                            List.of("근거"),
+                            "FEEDBACK",
+                            40000L)),
                     40000,
                     90000,
-                    1080000);
+                    1080000,
+                    "11/9 피드백 이후 저축 목표까지 부족액 29만 원 → 33만 원");
 
             when(service.suggest(eq(1L), eq("2026-11"))).thenReturn(response);
 
@@ -146,7 +152,12 @@ class SavingsSimulationControllerTest {
                             "금요일 저녁 외식이 전체의 60%",
                             0.74,
                             90000,
-                            1080000)));
+                            1080000,
+                            "남은 20일간 3번 덜 쓰기 (예상 10번 → 7번)",
+                            "NORMAL",
+                            List.of("근거"),
+                            "FEEDBACK",
+                            40000L)));
 
             when(service.simulate(eq(1L), any(SimulateRequest.class))).thenReturn(response);
 

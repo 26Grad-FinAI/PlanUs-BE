@@ -62,6 +62,9 @@ class SavingsSimulationServiceTest {
                 expenseRepo,
                 userRepo,
                 simulationRepo,
+                mock(com.planus.backend.domain.aifeedback.repository.UserReactionRepository.class),
+                new com.planus.backend.domain.aifeedback.config.AiFeedbackProperties(),
+                mock(com.planus.backend.domain.aifeedback.service.AiFeedbackService.class),
                 objectMapper,
                 fixedClock(LocalDate.of(2026, 12, 5)));
     }
@@ -171,6 +174,70 @@ class SavingsSimulationServiceTest {
         @Nested
         @DisplayName("성공")
         class Success {
+
+            @Test
+            @DisplayName("진행 중인 달은 오늘 기준으로 다시 계산해 피드백과 비교한다 — 이어진 카테고리 FEEDBACK, 새로 생긴 카테고리 NEW, 사라진 카테고리 제외 (#127)")
+            void recomputesAsOfToday() throws Exception {
+                var feedbackService = mock(com.planus.backend.domain.aifeedback.service.AiFeedbackService.class);
+                service = new SavingsSimulationService(
+                        feedbackRepo,
+                        budgetRepo,
+                        budgetCatRepo,
+                        expenseRepo,
+                        userRepo,
+                        simulationRepo,
+                        mock(com.planus.backend.domain.aifeedback.repository.UserReactionRepository.class),
+                        new com.planus.backend.domain.aifeedback.config.AiFeedbackProperties(),
+                        feedbackService,
+                        objectMapper,
+                        fixedClock(LocalDate.of(2026, 11, 16)));
+                // 피드백(11/9): 식대(7) 4만 원·오락(5) 2만 원 제안, 저축 목표까지 부족액 290,000원
+                @SuppressWarnings("unchecked")
+                Map<String, Object> payload = objectMapper.readValue(buildPayloadWithEnrichedActions(), Map.class);
+                payload.put("savingsGapWon", 290_000);
+                when(feedbackRepo.findByUserIdAndPeriodTypeOrderByPeriodStartDesc(1L, "WEEKLY"))
+                        .thenReturn(List.of(feedbackWith(objectMapper.writeValueAsString(payload))));
+                // 오늘(11/16): 식대는 5만 원으로 늘고, 오락은 줄일 필요가 없어졌고, 쇼핑(3)이 새로 초과 예상, 부족액 330,000원
+                when(feedbackService.computeActionsAsOf(1L, LocalDate.of(2026, 11, 16)))
+                        .thenReturn(
+                                new com.planus.backend.domain.aifeedback.service.AiFeedbackService.SavingsActionsAsOf(
+                                        List.of(
+                                                new com.planus.backend.domain.aifeedback.action.ActionPlan(
+                                                        7, 50_000, "FREQUENCY", 0.7),
+                                                new com.planus.backend.domain.aifeedback.action.ActionPlan(
+                                                        3, 30_000, "UNIT_PRICE", 0.6)),
+                                        330_000));
+
+                SuggestResponse result = service.suggest(1L, "2026-11");
+
+                assertThat(result.actions())
+                        .extracting(SuggestResponse.ActionCard::categoryId)
+                        .containsExactly(7, 3);
+                SuggestResponse.ActionCard kept = result.actions().get(0);
+                assertThat(kept.source()).isEqualTo("FEEDBACK");
+                assertThat(kept.reductionWon()).isEqualTo(50_000);
+                assertThat(kept.feedbackReductionWon()).isEqualTo(40_000L);
+                assertThat(kept.currentBehavior()).as("문구는 피드백에 저장된 것을 잇는다").isEqualTo("주 4.2회 외식");
+                SuggestResponse.ActionCard fresh = result.actions().get(1);
+                assertThat(fresh.source()).isEqualTo("NEW");
+                assertThat(fresh.feedbackReductionWon()).isNull();
+                assertThat(fresh.currentBehavior()).as("LLM을 새로 부르지 않아 문구가 없다").isNull();
+                assertThat(result.totalPossibleReduction()).isEqualTo(80_000);
+                assertThat(result.comparison()).isEqualTo("11/9 피드백 이후 저축 목표까지 부족액 29만 원 → 33만 원");
+            }
+
+            @Test
+            @DisplayName("지난 달은 다시 계산하지 않고 피드백에 저장된 액션을 쓴다")
+            void pastMonth_usesSavedActions() throws Exception {
+                when(feedbackRepo.findByUserIdAndPeriodTypeOrderByPeriodStartDesc(1L, "WEEKLY"))
+                        .thenReturn(List.of(feedbackWith(buildPayloadWithEnrichedActions())));
+
+                SuggestResponse result = service.suggest(1L, "2026-11"); // 기본 시계는 12월
+
+                assertThat(result.actions()).hasSize(2);
+                assertThat(result.actions()).allMatch(a -> "FEEDBACK".equals(a.source()));
+                assertThat(result.comparison()).isNull();
+            }
 
             @Test
             @DisplayName("enrichedActions가 있으면 행동 기반 제안을 반환한다")
@@ -419,6 +486,9 @@ class SavingsSimulationServiceTest {
                         expenseRepo,
                         userRepo,
                         simulationRepo,
+                        mock(com.planus.backend.domain.aifeedback.repository.UserReactionRepository.class),
+                        new com.planus.backend.domain.aifeedback.config.AiFeedbackProperties(),
+                        mock(com.planus.backend.domain.aifeedback.service.AiFeedbackService.class),
                         objectMapper,
                         fixedClock(LocalDate.of(2026, 11, 16)));
                 UserAccount user = userWithGoal(3_000_000, 0, 0);
@@ -447,6 +517,11 @@ class SavingsSimulationServiceTest {
                 assertThat(result.message())
                         .isEqualTo(String.format(
                                 "월 %,d원, 1년 %,d원을 더 저축할 수 있습니다", result.monthlySaving(), result.annualSaving()));
+                // 방법·실현 가능성은 거래 데이터에서 코드로 계산한다 (#127): 11/1~16 거래 1건 → 남은 14일 예상 횟수·감축 횟수가 숫자로 나온다
+                assertThat(card.method()).startsWith("남은 14일간").contains("번");
+                assertThat(card.feasibilityLevel()).isIn("EASY", "NORMAL", "HARD");
+                assertThat(card.feasibilityReasons()).isNotEmpty();
+                assertThat(card.feasibilityReasons().get(0)).contains("남은 기간 예상 지출");
             }
 
             @Test
@@ -477,6 +552,9 @@ class SavingsSimulationServiceTest {
                         expenseRepo,
                         userRepo,
                         simulationRepo,
+                        mock(com.planus.backend.domain.aifeedback.repository.UserReactionRepository.class),
+                        new com.planus.backend.domain.aifeedback.config.AiFeedbackProperties(),
+                        mock(com.planus.backend.domain.aifeedback.service.AiFeedbackService.class),
                         objectMapper,
                         fixedClock(LocalDate.of(2026, 11, 4)));
                 UserAccount user = userWithGoal(3_000_000, 0, 500_000);

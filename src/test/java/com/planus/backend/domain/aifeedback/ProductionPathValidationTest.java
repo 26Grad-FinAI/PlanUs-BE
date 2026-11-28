@@ -307,6 +307,137 @@ class ProductionPathValidationTest {
         examples.forEach(System.out::println);
     }
 
+    /**
+     * 절약 시뮬레이션 측정 (#127, LLM 없음). 환경변수 {@code SIM_MEASURE}가 있을 때만 실행한다.
+     *
+     * <ul>
+     *   <li>재계산 일치: 일요일 기준 {@code computeActionsAsOf}가 그 주 피드백에 저장된 액션과 같은가 (같은 계산이어야 한다)
+     *   <li>주 단위 저장의 어긋남: 같은 주를 월요일에 열었을 때 일요일 기준(저장분)과 카테고리·감축액이 얼마나 다른가
+     *   <li>방법·실현 가능성: 코드가 방법을 만들 수 있는 비율, 등급 분포, 방법의 횟수×건당 금액이 감축액과 맞는 정도
+     * </ul>
+     */
+    @Test
+    @DisplayName("[측정] 절약 시뮬레이션 — 재계산 일치, 월요일·일요일 어긋남, 방법·실현 가능성 분포")
+    void simulationMeasure() throws Exception {
+        Assumptions.assumeTrue(System.getenv("SIM_MEASURE") != null, "SIM_MEASURE 미설정 → 스킵");
+
+        List<Expense> expenses = loadTransactions();
+        LocalDate dataEnd = expenses.stream()
+                .map(Expense::getDate)
+                .max(Comparator.naturalOrder())
+                .orElseThrow();
+        Map<YearMonth, Map<Integer, Long>> budgets = withDefaultBudgets(loadBudgets(), dataEnd);
+        LocalDate firstMonday = expenses.stream()
+                .map(Expense::getDate)
+                .min(Comparator.naturalOrder())
+                .orElseThrow()
+                .with(TemporalAdjusters.nextOrSame(DayOfWeek.MONDAY));
+        AiFeedbackService service = new Store(expenses, budgets).service((system, user) -> "이번 주 피드백이에요.");
+        ObjectMapper mapper = new ObjectMapper();
+
+        int weeks = 0, parityOk = 0, mondayDiffers = 0, mondayCatDiffers = 0;
+        long mondayAbsDelta = 0, mondayCompared = 0;
+        int cards = 0, withMethod = 0, arithmeticClose = 0, arithmeticChecked = 0;
+        Map<String, Integer> levels = new java.util.TreeMap<>();
+        for (int week = 5; ; week++) {
+            LocalDate weekEnd = firstMonday.plusWeeks(week).minusDays(1);
+            if (weekEnd.isAfter(dataEnd)) break;
+            Optional<AiFeedback> fb = service.generateWeekly(USER_ID, weekEnd);
+            if (fb.isEmpty() || fb.get().getPayload() == null) continue;
+            com.fasterxml.jackson.databind.JsonNode payload =
+                    mapper.readTree(fb.get().getPayload());
+            if (!"ALERT".equals(payload.path("feedbackType").asText())) continue;
+            Map<Integer, Long> stored = new java.util.TreeMap<>();
+            payload.path("actions")
+                    .forEach(a -> stored.put(
+                            a.path("categoryId").asInt(), a.path("reductionWon").asLong()));
+            if (stored.isEmpty()) continue;
+            weeks++;
+
+            Map<Integer, Long> sunday = reductions(service.computeActionsAsOf(USER_ID, weekEnd));
+            if (sunday.equals(stored)) parityOk++;
+
+            Map<Integer, Long> monday = reductions(service.computeActionsAsOf(USER_ID, weekEnd.minusDays(6)));
+            if (!monday.equals(stored)) mondayDiffers++;
+            if (!monday.keySet().equals(stored.keySet())) mondayCatDiffers++;
+            for (var en : stored.entrySet()) {
+                if (monday.containsKey(en.getKey())) {
+                    mondayAbsDelta += Math.abs(monday.get(en.getKey()) - en.getValue());
+                    mondayCompared++;
+                }
+            }
+
+            // 방법·실현 가능성 (일요일 기준 저장 액션)
+            for (var a : payload.path("actions")) {
+                int cat = a.path("categoryId").asInt();
+                long reduction = a.path("reductionWon").asLong();
+                LocalDate monthStart = weekEnd.withDayOfMonth(1);
+                List<Expense> all = expenses.stream()
+                        .filter(e -> e.isExpense()
+                                && e.isVariable()
+                                && e.getCategoryId() == cat
+                                && !e.getDate().isAfter(weekEnd)
+                                && !e.getDate().isBefore(monthStart.minusMonths(3)))
+                        .toList();
+                List<Expense> now = all.stream()
+                        .filter(e -> !e.getDate().isBefore(monthStart))
+                        .toList();
+                List<Expense> past = all.stream()
+                        .filter(e -> e.getDate().isBefore(monthStart))
+                        .toList();
+                long mtd = now.stream().mapToLong(Expense::getAmount).sum();
+                long prev = past.stream()
+                        .filter(e -> YearMonth.from(e.getDate()).equals(YearMonth.from(monthStart.minusMonths(1))))
+                        .mapToLong(Expense::getAmount)
+                        .sum();
+                YearMonth ym = YearMonth.from(weekEnd);
+                double priorRate = prev > 0 ? (double) prev / ym.minusMonths(1).lengthOfMonth() : 0.0;
+                long remaining = BudgetProjector.remainingCategoryExpected(
+                        mtd, weekEnd.getDayOfMonth(), ym.lengthOfMonth(), priorRate, null, null);
+                var plan = com.planus.backend.domain.savingssimulation.core.SavingsMethodAnalyzer.analyze(
+                        new com.planus.backend.domain.savingssimulation.core.SavingsMethodAnalyzer.Input(
+                                cat,
+                                a.path("dominantFactor").asText(null),
+                                reduction,
+                                weekEnd,
+                                now,
+                                past,
+                                remaining,
+                                false));
+                cards++;
+                levels.merge(plan.level().name(), 1, Integer::sum);
+                if (plan.method() != null) {
+                    withMethod++;
+                    if (plan.cutCount() > 0 && !now.isEmpty()) {
+                        long avg = mtd / now.size();
+                        arithmeticChecked++;
+                        // 덜 쓸 횟수 × 건당 평균이 감축액과 같은 규모인가 (반올림·상한 때문에 ±50% 이내면 일치로 센다)
+                        if (Math.abs(plan.cutCount() * avg - reduction) <= reduction * 0.5) arithmeticClose++;
+                    }
+                }
+            }
+        }
+
+        System.out.printf("%n=== 절약 시뮬레이션 측정 (ALERT·액션 있는 %d주) ===%n", weeks);
+        System.out.printf("일요일 기준 재계산 = 저장된 액션: %d/%d주%n", parityOk, weeks);
+        System.out.printf(
+                "같은 주를 월요일에 열었다면(주 단위 저장 가정): 액션이 일요일과 다른 주 %d/%d, 카테고리 구성이 다른 주 %d/%d, 겹치는 카테고리 감축액 평균 차이 %,d원%n",
+                mondayDiffers,
+                weeks,
+                mondayCatDiffers,
+                weeks,
+                mondayCompared == 0 ? 0 : mondayAbsDelta / mondayCompared);
+        System.out.printf("방법 생성: %d/%d 카드, 실현 가능성 등급 분포 %s%n", withMethod, cards, levels);
+        System.out.printf("빈도 방식 방법의 (덜 쓸 횟수 × 건당 평균)이 감축액과 ±50%% 이내: %d/%d%n", arithmeticClose, arithmeticChecked);
+        assertThat(weeks).isGreaterThan(0);
+    }
+
+    private static Map<Integer, Long> reductions(AiFeedbackService.SavingsActionsAsOf r) {
+        Map<Integer, Long> m = new java.util.TreeMap<>();
+        r.actions().forEach(a -> m.put(a.categoryId(), a.reductionWon()));
+        return m;
+    }
+
     @Test
     @DisplayName("[스모크] 가짜 LLM으로 운영 경로 조립 확인 — 35주차 프롬프트에 운영 정의 데이터가 들어감")
     void productionPath_smoke() throws Exception {
